@@ -168,6 +168,33 @@ body {
     gap: 1rem;
 }
 
+.header-tools-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+}
+
+.header-icons-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-add-client {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
+}
+
 .search-bar-wrapper {
     position: relative;
     width: 280px;
@@ -958,5 +985,28 @@ svg.lucide, .lucide-icon, i[data-lucide] svg {
 .telemetry-gauge-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsive Media Queries for Header Navigation */
+@media (max-width: 1280px) {
+    .app-header {
+        flex-wrap: wrap;
+        padding: 0.75rem 1.25rem;
+    }
+    .header-status-ticker {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        margin-top: 0.25rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .search-bar-wrapper {
+        width: 180px;
+    }
+    .header-tools-stack {
+        align-items: center;
+    }
 }
 

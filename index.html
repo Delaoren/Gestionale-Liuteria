@@ -54,18 +54,24 @@
                 <i data-lucide="search" class="lucide-search"></i>
                 <input type="text" id="globalSearchInput" placeholder="Cerca app o modulo...">
             </div>
-            <button class="btn btn-secondary btn-icon" onclick="window.haService.fetchTelemetry(); window.showToast('Aggiornamento misurazioni T e H da Home Assistant...');" title="Aggiorna Misurazioni T e H">
-                <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i>
-            </button>
-            <button class="btn btn-secondary btn-icon" onclick="window.openHaModal()" title="Configurazione Home Assistant (Rete Locale)">
-                <i data-lucide="home" class="lucide-home" style="color:var(--accent-cyan);"></i>
-            </button>
-            <button class="btn btn-secondary btn-icon" onclick="window.showToast('Dati salvati e sincronizzati in LocalStorage.')" title="Stato Sincronizzazione">
-                <i data-lucide="database" class="lucide-database"></i>
-            </button>
-            <button class="btn btn-primary" onclick="window.openAddModal('clienti')">
-                <i data-lucide="plus" class="lucide-plus"></i> Rapido
-            </button>
+
+            <!-- Action Tools Stack: Icons on Top, Add Client Button directly below -->
+            <div class="header-tools-stack">
+                <div class="header-icons-row">
+                    <button class="btn btn-secondary btn-icon" onclick="window.haService.fetchTelemetry(); window.showToast('Aggiornamento misurazioni T e H da Home Assistant...');" title="Sincronizza / Aggiorna Misurazioni T e H">
+                        <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-icon" onclick="window.openHaModal()" title="Stato Configurazione Home Assistant (Rete Locale)">
+                        <i data-lucide="home" class="lucide-home" style="color:var(--accent-cyan);"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-icon" onclick="window.showToast('Dati salvati e sincronizzati in LocalStorage.')" title="Stato Sincronizzazione Database">
+                        <i data-lucide="database" class="lucide-database"></i>
+                    </button>
+                </div>
+                <button class="btn btn-primary btn-add-client" onclick="window.openAddModal('clienti')" title="Aggiungi Nuovo Cliente">
+                    <i data-lucide="user-plus" class="lucide-user-plus"></i> + Nuovo Cliente
+                </button>
+            </div>
         </div>
     </header>
 
