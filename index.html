@@ -25,51 +25,51 @@
             </div>
         </a>
 
-        <!-- Live Workshop Telemetry Monitor (T, H, EMC Legno) -->
-        <div class="header-status-ticker" onclick="window.openHaModal()" title="Telemetria Climatica Bottega (T, H, EMC Legno) - Clicca per configurare">
-            <div class="status-item">
-                <div class="status-dot" id="haStatusDot"></div>
-                <span id="haStatusText">Sensore Bottega: <strong>Online</strong></span>
-            </div>
-            <div class="status-item">
-                <i data-lucide="thermometer" class="lucide-thermometer" style="color:var(--accent-amber);"></i>
-                <span>Temp: <strong id="haTempText">25.0 °C</strong></span>
-            </div>
-            <div class="status-item">
-                <i data-lucide="droplets" class="lucide-droplets" style="color:var(--accent-cyan);"></i>
-                <span>Umidità: <strong id="haHumidityText">61.3% RH</strong></span>
-            </div>
-            <div class="status-item" title="Umidità di Equilibrio del Legno (Equilibrium Moisture Content - Ottimale 8.0% - 9.5%)">
-                <i data-lucide="tree-pine" class="lucide-tree-pine" style="color:var(--accent-emerald);"></i>
-                <span>EMC Legno: <strong id="haEmcText">11.2% <small style="font-size:0.75rem; color:var(--text-secondary);">(Equilibrio)</small></strong></span>
-            </div>
-            <span class="badge badge-warning" id="haStatusBadge" style="cursor:pointer; font-size:0.7rem; padding: 0.2rem 0.5rem;">
-                <i data-lucide="radio"></i> Rete Locale
-            </span>
-        </div>
-
-        <div class="header-actions">
-            <!-- Global Search -->
+        <!-- Central Section: Search Input & Add Client Button -->
+        <div class="header-center-section">
             <div class="search-bar-wrapper">
-                <i data-lucide="search" class="lucide-search"></i>
                 <input type="text" id="globalSearchInput" placeholder="Cerca app o modulo...">
             </div>
+            <button class="btn btn-primary btn-add-client" onclick="window.openAddModal('clienti')" title="Aggiungi Nuovo Cliente">
+                <i data-lucide="user-plus" class="lucide-user-plus"></i> + Nuovo Cliente
+            </button>
+        </div>
 
-            <!-- Action Tools Stack: Icons on Top, Add Client Button directly below -->
-            <div class="header-tools-stack">
-                <div class="header-icons-row">
-                    <button class="btn btn-secondary btn-icon" onclick="window.haService.fetchTelemetry(); window.showToast('Aggiornamento misurazioni T e H da Home Assistant...');" title="Sincronizza / Aggiorna Misurazioni T e H">
-                        <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i>
-                    </button>
-                    <button class="btn btn-secondary btn-icon" onclick="window.openHaModal()" title="Stato Configurazione Home Assistant (Rete Locale)">
-                        <i data-lucide="home" class="lucide-home" style="color:var(--accent-cyan);"></i>
-                    </button>
-                    <button class="btn btn-secondary btn-icon" onclick="window.showToast('Dati salvati e sincronizzati in LocalStorage.')" title="Stato Sincronizzazione Database">
-                        <i data-lucide="database" class="lucide-database"></i>
-                    </button>
+        <!-- Right Section: Telemetry Ticker & Quick Actions Icons -->
+        <div class="header-right-section">
+            <!-- Live Workshop Telemetry Monitor (T, H, EMC Legno) -->
+            <div class="header-status-ticker" onclick="window.openHaModal()" title="Telemetria Climatica Bottega (T, H, EMC Legno) - Clicca per configurare">
+                <div class="status-item">
+                    <div class="status-dot" id="haStatusDot"></div>
+                    <span id="haStatusText">Sensore Bottega: <strong>Online</strong></span>
                 </div>
-                <button class="btn btn-primary btn-add-client" onclick="window.openAddModal('clienti')" title="Aggiungi Nuovo Cliente">
-                    <i data-lucide="user-plus" class="lucide-user-plus"></i> + Nuovo Cliente
+                <div class="status-item">
+                    <i data-lucide="thermometer" class="lucide-thermometer" style="color:var(--accent-amber);"></i>
+                    <span>Temp: <strong id="haTempText">25.0 °C</strong></span>
+                </div>
+                <div class="status-item">
+                    <i data-lucide="droplets" class="lucide-droplets" style="color:var(--accent-cyan);"></i>
+                    <span>Umidità: <strong id="haHumidityText">61.3% RH</strong></span>
+                </div>
+                <div class="status-item" title="Umidità di Equilibrio del Legno (Equilibrium Moisture Content - Ottimale 8.0% - 9.5%)">
+                    <i data-lucide="tree-pine" class="lucide-tree-pine" style="color:var(--accent-emerald);"></i>
+                    <span>EMC Legno: <strong id="haEmcText">11.2% <small style="font-size:0.75rem; color:var(--text-secondary);">(Equilibrio)</small></strong></span>
+                </div>
+                <span class="badge badge-warning" id="haStatusBadge" style="cursor:pointer; font-size:0.7rem; padding: 0.2rem 0.5rem;">
+                    <i data-lucide="radio"></i> Rete Locale
+                </span>
+            </div>
+
+            <!-- Action Icons: Refresh, Home Assistant, Database -->
+            <div class="header-icons-row">
+                <button class="btn btn-secondary btn-icon" onclick="window.haService.fetchTelemetry(); window.showToast('Aggiornamento misurazioni T e H da Home Assistant...');" title="Sincronizza / Aggiorna Misurazioni T e H">
+                    <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i>
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="window.openHaModal()" title="Stato Configurazione Home Assistant (Rete Locale)">
+                    <i data-lucide="home" class="lucide-home" style="color:var(--accent-cyan);"></i>
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="window.showToast('Dati salvati e sincronizzati in LocalStorage.')" title="Stato Sincronizzazione Database">
+                    <i data-lucide="database" class="lucide-database"></i>
                 </button>
             </div>
         </div>
