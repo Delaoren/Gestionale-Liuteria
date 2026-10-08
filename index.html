@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atelier Liuteria Master | Suite Gestionale Integrata</title>
+    <meta name="description" content="Gestionale professionale per botteghe di liuteria: gestione clienti, magazzino legni da risonanza, lavorazioni, restauro, contabilità e laboratorio con monitoraggio ambientale Home Assistant.">
+    <!-- Lutherie Gold Violin Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>">
+    <link rel="stylesheet" href="./css/styles.css">
+    <!-- Lucide Icons Library (Local offline bundle) -->
+    <script src="./js/lucide.min.js"></script>
+</head>
+<body>
+
+    <!-- Header Navigation Bar -->
+    <header class="app-header">
+        <a href="#" class="brand-container" onclick="if(window.appController) window.appController.closeModule(); return false;">
+            <div class="brand-logo-icon">
+                <i data-lucide="music-4" class="lucide-music-4"></i>
+            </div>
+            <div class="brand-text">
+                <h1>Liuteria De Lorenzi</h1>
+                <p>Suite Gestionale Master</p>
+            </div>
+        </a>
+
+        <!-- Live Workshop Telemetry Monitor (T, H, EMC Legno) -->
+        <div class="header-status-ticker" onclick="window.openHaModal()" title="Telemetria Climatica Bottega (T, H, EMC Legno) - Clicca per configurare">
+            <div class="status-item">
+                <div class="status-dot" id="haStatusDot"></div>
+                <span id="haStatusText">Sensore Bottega: <strong>Online</strong></span>
+            </div>
+            <div class="status-item">
+                <i data-lucide="thermometer" class="lucide-thermometer" style="color:var(--accent-amber);"></i>
+                <span>Temp: <strong id="haTempText">25.0 °C</strong></span>
+            </div>
+            <div class="status-item">
+                <i data-lucide="droplets" class="lucide-droplets" style="color:var(--accent-cyan);"></i>
+                <span>Umidità: <strong id="haHumidityText">61.3% RH</strong></span>
+            </div>
+            <div class="status-item" title="Umidità di Equilibrio del Legno (Equilibrium Moisture Content - Ottimale 8.0% - 9.5%)">
+                <i data-lucide="tree-pine" class="lucide-tree-pine" style="color:var(--accent-emerald);"></i>
+                <span>EMC Legno: <strong id="haEmcText">11.2% <small style="font-size:0.75rem; color:var(--text-secondary);">(Equilibrio)</small></strong></span>
+            </div>
+            <span class="badge badge-warning" id="haStatusBadge" style="cursor:pointer; font-size:0.7rem; padding: 0.2rem 0.5rem;">
+                <i data-lucide="radio"></i> Rete Locale
+            </span>
+        </div>
+
+        <div class="header-actions">
+            <!-- Global Search -->
+            <div class="search-bar-wrapper">
+                <i data-lucide="search" class="lucide-search"></i>
+                <input type="text" id="globalSearchInput" placeholder="Cerca app o modulo...">
+            </div>
+            <button class="btn btn-secondary btn-icon" onclick="window.haService.fetchTelemetry(); window.showToast('Aggiornamento misurazioni T e H da Home Assistant...');" title="Aggiorna Misurazioni T e H">
+                <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i>
+            </button>
+            <button class="btn btn-secondary btn-icon" onclick="window.openHaModal()" title="Configurazione Home Assistant (Rete Locale)">
+                <i data-lucide="home" class="lucide-home" style="color:var(--accent-cyan);"></i>
+            </button>
+            <button class="btn btn-secondary btn-icon" onclick="window.showToast('Dati salvati e sincronizzati in LocalStorage.')" title="Stato Sincronizzazione">
+                <i data-lucide="database" class="lucide-database"></i>
+            </button>
+            <button class="btn btn-primary" onclick="window.openAddModal('clienti')">
+                <i data-lucide="plus" class="lucide-plus"></i> Rapido
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="main-wrapper">
+
+        <!-- HOME VIEW (Grid of Apps in Alphabetical Order) -->
+        <div id="homeView">
+            <!-- Hero Banner -->
+            <section class="hero-banner">
+                <div class="hero-content">
+                    <h2>Liuteria De Lorenzi</h2>
+                    <p>Piattaforma modulare per la gestione completa di strumenti ad arco, legnami pregiati da risonanza, schede di restauro, clienti e contabilità con telemetria igrometrica integrata.</p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat-card" onclick="window.appController.openModule('clienti')" style="cursor:pointer;" title="Visualizza Anagrafica Clienti">
+                        <div class="num" id="statClientsNum">3</div>
+                        <div class="label">Clienti</div>
+                    </div>
+                    <div class="hero-stat-card" onclick="window.appController.openModule('magazzinoStrumenti')" style="cursor:pointer;" title="Visualizza Strumenti Finiti">
+                        <div class="num" id="statInstrNum">3</div>
+                        <div class="label">Strumenti Finiti</div>
+                    </div>
+                    <div class="hero-stat-card" onclick="window.appController.openModule('calendarioAppuntamenti')" style="cursor:pointer;" title="Visualizza Calendario Appuntamenti">
+                        <div class="num" id="statAppointmentsTodayNum">1</div>
+                        <div class="label">Appuntamenti Oggi</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Apps Launcher Section -->
+            <section>
+                <div class="section-header">
+                    <div class="section-title-group">
+                        <h3>Applicazioni Gestionale</h3>
+                        <span class="badge-alphabetical">
+                            <i data-lucide="arrow-down-a-z" class="lucide-arrow-down-a-z"></i> Ordine Alfabetico A-Z
+                        </span>
+                    </div>
+                    <span style="font-size:0.85rem; color:var(--text-muted);">Totale 13 Moduli Integrati</span>
+                </div>
+
+                <!-- Grid of 13 Apps -->
+                <div class="apps-grid" id="appsGrid">
+                    <!-- Loaded dynamically via js/app.js -->
+                </div>
+            </section>
+        </div>
+
+        <!-- MODULE VIEW (Detailed view when an app is opened) -->
+        <div id="moduleView" class="module-view-container">
+            <div class="module-header-nav" id="moduleHeaderNav">
+                <!-- Loaded dynamically -->
+            </div>
+            <div id="moduleContentContainer" class="module-content-grid">
+                <!-- Module content loaded dynamically -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Global Modal Overlay (Add / Edit) -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 id="modalTitle">Nuovo Inserimento</h3>
+                <button class="modal-close-btn" onclick="window.closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic form fields -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Telemetry Configuration Modal (MQTT / Home Assistant) -->
+    <div class="modal-overlay" id="haModalOverlay">
+        <div class="modal-container ha-modal-container">
+            <div class="modal-header">
+                <div style="display:flex; align-items:center; gap:0.6rem;">
+                    <div style="width:36px; height:36px; border-radius:8px; background:rgba(6, 182, 212, 0.2); border:1px solid var(--accent-cyan); display:flex; align-items:center; justify-content:center; color:var(--accent-cyan);">
+                        <i data-lucide="radio"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:1.2rem; color:#fff;">Telemetria Climatica Laboratorio</h3>
+                        <p style="margin:0; font-size:0.75rem; color:var(--text-secondary);">Lettura Temperatura (T) e Umidità (H) via MQTT (192.168.68.108) o Home Assistant</p>
+                    </div>
+                </div>
+                <button class="modal-close-btn" onclick="window.closeHaModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="haModalBody">
+                <!-- Rendered dynamically via js/app.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Data and Application Logic -->
+    <script src="./js/data.js"></script>
+    <script src="./js/homeAssistant.js"></script>
+    <script src="./js/modules/renderers.js"></script>
+    <script src="./js/app.js"></script>
+</body>
+</html>
