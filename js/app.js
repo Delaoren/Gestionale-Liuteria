@@ -348,79 +348,95 @@ window.openAddModal = function(collectionName) {
     const appInfo = APPS.find(a => a.id === collectionName);
     modalTitle.innerText = `Nuovo Inserimento: ${appInfo ? appInfo.name : collectionName}`;
 
+    const todayIso = new Date().toISOString().split('T')[0];
+    const d30 = new Date(); d30.setDate(d30.getDate() + 30);
+    const nextMonthIso = d30.toISOString().split('T')[0];
+    const d7 = new Date(); d7.setDate(d7.getDate() + 7);
+    const weekAfterIso = d7.toISOString().split('T')[0];
+    const todayDateTimeLocal = new Date().toISOString().slice(0, 16);
+
+    const clientsList = ((window.atelierDB && window.atelierDB.data.clienti) || [])
+        .map(c => `<option value="${c.nome}">`).join('');
+    const woodsList = ((window.atelierDB && window.atelierDB.data.magazzinoLegno) || [])
+        .map(w => `<option value="${w.essenza} (${w.annoTaglio})">`).join('');
+    const instrumentsList = [
+        ...(((window.atelierDB && window.atelierDB.data.costruzione) || []).map(i => `<option value="${i.opNumero} - ${i.modello}">`)),
+        ...(((window.atelierDB && window.atelierDB.data.magazzinoStrumenti) || []).map(i => `<option value="${i.nome}">`))
+    ].join('');
+
+    const ha = window.haService || { lastReadings: { temp: 21.8, humidity: 47.5 } };
+    const curTemp = (ha.lastReadings && ha.lastReadings.temp) ? ha.lastReadings.temp.toFixed(1) : "21.8";
+    const curHum = (ha.lastReadings && ha.lastReadings.humidity) ? ha.lastReadings.humidity.toFixed(1) : "47.5";
+    const currentClimateString = `${curTemp}°C / ${curHum}% RH (Ottimale)`;
+
     let formHTML = '';
 
-    if (collectionName === 'clienti') {
+    if (collectionName === 'biblioteca') {
         formHTML = `
-            <form onsubmit="window.saveNewRecord(event, 'clienti')">
+            <form onsubmit="window.saveNewRecord(event, 'biblioteca')">
                 <div class="form-group">
-                    <label>Nome Completo Cliente</label>
-                    <input type="text" id="f_nome" class="form-control" required placeholder="Es. Maestro Giuseppe Verdi">
+                    <label>Titolo Opera / Trattato / Documento Tecnico</label>
+                    <input type="text" id="f_bib_titolo" class="form-control" required placeholder="Es. Rilievi Acustici e Sesto Stradivari 'Cremonese' 1715">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Ruolo / Titolo</label>
-                        <input type="text" id="f_ruolo" class="form-control" placeholder="Es. Violoncellista Solista">
+                        <label>Autore / Ente di Ricerca</label>
+                        <input type="text" id="f_bib_autore" class="form-control" required placeholder="Es. S. F. Sacconi / G. Baese / Museo del Violino">
                     </div>
                     <div class="form-group">
-                        <label>Città</label>
-                        <input type="text" id="f_citta" class="form-control" placeholder="Es. Cremona">
+                        <label>Categoria</label>
+                        <select id="f_bib_categoria" class="form-control">
+                            <option value="Disegni e Modelli">Disegni e Modelli</option>
+                            <option value="Ricette e Trattamenti">Ricette e Trattamenti</option>
+                            <option value="Analisi Scientifica">Analisi Scientifica</option>
+                            <option value="Tecnica Costruttiva">Tecnica Costruttiva</option>
+                            <option value="Storia & Liuteria">Storia & Liuteria</option>
+                            <option value="Acustica Applicata">Acustica Applicata</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="f_email" class="form-control" placeholder="email@dominio.it">
+                        <label>Anno Pubblicazione</label>
+                        <input type="number" id="f_bib_anno" class="form-control" value="2018">
                     </div>
                     <div class="form-group">
-                        <label>Telefono</label>
-                        <input type="text" id="f_telefono" class="form-control" placeholder="+39 340 ...">
+                        <label>Formato Documento</label>
+                        <select id="f_bib_formato" class="form-control">
+                            <option value="PDF Blueprint">PDF Blueprint</option>
+                            <option value="Manuale Tecnico">Manuale Tecnico</option>
+                            <option value="Rapporto Tomografico">Rapporto Tomografico (CT-Scan)</option>
+                            <option value="PDF Guida">PDF Guida</option>
+                            <option value="Articolo Scientifico">Articolo Scientifico</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Numero Pagine</label>
+                        <input type="number" id="f_bib_pagine" class="form-control" value="48">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Note & Preferenze Timbriche</label>
-                    <textarea id="f_note" class="form-control" placeholder="Note del liutaio su preferenze suono..."></textarea>
+                    <label>Tags & Parole Chiave (separate da virgola)</label>
+                    <input type="text" id="f_bib_tags" class="form-control" placeholder="Es. Stradivari, Violino, Spessori, Frequenze, Vernici">
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Salva Cliente</button>
-            </form>
-        `;
-    } else if (collectionName === 'magazzinoLegno') {
-        formHTML = `
-            <form onsubmit="window.saveNewRecord(event, 'magazzinoLegno')">
                 <div class="form-group">
-                    <label>Essenza Legno</label>
-                    <input type="text" id="f_essenza" class="form-control" required placeholder="Es. Abete Rosso Val di Fiemme">
+                    <label>Note & Sintesi Documento</label>
+                    <textarea id="f_bib_note" class="form-control" placeholder="Dettagli essenziali, spessori della tavola, note di laboratorio o frequenze citate..."></textarea>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Provenienza</label>
-                        <input type="text" id="f_provenienza" class="form-control" placeholder="Es. Paneveggio (TN)">
-                    </div>
-                    <div class="form-group">
-                        <label>Anno Taglio</label>
-                        <input type="number" id="f_annoTaglio" class="form-control" value="2015">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Quantità Pezzi</label>
-                        <input type="number" id="f_quantita" class="form-control" value="1">
-                    </div>
-                    <div class="form-group">
-                        <label>Prezzo Unitario (€)</label>
-                        <input type="number" id="f_prezzoUnitario" class="form-control" value="250">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Registra Legno</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-book-plus"></i> Archivia Documento in Biblioteca
+                </button>
             </form>
         `;
     } else if (collectionName === 'calendarioAppuntamenti') {
-        const todayIso = new Date().toISOString().split('T')[0];
         formHTML = `
             <form onsubmit="window.saveNewRecord(event, 'calendarioAppuntamenti')">
                 <div class="form-group">
                     <label>Cliente / Richiedente</label>
-                    <input type="text" id="f_app_cliente" class="form-control" required placeholder="Es. Maestro Marco Rossi (Primo Violino)">
+                    <input type="text" id="f_app_cliente" list="app_clienti_list" class="form-control" required placeholder="Es. Maestro Marco Rossi (Primo Violino)">
+                    <datalist id="app_clienti_list">
+                        ${clientsList}
+                    </datalist>
                 </div>
                 <div class="form-row">
                     <div class="form-group" style="flex:1;">
@@ -441,80 +457,148 @@ window.openAddModal = function(collectionName) {
                             <option value="Consulenza e Valutazione">Consulenza e Valutazione</option>
                             <option value="Consegna Strumento">Consegna Strumento</option>
                             <option value="Regolazione tastiera e ponticello">Regolazione tastiera e ponticello</option>
+                            <option value="Ispezione e Diagnosi Restauro">Ispezione e Diagnosi Restauro</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Strumento di Riferimento</label>
-                        <input type="text" id="f_app_strumento" class="form-control" placeholder="Es. Violino Stradivari Copy 2021">
+                        <input type="text" id="f_app_strumento" list="app_strumenti_list" class="form-control" placeholder="Es. Violino Guarneri 1742">
+                        <datalist id="app_strumenti_list">
+                            ${instrumentsList}
+                        </datalist>
                     </div>
                     <div class="form-group">
                         <label>Stato Appuntamento</label>
                         <select id="f_app_stato" class="form-control">
                             <option value="Confermato">Confermato</option>
                             <option value="In attesa">In attesa</option>
+                            <option value="Completato">Completato</option>
                         </select>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Note Atelier</label>
-                    <textarea id="f_app_note" class="form-control" placeholder="Dettagli sulle lavorazioni da concordare..."></textarea>
+                    <textarea id="f_app_note" class="form-control" placeholder="Dettagli sulle lavorazioni da concordare, preferenze acustiche del musicista..."></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Salva Appuntamento</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-calendar-plus"></i> Salva Appuntamento
+                </button>
             </form>
         `;
-    } else if (collectionName === 'magazzinoStrumenti') {
-        const rndCode = `VIO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
+    } else if (collectionName === 'calendarioLavorazioni') {
         formHTML = `
-            <form onsubmit="window.saveNewRecord(event, 'magazzinoStrumenti')">
+            <form onsubmit="window.saveNewRecord(event, 'calendarioLavorazioni')">
+                <div class="form-group">
+                    <label>Titolo Lavorazione / Attività</label>
+                    <input type="text" id="f_lav_titolo" class="form-control" required placeholder="Es. Scultura Riccio e Cassetta Pirolo Opus 45">
+                </div>
                 <div class="form-row">
-                    <div class="form-group" style="flex:1;">
-                        <label>Codice Identificativo</label>
-                        <input type="text" id="f_str_codice" class="form-control" required value="${rndCode}">
+                    <div class="form-group">
+                        <label>Strumento di Riferimento</label>
+                        <input type="text" id="f_lav_strumento" list="lav_strumenti_list" class="form-control" required placeholder="Es. Violino Opus 45 Guarneri">
+                        <datalist id="lav_strumenti_list">
+                            ${instrumentsList}
+                        </datalist>
                     </div>
-                    <div class="form-group" style="flex:2;">
-                        <label>Nome Strumento</label>
-                        <input type="text" id="f_str_nome" class="form-control" required placeholder="Es. Violino Master 'La Fenice' Opus 44">
+                    <div class="form-group">
+                        <label>Responsabile / Operatore</label>
+                        <select id="f_lav_responsabile" class="form-control">
+                            <option value="Maestro Liutaio">Maestro Liutaio</option>
+                            <option value="Assistente Atelier">Assistente Atelier</option>
+                            <option value="Restauratore Capo">Restauratore Capo</option>
+                            <option value="Allievo di Bottega">Allievo di Bottega</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Tipologia</label>
-                        <select id="f_str_tipologia" class="form-control">
-                            <option value="Violino 4/4">Violino 4/4</option>
-                            <option value="Viola">Viola</option>
-                            <option value="Violoncello">Violoncello</option>
-                            <option value="Contrabbasso">Contrabbasso</option>
-                            <option value="Arco da Concerto">Arco da Concerto</option>
+                        <label>Fase Lavorazione</label>
+                        <input type="text" id="f_lav_fase" list="lav_fasi_list" class="form-control" required placeholder="Es. Sbozzatura & Occhioli">
+                        <datalist id="lav_fasi_list">
+                            <option value="Sbozzatura e Occhioli">
+                            <option value="Piallatura Giunta e Bombatura">
+                            <option value="Scavo Spessori e Intaglio Effi">
+                            <option value="Incatenatura e Chiusura Cassa">
+                            <option value="Filettatura e Finitura Bordi">
+                            <option value="Incastro Manico e Tastiera">
+                            <option value="Ossidazione UV e Verniciatura Mano 1/12">
+                            <option value="Applicazione Tacchetti di Restauro">
+                            <option value="Montatura, Ponticello e Anima">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Priorità</label>
+                        <select id="f_lav_priorita" class="form-control">
+                            <option value="Media">Media</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Urgentissima">Urgentissima</option>
+                            <option value="Bassa">Bassa</option>
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Modello</label>
-                        <input type="text" id="f_str_modello" class="form-control" placeholder="Es. Stradivari 1715 Cremonese">
-                    </div>
-                    <div class="form-group">
-                        <label>Prezzo (€)</label>
-                        <input type="number" id="f_str_prezzo" class="form-control" value="16000">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Stato Strumento</label>
-                        <select id="f_str_stato" class="form-control">
-                            <option value="Disponibile in Showroom">Disponibile in Showroom</option>
-                            <option value="In Prova presso Cliente">In Prova presso Cliente</option>
-                            <option value="Venduto">Venduto</option>
-                        </select>
+                        <label>📅 Data Inizio</label>
+                        <input type="date" id="f_lav_inizio" class="form-control" required value="${todayIso}">
                     </div>
                     <div class="form-group">
-                        <label>Certificato</label>
-                        <input type="text" id="f_str_certificato" class="form-control" value="Certificato di Autenticità Liuteria De Lorenzi">
+                        <label>🏁 Data Consegna / Fine</label>
+                        <input type="date" id="f_lav_fine" class="form-control" required value="${weekAfterIso}">
+                    </div>
+                    <div class="form-group">
+                        <label>Avanzamento: <strong id="f_lav_progVal" style="color:var(--accent-gold);">20%</strong></label>
+                        <input type="range" id="f_lav_progresso" class="form-control" min="0" max="100" value="20" oninput="document.getElementById('f_lav_progVal').innerText = this.value + '%'" style="cursor:pointer; padding:0.4rem;">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-clock"></i> Pianifica Lavorazione in Atelier
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'clienti') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'clienti')">
+                <div class="form-group">
+                    <label>Nome Completo Cliente / Musicista</label>
+                    <input type="text" id="f_nome" class="form-control" required placeholder="Es. Maestro Marco Rossi">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Ruolo / Titolo</label>
+                        <input type="text" id="f_ruolo" class="form-control" placeholder="Es. Solista & Primo Violino Teatro alla Scala">
+                    </div>
+                    <div class="form-group">
+                        <label>Città & Nazione</label>
+                        <input type="text" id="f_citta" class="form-control" placeholder="Es. Milano (Italia)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="f_email" class="form-control" placeholder="email@orchestra.it">
+                    </div>
+                    <div class="form-group">
+                        <label>Telefono</label>
+                        <input type="text" id="f_telefono" class="form-control" placeholder="+39 335 ...">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Strumenti Posseduti / Assegnati</label>
+                        <input type="text" id="f_strumentiPosseduti" class="form-control" placeholder="Es. Violino Master Opus 38, Arco Sartory">
+                    </div>
+                    <div class="form-group">
+                        <label>Storico Spesa Totale (€)</label>
+                        <input type="number" id="f_spesaTotale" class="form-control" value="0">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Vernice & Finitura</label>
-                    <input type="text" id="f_str_vernice" class="form-control" placeholder="Es. Olio di ambra e resine naturali colore ambrato dorato">
+                    <label>Note & Preferenze Timbriche del Musicista</label>
+                    <textarea id="f_note" class="form-control" placeholder="Es. Predilige timbro caldo nei bassi, anima leggermente avanzata, ponticello modello belga..."></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Registra Strumento Finito</button>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-user-plus"></i> Salva Cliente
+                </button>
             </form>
         `;
     } else if (collectionName === 'costruzione') {
@@ -529,18 +613,9 @@ window.openAddModal = function(collectionName) {
         });
         const nextOpusNum = highestNum > 0 ? highestNum + 1 : 45;
         const defaultOpus = `Opus ${nextOpusNum}`;
-        const todayIso = new Date().toISOString().split('T')[0];
         const targetDate = new Date();
         targetDate.setMonth(targetDate.getMonth() + 3);
         const estDeliveryIso = targetDate.toISOString().split('T')[0];
-
-        // Gather existing clients for datalist
-        const clientsList = ((window.atelierDB && window.atelierDB.data.clienti) || [])
-            .map(c => `<option value="${c.nome}">`).join('');
-
-        // Gather existing wood species from warehouse
-        const woodsList = ((window.atelierDB && window.atelierDB.data.magazzinoLegno) || [])
-            .map(w => `<option value="${w.essenza} (${w.annoTaglio})">`).join('');
 
         formHTML = `
             <form onsubmit="window.saveNewRecord(event, 'costruzione')">
@@ -671,6 +746,441 @@ window.openAddModal = function(collectionName) {
                 </button>
             </form>
         `;
+    } else if (collectionName === 'gestioneContabilita') {
+        const existingFat = (window.atelierDB && window.atelierDB.data.gestioneContabilita) || [];
+        const suggestedFatNum = `FATT-${new Date().getFullYear()}-${String(existingFat.length + 42).padStart(3, '0')}`;
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'gestioneContabilita')">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>N° Fattura / Ricevuta</label>
+                        <input type="text" id="f_fat_numero" class="form-control" required value="${suggestedFatNum}" placeholder="Es. FATT-2026-045">
+                    </div>
+                    <div class="form-group" style="flex:2;">
+                        <label>Cliente Intestatario</label>
+                        <input type="text" id="f_fat_cliente" list="fat_clienti_list" class="form-control" required placeholder="Es. Marco Rossi / Orchestra...">
+                        <datalist id="fat_clienti_list">
+                            ${clientsList}
+                        </datalist>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Causale Lavoro / Prestazione</label>
+                    <input type="text" id="f_fat_causale" class="form-control" required placeholder="Es. Vendita Violino Master Opus 42 + Certificato di Autenticità">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Importo (€)</label>
+                        <input type="number" id="f_fat_importo" class="form-control" required value="18000" min="0" step="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Metodo di Pagamento</label>
+                        <select id="f_fat_metodo" class="form-control">
+                            <option value="Bonifico Bancario">Bonifico Bancario</option>
+                            <option value="Carta di Credito">Carta di Credito</option>
+                            <option value="Assegno Circolare">Assegno Circolare</option>
+                            <option value="Contanti">Contanti</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Stato Pagamento</label>
+                        <select id="f_fat_stato" class="form-control">
+                            <option value="In Sospeso">In Sospeso</option>
+                            <option value="Pagata">Pagata</option>
+                            <option value="Annullata">Annullata</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Data Emissione</label>
+                        <input type="date" id="f_fat_data" class="form-control" required value="${todayIso}">
+                    </div>
+                    <div class="form-group">
+                        <label>Data Scadenza Pagamento</label>
+                        <input type="date" id="f_fat_scadenza" class="form-control" required value="${nextMonthIso}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-file-plus"></i> Emetti e Registra Fattura
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'laboratorio') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'laboratorio')">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Postazione / Banco di Lavoro</label>
+                        <input type="text" id="f_lab_banco" class="form-control" required placeholder="Es. Banco C - Finitura & Verniciatura">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Assegnato A (Operatore)</label>
+                        <select id="f_lab_assegnatoA" class="form-control">
+                            <option value="Maestro Liutaio">Maestro Liutaio</option>
+                            <option value="Restauratore Capo">Restauratore Capo</option>
+                            <option value="Assistente Atelier">Assistente Atelier</option>
+                            <option value="Allievo Bottega">Allievo Bottega</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Strumento in Lavorazione</label>
+                        <input type="text" id="f_lab_strumento" list="lab_str_list" class="form-control" required placeholder="Es. Violino Opus 45">
+                        <datalist id="lab_str_list">
+                            ${instrumentsList}
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Stato Stazione</label>
+                        <select id="f_lab_statoStazione" class="form-control">
+                            <option value="Attivo">Attivo</option>
+                            <option value="In Manutenzione">In Manutenzione</option>
+                            <option value="Libero / Disponibile">Libero / Disponibile</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Condizioni Ambientali Rilevate</label>
+                    <input type="text" id="f_lab_condizioni" class="form-control" value="${currentClimateString}" placeholder="Es. 22.1°C / 48.5% RH (Ottimale)">
+                </div>
+                <div class="form-group">
+                    <label>Utensili & Attrezzature in Uso (separate da virgola)</label>
+                    <textarea id="f_lab_utensili" class="form-control" placeholder="Es. Pialletto a botte 8mm, Sgorga Dastra #7 18mm, Colla di pelle 60°C, Spessimetro rapido"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-gauge"></i> Registra Stazione Laboratorio
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'magazzinoLegno') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'magazzinoLegno')">
+                <div class="form-group">
+                    <label>Essenza Legno da Risonanza</label>
+                    <input type="text" id="f_essenza" list="leg_essenze_list" class="form-control" required placeholder="Es. Abete Rosso da Risonanza (Picea abies)">
+                    <datalist id="leg_essenze_list">
+                        <option value="Abete Rosso da Risonanza (Picea abies)">
+                        <option value="Acero Marezzato Balcanico (Acer pseudoplatanus)">
+                        <option value="Ebano Nero Naturale (Diospyros ebenum)">
+                        <option value="Pernambuco Premium (Paubrasilia echinata)">
+                        <option value="Pioppo Marezzato Maschio">
+                        <option value="Salice per Controfasce e Zocchetti">
+                    </datalist>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Provenienza / Foresta</label>
+                        <input type="text" id="f_provenienza" class="form-control" placeholder="Es. Foresta dei Violini - Val di Fiemme (TN)">
+                    </div>
+                    <div class="form-group">
+                        <label>Anno Taglio</label>
+                        <input type="number" id="f_annoTaglio" class="form-control" value="2012">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipologia Pezzo / Formato</label>
+                        <select id="f_tipoPezzo" class="form-control">
+                            <option value="Spaccato a Cuneo per Tavola Violino">Spaccato a Cuneo per Tavola Violino</option>
+                            <option value="Set Fondo Unico + Fasce + Manico">Set Fondo Unico + Fasce + Manico</option>
+                            <option value="Fondo a Due Pezzi Speculari + Fasce">Fondo a Due Pezzi Speculari + Fasce</option>
+                            <option value="Blocchetti per Tastiera Violoncello e Violino">Blocchetti per Tastiera</option>
+                            <option value="Bacchette Ottagonali per Archi Violino">Bacchette per Archi</option>
+                            <option value="Tavola e Fondo per Violoncello">Set per Violoncello</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantità Pezzi</label>
+                        <input type="number" id="f_quantita" class="form-control" value="5" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Prezzo Unitario (€)</label>
+                        <input type="number" id="f_prezzoUnitario" class="form-control" value="350">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Densità Legno</label>
+                        <input type="text" id="f_densita" class="form-control" value="0.38 g/cm³" placeholder="Es. 0.38 g/cm³">
+                    </div>
+                    <div class="form-group">
+                        <label>Velocità del Suono (m/s)</label>
+                        <input type="text" id="f_velocitaSuono" class="form-control" value="5400 m/s" placeholder="Es. 5450 m/s">
+                    </div>
+                    <div class="form-group">
+                        <label>Stato Conservazione</label>
+                        <select id="f_leg_stato" class="form-control">
+                            <option value="Stagionato / PRONTO">Stagionato / PRONTO</option>
+                            <option value="In Stagionatura">In Stagionatura</option>
+                            <option value="Rarità / PRONTO">Rarità / PRONTO</option>
+                            <option value="In Giacenza">In Giacenza</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-trees"></i> Registra Legno nel Magazzino Tonewood
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'magazzinoStrumenti') {
+        const rndCode = `VIO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'magazzinoStrumenti')">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Codice Identificativo</label>
+                        <input type="text" id="f_str_codice" class="form-control" required value="${rndCode}">
+                    </div>
+                    <div class="form-group" style="flex:2;">
+                        <label>Nome Strumento</label>
+                        <input type="text" id="f_str_nome" class="form-control" required placeholder="Es. Violino Master 'La Fenice' Opus 45">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipologia</label>
+                        <select id="f_str_tipologia" class="form-control">
+                            <option value="Violino 4/4">Violino 4/4</option>
+                            <option value="Viola">Viola</option>
+                            <option value="Violoncello">Violoncello</option>
+                            <option value="Contrabbasso">Contrabbasso</option>
+                            <option value="Arco da Concerto">Arco da Concerto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Modello</label>
+                        <input type="text" id="f_str_modello" class="form-control" placeholder="Es. Stradivari 1715 Cremonese">
+                    </div>
+                    <div class="form-group">
+                        <label>Anno Costruzione</label>
+                        <input type="number" id="f_str_anno" class="form-control" value="${new Date().getFullYear()}">
+                    </div>
+                    <div class="form-group">
+                        <label>Prezzo (€)</label>
+                        <input type="number" id="f_str_prezzo" class="form-control" value="16000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stato Strumento</label>
+                        <select id="f_str_stato" class="form-control">
+                            <option value="Disponibile in Showroom">Disponibile in Showroom</option>
+                            <option value="In Prova presso Cliente">In Prova presso Cliente</option>
+                            <option value="Venduto">Venduto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Certificato</label>
+                        <input type="text" id="f_str_certificato" class="form-control" value="Certificato di Autenticità Liuteria De Lorenzi">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Vernice & Finitura</label>
+                    <input type="text" id="f_str_vernice" class="form-control" placeholder="Es. Olio di ambra e resine naturali colore ambrato dorato">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-music"></i> Registra Strumento Finito in Showroom
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'media') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'media')">
+                <div class="form-group">
+                    <label>Titolo File / Registrazione Acustica</label>
+                    <input type="text" id="f_med_titolo" class="form-control" required placeholder="Es. Macro Scultura Riccio e Filetto Violino Opus 42">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipologia Media</label>
+                        <select id="f_med_tipo" class="form-control">
+                            <option value="Foto High-Res">Foto High-Res</option>
+                            <option value="Audio Lossless">Audio Lossless (Test Acustico)</option>
+                            <option value="Video 4K">Video 4K (Lavorazione)</option>
+                            <option value="Rilievo CT-Scan">Rilievo CT-Scan</option>
+                            <option value="Disegno Vettoriale">Disegno Vettoriale Blueprint</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Categoria</label>
+                        <select id="f_med_categoria" class="form-control">
+                            <option value="Finitura & Dettagli">Finitura & Dettagli</option>
+                            <option value="Test Acustici">Test Acustici</option>
+                            <option value="Lavorazione Atelier">Lavorazione Atelier</option>
+                            <option value="Certificati & Foto Ufficiali">Certificati & Foto Ufficiali</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Formato File</label>
+                        <input type="text" id="f_med_formato" class="form-control" value="JPG / 4K" placeholder="Es. JPG / 4K, FLAC 24bit/96kHz, MP4">
+                    </div>
+                    <div class="form-group">
+                        <label>Dimensione File</label>
+                        <input type="text" id="f_med_dimensione" class="form-control" value="15 MB" placeholder="Es. 15 MB, 88 MB">
+                    </div>
+                    <div class="form-group">
+                        <label>URL / Percorso Immagine</label>
+                        <input type="text" id="f_med_url" class="form-control" value="./assets/lutherie_banner.png" placeholder="Es. ./assets/...">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Descrizione Tecnica & Note Scatto/Audio</label>
+                    <textarea id="f_med_descrizione" class="form-control" placeholder="Dettagli sulle condizioni di ripresa o registrazione, microfoni usati, macro ottica..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-upload"></i> Carica Media nell'Archivio
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'report') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'report')">
+                <div class="form-group">
+                    <label>Titolo Report / Analisi</label>
+                    <input type="text" id="f_rep_titolo" class="form-control" required placeholder="Es. Rendimento e Produzione Trimestre Q4 2026">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Periodo di Riferimento</label>
+                        <input type="text" id="f_rep_periodo" class="form-control" required placeholder="Es. Ottobre - Dicembre 2026">
+                    </div>
+                    <div class="form-group">
+                        <label>Strumenti Costruiti</label>
+                        <input type="number" id="f_rep_costruiti" class="form-control" value="3">
+                    </div>
+                    <div class="form-group">
+                        <label>Restauri Completati</label>
+                        <input type="number" id="f_rep_restaurati" class="form-control" value="5">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Ricavo Totale (€)</label>
+                        <input type="number" id="f_rep_ricavo" class="form-control" value="48000">
+                    </div>
+                    <div class="form-group">
+                        <label>Margine Netto</label>
+                        <input type="text" id="f_rep_margine" class="form-control" value="68%" placeholder="Es. 70%">
+                    </div>
+                    <div class="form-group">
+                        <label>Top Performance / Strumento Faro</label>
+                        <input type="text" id="f_rep_top" class="form-control" value="Violino Guarneri Lord Wilton Opus 42">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-bar-chart-3"></i> Salva Report Statistico
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'restauro') {
+        const existingRes = (window.atelierDB && window.atelierDB.data.restauro) || [];
+        const suggestedResCodice = `RST-${new Date().getFullYear()}-${String(existingRes.length + 8).padStart(2, '0')}`;
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'restauro')">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Codice Scheda Restauro</label>
+                        <input type="text" id="f_res_codice" class="form-control" required value="${suggestedResCodice}" placeholder="Es. RST-2026-10">
+                    </div>
+                    <div class="form-group" style="flex:2;">
+                        <label>Strumento Storico da Restaurare</label>
+                        <input type="text" id="f_res_strumento" class="form-control" required placeholder="Es. Viola d'Amore Anonima Bolognese (XVIII Secolo)">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Proprietario / Committente</label>
+                        <input type="text" id="f_res_proprietario" list="res_clienti_list" class="form-control" required placeholder="Es. Collezione Privata / Musicista">
+                        <datalist id="res_clienti_list">
+                            ${clientsList}
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Stato Intervento</label>
+                        <select id="f_res_stato" class="form-control">
+                            <option value="Diagnosi & Preventivo">Diagnosi & Preventivo</option>
+                            <option value="In Corso (Apertura Cassa)">In Corso (Apertura Cassa)</option>
+                            <option value="In Corso (Fase Tacchetti)">In Corso (Fase Tacchetti)</option>
+                            <option value="Chiusura Cassa e Ritocco Vernice">Chiusura Cassa e Ritocco Vernice</option>
+                            <option value="Messa a Punto & Consegna">Messa a Punto & Consegna</option>
+                            <option value="Completato">Completato</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Diagnosi Danni & Stato di Conservazione</label>
+                    <textarea id="f_res_diagnosi" class="form-control" required placeholder="Es. Spaccatura della tavola armonica vicino all'anima, vernice originale degradata, catena collassata..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Interventi di Restauro Previsti</label>
+                    <textarea id="f_res_interventi" class="form-control" required placeholder="Es. Apertura cassa con lama riscaldata, pulizia colle antiche, posa tacchetti in abete di risonanza, sostituzione catena..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Preventivo Economico (€)</label>
+                        <input type="number" id="f_res_preventivo" class="form-control" value="3500">
+                    </div>
+                    <div class="form-group">
+                        <label>Data Consegna Stimata</label>
+                        <input type="date" id="f_res_consegna" class="form-control" value="${nextMonthIso}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-sparkles"></i> Registra Scheda di Restauro
+                </button>
+            </form>
+        `;
+    } else if (collectionName === 'social') {
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'social')">
+                <div class="form-group">
+                    <label>Titolo / Argomento Post</label>
+                    <input type="text" id="f_soc_titolo" class="form-control" required placeholder="Es. Showcase Scultura Riccio e Filetto Violino Opus 42">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Piattaforma</label>
+                        <select id="f_soc_piattaforma" class="form-control">
+                            <option value="Instagram">Instagram</option>
+                            <option value="YouTube">YouTube</option>
+                            <option value="Facebook">Facebook</option>
+                            <option value="TikTok">TikTok</option>
+                            <option value="LinkedIn">LinkedIn</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Stato Programmazione</label>
+                        <select id="f_soc_stato" class="form-control">
+                            <option value="Programmato">Programmato</option>
+                            <option value="Bozza">Bozza</option>
+                            <option value="In Revisione">In Revisione</option>
+                            <option value="Pubblicato">Pubblicato</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Data e Ora Pubblicazione</label>
+                        <input type="datetime-local" id="f_soc_data" class="form-control" value="${todayDateTimeLocal}">
+                    </div>
+                    <div class="form-group">
+                        <label>Stima Likes / Interazioni</label>
+                        <input type="text" id="f_soc_likes" class="form-control" value="1.5K" placeholder="Es. 2.4K">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Hashtag Strategici</label>
+                    <input type="text" id="f_soc_hashtag" class="form-control" value="#lutherie #cremona #violinmaker #tonewood #handmade #stradivari" placeholder="Es. #lutherie #cremona...">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
+                    <i class="lucide-share-2"></i> Programma Pubblicazione Social
+                </button>
+            </form>
+        `;
     } else {
         // Generic fallback form
         formHTML = `
@@ -698,60 +1208,59 @@ window.closeModal = function() {
 
 window.saveNewRecord = function(e, collectionName) {
     e.preventDefault();
-    if (collectionName === 'clienti') {
+    if (collectionName === 'biblioteca') {
         const item = {
-            id: "cli-" + Date.now(),
-            nome: document.getElementById("f_nome").value,
-            ruolo: document.getElementById("f_ruolo").value || "Cliente Atelier",
-            citta: document.getElementById("f_citta").value || "Italia",
-            email: document.getElementById("f_email").value || "-",
-            telefono: document.getElementById("f_telefono").value || "-",
-            strumentiPosseduti: ["Nuova Richiesta"],
-            spesaTotale: 0,
-            note: document.getElementById("f_note").value || "Nuova scheda cliente."
+            id: "bib-" + Date.now(),
+            titolo: document.getElementById("f_bib_titolo").value.trim(),
+            autore: document.getElementById("f_bib_autore").value.trim(),
+            categoria: document.getElementById("f_bib_categoria").value,
+            anno: parseInt(document.getElementById("f_bib_anno").value) || new Date().getFullYear(),
+            formato: document.getElementById("f_bib_formato").value,
+            pagine: parseInt(document.getElementById("f_bib_pagine").value) || 1,
+            note: document.getElementById("f_bib_note").value.trim(),
+            tags: (document.getElementById("f_bib_tags").value || "").split(',').map(t => t.trim()).filter(Boolean)
         };
-        window.atelierDB.addItem("clienti", item);
-    } else if (collectionName === 'magazzinoLegno') {
-        const item = {
-            id: "leg-" + Date.now(),
-            essenza: document.getElementById("f_essenza").value,
-            provenienza: document.getElementById("f_provenienza").value || "Italia",
-            annoTaglio: parseInt(document.getElementById("f_annoTaglio").value) || 2020,
-            stagionaturaAnni: new Date().getFullYear() - (parseInt(document.getElementById("f_annoTaglio").value) || 2020),
-            tipoPezzo: "Set da Risonanza",
-            quantita: parseInt(document.getElementById("f_quantita").value) || 1,
-            densita: "0.39 g/cm³",
-            velocitaSuono: "5100 m/s",
-            prezzoUnitario: parseFloat(document.getElementById("f_prezzoUnitario").value) || 100,
-            stato: "Stagionato / PRONTO"
-        };
-        window.atelierDB.addItem("magazzinoLegno", item);
+        window.atelierDB.addItem("biblioteca", item);
     } else if (collectionName === 'calendarioAppuntamenti') {
         const item = {
             id: "app-" + Date.now(),
-            cliente: document.getElementById("f_app_cliente").value,
+            cliente: document.getElementById("f_app_cliente").value.trim(),
             data: document.getElementById("f_app_data").value || new Date().toISOString().split('T')[0],
-            ora: document.getElementById("f_app_ora").value || "10:00",
+            ora: document.getElementById("f_app_ora").value || "10:30",
             tipo: document.getElementById("f_app_tipo").value || "Incontro",
-            strumento: document.getElementById("f_app_strumento").value || "-",
+            strumento: document.getElementById("f_app_strumento").value.trim() || "-",
             stato: document.getElementById("f_app_stato").value || "Confermato",
-            note: document.getElementById("f_app_note").value || ""
+            note: document.getElementById("f_app_note").value.trim()
         };
         window.atelierDB.addItem("calendarioAppuntamenti", item);
-    } else if (collectionName === 'magazzinoStrumenti') {
+    } else if (collectionName === 'calendarioLavorazioni') {
         const item = {
-            id: "str-" + Date.now(),
-            codice: document.getElementById("f_str_codice").value || `VIO-${Date.now().toString().slice(-4)}`,
-            nome: document.getElementById("f_str_nome").value,
-            tipologia: document.getElementById("f_str_tipologia").value || "Violino",
-            modello: document.getElementById("f_str_modello").value || "Modello Classico",
-            annoCostruzione: new Date().getFullYear(),
-            prezzo: parseFloat(document.getElementById("f_str_prezzo").value) || 15000,
-            stato: document.getElementById("f_str_stato").value || "Disponibile in Showroom",
-            certificato: document.getElementById("f_str_certificato").value || "Presente",
-            vernice: document.getElementById("f_str_vernice").value || "Finitura tradizionale a olio"
+            id: "lav-" + Date.now(),
+            titolo: document.getElementById("f_lav_titolo").value.trim(),
+            responsabile: document.getElementById("f_lav_responsabile").value || "Maestro Liutaio",
+            inizio: document.getElementById("f_lav_inizio").value || new Date().toISOString().split('T')[0],
+            fine: document.getElementById("f_lav_fine").value || "",
+            progresso: parseInt(document.getElementById("f_lav_progresso").value) || 0,
+            priorita: document.getElementById("f_lav_priorita").value || "Media",
+            fase: document.getElementById("f_lav_fase").value.trim() || "Lavorazione in corso",
+            strumento: document.getElementById("f_lav_strumento").value.trim() || "-"
         };
-        window.atelierDB.addItem("magazzinoStrumenti", item);
+        window.atelierDB.addItem("calendarioLavorazioni", item);
+    } else if (collectionName === 'clienti') {
+        const strList = (document.getElementById("f_strumentiPosseduti").value || "Nuovo Cliente")
+            .split(',').map(s => s.trim()).filter(Boolean);
+        const item = {
+            id: "cli-" + Date.now(),
+            nome: document.getElementById("f_nome").value.trim(),
+            ruolo: document.getElementById("f_ruolo").value.trim() || "Cliente Atelier",
+            citta: document.getElementById("f_citta").value.trim() || "Italia",
+            email: document.getElementById("f_email").value.trim() || "-",
+            telefono: document.getElementById("f_telefono").value.trim() || "-",
+            strumentiPosseduti: strList.length ? strList : ["Nuovo Cliente"],
+            spesaTotale: parseFloat(document.getElementById("f_spesaTotale").value) || 0,
+            note: document.getElementById("f_note").value.trim() || "Nuova anagrafica cliente."
+        };
+        window.atelierDB.addItem("clienti", item);
     } else if (collectionName === 'costruzione') {
         const item = {
             id: "cost-" + Date.now(),
@@ -769,6 +1278,109 @@ window.saveNewRecord = function(e, collectionName) {
             note: document.getElementById("f_cost_note") ? document.getElementById("f_cost_note").value.trim() : ""
         };
         window.atelierDB.addItem("costruzione", item);
+    } else if (collectionName === 'gestioneContabilita') {
+        const item = {
+            id: "fat-" + Date.now(),
+            numero: document.getElementById("f_fat_numero").value.trim(),
+            cliente: document.getElementById("f_fat_cliente").value.trim(),
+            causale: document.getElementById("f_fat_causale").value.trim(),
+            importo: parseFloat(document.getElementById("f_fat_importo").value) || 0,
+            data: document.getElementById("f_fat_data").value || new Date().toISOString().split('T')[0],
+            scadenza: document.getElementById("f_fat_scadenza").value || "",
+            stato: document.getElementById("f_fat_stato").value || "In Sospeso",
+            metodo: document.getElementById("f_fat_metodo").value || "Bonifico Bancario"
+        };
+        window.atelierDB.addItem("gestioneContabilita", item);
+    } else if (collectionName === 'laboratorio') {
+        const utensils = (document.getElementById("f_lab_utensili").value || "")
+            .split(',').map(u => u.trim()).filter(Boolean);
+        const item = {
+            id: "lab-" + Date.now(),
+            banco: document.getElementById("f_lab_banco").value.trim(),
+            assegnatoA: document.getElementById("f_lab_assegnatoA").value || "Maestro Liutaio",
+            strumentoInLavorazione: document.getElementById("f_lab_strumento").value.trim() || "-",
+            condizioniAmbiente: document.getElementById("f_lab_condizioni").value.trim(),
+            utensiliInUso: utensils.length ? utensils : ["Pialletti e sgorbie standard"],
+            statoStazione: document.getElementById("f_lab_statoStazione").value || "Attivo"
+        };
+        window.atelierDB.addItem("laboratorio", item);
+    } else if (collectionName === 'magazzinoLegno') {
+        const item = {
+            id: "leg-" + Date.now(),
+            essenza: document.getElementById("f_essenza").value.trim(),
+            provenienza: document.getElementById("f_provenienza").value.trim() || "Italia",
+            annoTaglio: parseInt(document.getElementById("f_annoTaglio").value) || 2020,
+            stagionaturaAnni: new Date().getFullYear() - (parseInt(document.getElementById("f_annoTaglio").value) || 2020),
+            tipoPezzo: document.getElementById("f_tipoPezzo").value || "Set da Risonanza",
+            quantita: parseInt(document.getElementById("f_quantita").value) || 1,
+            densita: document.getElementById("f_densita").value.trim() || "0.38 g/cm³",
+            velocitaSuono: document.getElementById("f_velocitaSuono").value.trim() || "5200 m/s",
+            prezzoUnitario: parseFloat(document.getElementById("f_prezzoUnitario").value) || 100,
+            stato: document.getElementById("f_leg_stato").value || "Stagionato / PRONTO"
+        };
+        window.atelierDB.addItem("magazzinoLegno", item);
+    } else if (collectionName === 'magazzinoStrumenti') {
+        const item = {
+            id: "str-" + Date.now(),
+            codice: document.getElementById("f_str_codice").value.trim() || `VIO-${Date.now().toString().slice(-4)}`,
+            nome: document.getElementById("f_str_nome").value.trim(),
+            tipologia: document.getElementById("f_str_tipologia").value || "Violino 4/4",
+            modello: document.getElementById("f_str_modello").value.trim() || "Modello Classico",
+            annoCostruzione: parseInt(document.getElementById("f_str_anno") ? document.getElementById("f_str_anno").value : new Date().getFullYear()) || new Date().getFullYear(),
+            prezzo: parseFloat(document.getElementById("f_str_prezzo").value) || 15000,
+            stato: document.getElementById("f_str_stato").value || "Disponibile in Showroom",
+            certificato: document.getElementById("f_str_certificato").value.trim() || "Presente",
+            vernice: document.getElementById("f_str_vernice").value.trim() || "Finitura tradizionale a olio"
+        };
+        window.atelierDB.addItem("magazzinoStrumenti", item);
+    } else if (collectionName === 'media') {
+        const item = {
+            id: "med-" + Date.now(),
+            titolo: document.getElementById("f_med_titolo").value.trim(),
+            tipo: document.getElementById("f_med_tipo").value,
+            formato: document.getElementById("f_med_formato").value.trim() || "JPG / 4K",
+            dimensione: document.getElementById("f_med_dimensione").value.trim() || "15 MB",
+            categoria: document.getElementById("f_med_categoria").value,
+            url: document.getElementById("f_med_url").value.trim() || "./assets/lutherie_banner.png",
+            descrizione: document.getElementById("f_med_descrizione").value.trim()
+        };
+        window.atelierDB.addItem("media", item);
+    } else if (collectionName === 'report') {
+        const item = {
+            id: "rep-" + Date.now(),
+            titolo: document.getElementById("f_rep_titolo").value.trim(),
+            periodo: document.getElementById("f_rep_periodo").value.trim(),
+            strumentiCostruiti: parseInt(document.getElementById("f_rep_costruiti").value) || 0,
+            strumentiRestaurati: parseInt(document.getElementById("f_rep_restaurati").value) || 0,
+            ricavoTotale: parseFloat(document.getElementById("f_rep_ricavo").value) || 0,
+            margineNetto: document.getElementById("f_rep_margine").value.trim() || "65%",
+            indicatoreTop: document.getElementById("f_rep_top").value.trim() || "Attività Atelier"
+        };
+        window.atelierDB.addItem("report", item);
+    } else if (collectionName === 'restauro') {
+        const item = {
+            id: "res-" + Date.now(),
+            codice: document.getElementById("f_res_codice").value.trim(),
+            strumento: document.getElementById("f_res_strumento").value.trim(),
+            proprietario: document.getElementById("f_res_proprietario").value.trim(),
+            diagnosi: document.getElementById("f_res_diagnosi").value.trim(),
+            interventiPrevisti: document.getElementById("f_res_interventi").value.trim(),
+            statoIntervento: document.getElementById("f_res_stato").value,
+            preventivo: parseFloat(document.getElementById("f_res_preventivo").value) || 0,
+            consegnaPrevista: document.getElementById("f_res_consegna").value || ""
+        };
+        window.atelierDB.addItem("restauro", item);
+    } else if (collectionName === 'social') {
+        const item = {
+            id: "soc-" + Date.now(),
+            titolo: document.getElementById("f_soc_titolo").value.trim(),
+            piattaforma: document.getElementById("f_soc_piattaforma").value,
+            dataProgrammata: document.getElementById("f_soc_data").value || new Date().toISOString(),
+            hashtag: document.getElementById("f_soc_hashtag").value.trim(),
+            likesPrevisti: document.getElementById("f_soc_likes").value.trim() || "1.0K",
+            stato: document.getElementById("f_soc_stato").value
+        };
+        window.atelierDB.addItem("social", item);
     }
 
     window.closeModal();
@@ -806,25 +1418,36 @@ window.saveNewRecordGeneric = function(e, collectionName) {
     }
 };
 
-window.quickUpdateCostruzione = function(id, delta) {
-    const item = (window.atelierDB.data.costruzione || []).find(i => i.id === id);
-    if (!item) return;
-    const newProg = Math.min(100, Math.max(0, (parseInt(item.progresso) || 0) + delta));
-    window.atelierDB.updateItem('costruzione', id, { progresso: newProg });
-    window.showToast(`${item.opNumero}: progresso avanzato al ${newProg}%`);
-    if (window.appController && window.appController.activeModuleId === 'costruzione') {
-        window.appController.openModule('costruzione');
+// Universal Record Management (Delete & Progress update across all modules)
+window.deleteRecord = function(collection, id, label) {
+    if (confirm(`Sei sicuro di voler eliminare "${label || 'questo elemento'}" da ${collection}?`)) {
+        window.atelierDB.removeItem(collection, id);
+        window.showToast(`${label || 'Elemento'} eliminato con successo!`);
+        if (window.appController && window.appController.activeModuleId === collection) {
+            window.appController.openModule(collection);
+        }
     }
 };
 
-window.deleteCostruzioneItem = function(id, opNumero) {
-    if (confirm(`Sei sicuro di voler eliminare ${opNumero || 'questo strumento'} dal registro di costruzione?`)) {
-        window.atelierDB.removeItem('costruzione', id);
-        window.showToast(`${opNumero || 'Strumento'} eliminato dal registro`);
-        if (window.appController && window.appController.activeModuleId === 'costruzione') {
-            window.appController.openModule('costruzione');
-        }
+window.quickUpdateProgress = function(collection, id, delta, label) {
+    const list = window.atelierDB.data[collection] || [];
+    const item = list.find(i => i.id === id);
+    if (!item) return;
+    const currentProg = parseInt(item.progresso) || 0;
+    const newProg = Math.min(100, Math.max(0, currentProg + delta));
+    window.atelierDB.updateItem(collection, id, { progresso: newProg });
+    window.showToast(`${label || item.titolo || item.opNumero || 'Lavorazione'}: progresso avanzato al ${newProg}%`);
+    if (window.appController && window.appController.activeModuleId === collection) {
+        window.appController.openModule(collection);
     }
+};
+
+window.quickUpdateCostruzione = function(id, delta) {
+    window.quickUpdateProgress('costruzione', id, delta);
+};
+
+window.deleteCostruzioneItem = function(id, opNumero) {
+    window.deleteRecord('costruzione', id, opNumero);
 };
 
 // ==========================================================================

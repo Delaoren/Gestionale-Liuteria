@@ -31,11 +31,16 @@ window.AppModules = {
                             <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem;">
                                 ${item.tags ? item.tags.map(t => `<span style="background:rgba(255,255,255,0.06); font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:4px; color:var(--accent-gold);">${t}</span>`).join('') : ''}
                             </div>
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
                                 <span class="badge badge-purple">${item.formato}</span>
-                                <button class="btn btn-secondary" style="padding:0.3rem 0.8rem; font-size:0.8rem;" onclick="window.showToast('Apertura anteprima documentale per: ${item.titolo}')">
-                                    <i class="lucide-file-text"></i> Leggi PDF
-                                </button>
+                                <div style="display:flex; gap:0.4rem;">
+                                    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Apertura anteprima documentale per: ${item.titolo}')">
+                                        <i class="lucide-file-text"></i> Leggi PDF
+                                    </button>
+                                    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('biblioteca', '${item.id}', '${item.titolo}')" title="Elimina documento">
+                                        <i class="lucide-trash-2"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `).join('')}
@@ -86,9 +91,14 @@ window.AppModules = {
                                     </td>
                                     <td style="font-size:0.85rem; color:var(--text-secondary);">${item.note}</td>
                                     <td>
-                                        <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Appuntamento confermato con sms/email a ${item.cliente}')">
-                                            <i class="lucide-bell"></i> Notifica
-                                        </button>
+                                        <div style="display:flex; gap:0.4rem;">
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Appuntamento confermato con sms/email a ${item.cliente}')" title="Notifica cliente">
+                                                <i class="lucide-bell"></i>
+                                            </button>
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('calendarioAppuntamenti', '${item.id}', '${item.cliente}')" title="Elimina appuntamento">
+                                                <i class="lucide-trash-2"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -128,8 +138,17 @@ window.AppModules = {
                                 <span>Avanzamento Stage</span>
                                 <strong style="color:var(--accent-gold);">${item.progresso}%</strong>
                             </div>
-                            <div class="progress-bar-bg">
+                            <div class="progress-bar-bg" style="margin-bottom:0.8rem;">
                                 <div class="progress-bar-fill" style="width: ${item.progresso}%;"></div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="window.quickUpdateProgress('calendarioLavorazioni', '${item.id}', 10, '${item.titolo}')" title="Avanza progresso +10%">
+                                    <i class="lucide-trending-up"></i> +10% Progresso
+                                </button>
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('calendarioLavorazioni', '${item.id}', '${item.titolo}')" title="Elimina lavorazione">
+                                    <i class="lucide-trash-2"></i> Elimina
+                                </button>
                             </div>
                         </div>
                     `).join('')}
@@ -178,14 +197,19 @@ window.AppModules = {
                                     </td>
                                     <td>${item.citta}</td>
                                     <td>
-                                        ${item.strumentiPosseduti.map(s => `<span class="badge badge-info" style="margin:2px 0;">${s}</span>`).join('<br>')}
+                                        ${(item.strumentiPosseduti || []).map(s => `<span class="badge badge-info" style="margin:2px 0;">${s}</span>`).join('<br>')}
                                     </td>
                                     <td><strong style="color:var(--accent-gold); font-size:1rem;">€ ${item.spesaTotale.toLocaleString()}</strong></td>
                                     <td style="font-size:0.82rem; color:var(--text-secondary); max-width:200px;">${item.note}</td>
                                     <td>
-                                        <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Scheda cliente aperta per ${item.nome}')">
-                                            <i class="lucide-external-link"></i> Dettagli
-                                        </button>
+                                        <div style="display:flex; gap:0.4rem;">
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Scheda cliente aperta per ${item.nome}')">
+                                                <i class="lucide-external-link"></i> Dettagli
+                                            </button>
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('clienti', '${item.id}', '${item.nome}')" title="Elimina cliente">
+                                                <i class="lucide-trash-2"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -316,9 +340,14 @@ window.AppModules = {
                                     </td>
                                     <td style="font-size:0.85rem; color:var(--text-muted);">${item.metodo}</td>
                                     <td>
-                                        <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Download PDF Fattura ${item.numero}')">
-                                            <i class="lucide-download"></i> PDF
-                                        </button>
+                                        <div style="display:flex; gap:0.4rem;">
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Download PDF Fattura ${item.numero}')" title="Scarica PDF">
+                                                <i class="lucide-download"></i> PDF
+                                            </button>
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('gestioneContabilita', '${item.id}', '${item.numero}')" title="Elimina fattura">
+                                                <i class="lucide-trash-2"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -484,9 +513,14 @@ window.AppModules = {
                         <i data-lucide="gauge" class="lucide-gauge" style="color: var(--accent-violet);"></i>
                         Monitoraggio Stazioni & Banchi di Lavoro Atelier
                     </div>
-                    <button class="btn btn-secondary" onclick="window.showToast('Sensori igrometrici sincronizzati con la bottega.')">
-                        <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i> Aggiorna Banchi
-                    </button>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-primary" onclick="window.openAddModal('laboratorio')">
+                            <i data-lucide="plus" class="lucide-plus"></i> Nuova Stazione
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.showToast('Sensori igrometrici sincronizzati con la bottega.')">
+                            <i data-lucide="refresh-cw" class="lucide-refresh-cw"></i> Aggiorna Banchi
+                        </button>
+                    </div>
                 </div>
                 <div class="cards-subgrid">
                     ${items.map(item => `
@@ -502,8 +536,14 @@ window.AppModules = {
                                 🌡️ <strong>Clima Banco:</strong> <span style="color:var(--accent-gold); font-weight:700;">${readings.temp.toFixed(1)}°C / ${readings.humidity.toFixed(1)}% RH</span> &bull; 🌲 <strong>EMC:</strong> <span style="color:var(--accent-emerald); font-weight:700;">${emcVal.toFixed(1)}%</span><br>
                                 🛠️ <strong>Utensili in Uso:</strong><br>
                                 <ul style="margin-left:1.2rem; margin-top:0.3rem; color:var(--text-secondary);">
-                                    ${item.utensiliInUso.map(u => `<li>${u}</li>`).join('')}
+                                    ${(item.utensiliInUso || []).map(u => `<li>${u}</li>`).join('')}
                                 </ul>
+                            </div>
+
+                            <div style="display:flex; justify-content:flex-end; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('laboratorio', '${item.id}', '${item.banco}')" title="Elimina stazione">
+                                    <i class="lucide-trash-2"></i> Elimina
+                                </button>
                             </div>
                         </div>
                     `).join('')}
@@ -606,6 +646,7 @@ window.AppModules = {
                                 <th>Parametri Acustici</th>
                                 <th>Valore Unità</th>
                                 <th>Stato</th>
+                                <th style="text-align:center;">Azione</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -627,6 +668,11 @@ window.AppModules = {
                                     </td>
                                     <td><strong style="color:var(--accent-gold);">€ ${item.prezzoUnitario}</strong></td>
                                     <td><span class="badge badge-success">${item.stato}</span></td>
+                                    <td style="text-align:center;">
+                                        <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('magazzinoLegno', '${item.id}', '${item.essenza}')" title="Elimina legno">
+                                            <i class="lucide-trash-2"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -644,7 +690,7 @@ window.AppModules = {
                 <div class="panel-header">
                     <div class="panel-title">
                         <i class="lucide-music" style="color: var(--accent-gold);"></i>
-                        Magazzino Strumenti Finiti & Showroom
+                        Magazzino Strumenti Finiti & Showroom (${items.length})
                     </div>
                     <button class="btn btn-primary" onclick="window.openAddModal('magazzinoStrumenti')">
                         <i class="lucide-plus"></i> Inserisci Strumento
@@ -663,9 +709,14 @@ window.AppModules = {
                             
                             <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.8rem;">
                                 <span style="font-size:1.3rem; font-weight:800; color:var(--accent-gold); font-family:var(--font-heading);">€ ${item.prezzo.toLocaleString()}</span>
-                                <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Certificato di Autenticità generato per ${item.codice}')">
-                                    <i class="lucide-award"></i> Certificato
-                                </button>
+                                <div style="display:flex; gap:0.4rem;">
+                                    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Certificato di Autenticità generato per ${item.codice}')">
+                                        <i class="lucide-award"></i> Certificato
+                                    </button>
+                                    <button class="btn btn-secondary" style="padding:0.3rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('magazzinoStrumenti', '${item.id}', '${item.nome}')" title="Elimina strumento">
+                                        <i class="lucide-trash-2"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `).join('')}
@@ -682,7 +733,7 @@ window.AppModules = {
                 <div class="panel-header">
                     <div class="panel-title">
                         <i data-lucide="image" class="lucide-image" style="color: var(--accent-purple);"></i>
-                        Media Library & Archivio Acustico / Fotografico
+                        Media Library & Archivio Acustico / Fotografico (${items.length})
                     </div>
                     <button class="btn btn-primary" onclick="window.openAddModal('media')">
                         <i data-lucide="upload" class="lucide-upload"></i> Carica Media
@@ -692,7 +743,7 @@ window.AppModules = {
                     ${items.map(item => `
                         <div class="info-card">
                             <div style="height:140px; background:rgba(0,0,0,0.5); border-radius:8px; margin-bottom:0.8rem; overflow:hidden; position:relative; display:flex; align-items:center; justify-content:center;">
-                                ${item.url && item.url.endsWith('.png') ? `
+                                ${item.url && (item.url.endsWith('.png') || item.url.endsWith('.jpg') || item.url.startsWith('data:image')) ? `
                                      <img src="${item.url}" style="width:100%; height:100%; object-fit:cover;">
                                 ` : `
                                      <i data-lucide="music" class="lucide-music" style="font-size:3rem; color:var(--accent-gold);"></i>
@@ -701,9 +752,17 @@ window.AppModules = {
                             </div>
                             <h4 style="font-family:var(--font-heading); color:#fff; font-size:1rem; margin-bottom:0.3rem;">${item.titolo}</h4>
                             <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.8rem;">${item.descrizione}</p>
-                            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted);">
+                            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-bottom:0.6rem;">
                                 <span>Formato: ${item.formato}</span>
                                 <span>Dim: ${item.dimensione}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Apertura file multimediale: ${item.titolo}')">
+                                    <i class="lucide-external-link"></i> Apri
+                                </button>
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('media', '${item.id}', '${item.titolo}')" title="Elimina media">
+                                    <i class="lucide-trash-2"></i> Elimina
+                                </button>
                             </div>
                         </div>
                     `).join('')}
@@ -720,16 +779,26 @@ window.AppModules = {
                 <div class="panel-header">
                     <div class="panel-title">
                         <i class="lucide-bar-chart-3" style="color: var(--accent-cyan);"></i>
-                        Report Statistiche & Analisi Rendimento
+                        Report Statistiche & Analisi Rendimento (${items.length})
                     </div>
-                    <button class="btn btn-secondary" onclick="window.showToast('Esportazione Report PDF in corso...')">
-                        <i class="lucide-download-cloud"></i> Esporta Report Completo
-                    </button>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn btn-primary" onclick="window.openAddModal('report')">
+                            <i class="lucide-plus"></i> Genera Report
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.showToast('Esportazione Report PDF in corso...')">
+                            <i class="lucide-download-cloud"></i> Esporta PDF
+                        </button>
+                    </div>
                 </div>
                 <div class="cards-subgrid">
                     ${items.map(item => `
                         <div class="info-card">
-                            <span class="badge badge-info" style="margin-bottom:0.6rem;">${item.periodo}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                                <span class="badge badge-info">${item.periodo}</span>
+                                <button class="btn btn-secondary" style="padding:0.2rem 0.4rem; font-size:0.7rem; color:#ef4444;" onclick="window.deleteRecord('report', '${item.id}', '${item.titolo}')" title="Elimina report">
+                                    <i class="lucide-trash-2"></i>
+                                </button>
+                            </div>
                             <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.2rem; margin-bottom:0.8rem;">${item.titolo}</h3>
                             
                             <div style="background:rgba(0,0,0,0.3); padding:1rem; border-radius:8px; font-size:0.85rem; margin-bottom:1rem;">
@@ -754,7 +823,7 @@ window.AppModules = {
                 <div class="panel-header">
                     <div class="panel-title">
                         <i class="lucide-sparkles" style="color: var(--accent-rosewood);"></i>
-                        Registro Interventi di Restauro & Riparazioni d'Epoca
+                        Registro Interventi di Restauro & Riparazioni d'Epoca (${items.length})
                     </div>
                     <button class="btn btn-primary" onclick="window.openAddModal('restauro')">
                         <i class="lucide-plus"></i> Registra Scheda Restauro
@@ -775,9 +844,19 @@ window.AppModules = {
                                 <div style="color:var(--text-secondary);">🔧 <strong>Interventi:</strong> ${item.interventiPrevisti}</div>
                             </div>
 
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size:1.1rem; font-weight:700; color:var(--accent-gold);">€ ${item.preventivo.toLocaleString()}</span>
-                                <span style="font-size:0.78rem; color:var(--text-muted);">Consegna: ${item.consegnaPrevista}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.8rem;">
+                                <div>
+                                    <span style="font-size:1.1rem; font-weight:700; color:var(--accent-gold);">€ ${item.preventivo.toLocaleString()}</span><br>
+                                    <span style="font-size:0.75rem; color:var(--text-muted);">Consegna: ${item.consegnaPrevista}</span>
+                                </div>
+                                <div style="display:flex; gap:0.4rem;">
+                                    <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="window.showToast('Scheda perizia di restauro per ${item.codice} aperta.')" title="Dettagli Perizia">
+                                        <i class="lucide-file-text"></i> Perizia
+                                    </button>
+                                    <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('restauro', '${item.id}', '${item.codice}')" title="Elimina scheda">
+                                        <i class="lucide-trash-2"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `).join('')}
@@ -794,7 +873,7 @@ window.AppModules = {
                 <div class="panel-header">
                     <div class="panel-title">
                         <i class="lucide-share-2" style="color: var(--accent-cyan);"></i>
-                        Social Media & Comunicazione Atelier
+                        Social Media & Comunicazione Atelier (${items.length})
                     </div>
                     <button class="btn btn-primary" onclick="window.openAddModal('social')">
                         <i class="lucide-plus"></i> Programma Post
@@ -810,8 +889,16 @@ window.AppModules = {
                             <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.05rem; margin-bottom:0.4rem;">${item.titolo}</h4>
                             <p style="font-size:0.8rem; color:var(--accent-gold); margin-bottom:0.8rem;">📅 ${item.dataProgrammata}</p>
                             <p style="font-size:0.78rem; color:var(--accent-cyan); margin-bottom:0.8rem;">${item.hashtag}</p>
-                            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
-                                <span>❤️ Engagement stima: ${item.likesPrevisti}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem; margin-top:0.6rem;">
+                                <span style="font-size:0.8rem; color:var(--text-muted);">❤️ Engagement: ${item.likesPrevisti}</span>
+                                <div style="display:flex; gap:0.4rem;">
+                                    <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:var(--accent-cyan);" onclick="window.showToast('Post pubblicato con successo sui canali social!')" title="Pubblica subito">
+                                        <i class="lucide-send"></i> Pubblica
+                                    </button>
+                                    <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('social', '${item.id}', '${item.titolo}')" title="Elimina post">
+                                        <i class="lucide-trash-2"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `).join('')}
