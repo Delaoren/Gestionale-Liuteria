@@ -517,6 +517,160 @@ window.openAddModal = function(collectionName) {
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Registra Strumento Finito</button>
             </form>
         `;
+    } else if (collectionName === 'costruzione') {
+        const existingCost = (window.atelierDB && window.atelierDB.data.costruzione) || [];
+        let highestNum = 0;
+        existingCost.forEach(c => {
+            const match = (c.opNumero || '').match(/(\d+)/);
+            if (match) {
+                const n = parseInt(match[1]);
+                if (n > highestNum) highestNum = n;
+            }
+        });
+        const nextOpusNum = highestNum > 0 ? highestNum + 1 : 45;
+        const defaultOpus = `Opus ${nextOpusNum}`;
+        const todayIso = new Date().toISOString().split('T')[0];
+        const targetDate = new Date();
+        targetDate.setMonth(targetDate.getMonth() + 3);
+        const estDeliveryIso = targetDate.toISOString().split('T')[0];
+
+        // Gather existing clients for datalist
+        const clientsList = ((window.atelierDB && window.atelierDB.data.clienti) || [])
+            .map(c => `<option value="${c.nome}">`).join('');
+
+        // Gather existing wood species from warehouse
+        const woodsList = ((window.atelierDB && window.atelierDB.data.magazzinoLegno) || [])
+            .map(w => `<option value="${w.essenza} (${w.annoTaglio})">`).join('');
+
+        formHTML = `
+            <form onsubmit="window.saveNewRecord(event, 'costruzione')">
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>N° Opus / Identificativo</label>
+                        <input type="text" id="f_cost_opNumero" class="form-control" required value="${defaultOpus}" placeholder="Es. Opus 42">
+                    </div>
+                    <div class="form-group" style="flex:2;">
+                        <label>Modello di Strumento</label>
+                        <input type="text" id="f_cost_modello" list="cost_modelli_list" class="form-control" required placeholder="Es. Violino Guarneri del Gesù 1742 'Lord Wilton'">
+                        <datalist id="cost_modelli_list">
+                            <option value="Violino Guarneri del Gesù 1742 'Lord Wilton'">
+                            <option value="Violino Guarneri del Gesù 1743 'Cannone'">
+                            <option value="Violino Antonio Stradivari 1715 'Il Cremonese'">
+                            <option value="Violino Antonio Stradivari 1716 'Messie'">
+                            <option value="Viola Gaspare da Salò 41.5 cm">
+                            <option value="Viola Andrea Guarneri 1676 'Conte Vitale'">
+                            <option value="Violoncello Domenico Montagnana 1739 'Sleeping Beauty'">
+                            <option value="Violoncello Matteo Gofriller 1700">
+                            <option value="Violoncello Stradivari 1707 'Forma B'">
+                        </datalist>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Committente / Destinatario</label>
+                        <input type="text" id="f_cost_committente" list="cost_committenti_list" class="form-control" required value="In Vendita (Disponibile)" placeholder="Es. In Vendita / Solista...">
+                        <datalist id="cost_committenti_list">
+                            <option value="In Vendita (Disponibile)">
+                            ${clientsList}
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Fase Attuale di Lavorazione</label>
+                        <input type="text" id="f_cost_faseAttuale" list="cost_fasi_list" class="form-control" required value="Intavolazione & Scultura Riccio" placeholder="Es. Intavolazione & Scultura Riccio">
+                        <datalist id="cost_fasi_list">
+                            <option value="Scelta e Preparazione Legni">
+                            <option value="Piallatura Giunta Fondo e Tavola">
+                            <option value="Sbozzatura & Sesto Bombature">
+                            <option value="Scavo Spessori Tavola & Fondo">
+                            <option value="Taglio Effi & Incatenatura">
+                            <option value="Fasce, Zocchetti & Controfasce">
+                            <option value="Intavolazione & Scultura Riccio">
+                            <option value="Filettatura & Chiusura Cassa">
+                            <option value="Incastro Manico & Tastiera in Ebano">
+                            <option value="Preparazione a Vernice (Imprimitura)">
+                            <option value="Verniciatura ad Olio (Mano 1/12)">
+                            <option value="Verniciatura ad Olio (Mani Finali)">
+                            <option value="Lucidatura & Essiccazione UV">
+                            <option value="Montatura, Ponticello & Anima">
+                            <option value="Messa a Punto Acustica Finale">
+                        </datalist>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🌲 Legno Tavola Armonica</label>
+                        <input type="text" id="f_cost_legnoTavola" list="cost_tavola_list" class="form-control" required value="Abete Rosso Val di Fiemme 2012 (Stagionatura 14 anni)" placeholder="Es. Abete Rosso Val di Fiemme 2012">
+                        <datalist id="cost_tavola_list">
+                            <option value="Abete Rosso Val di Fiemme 2012 (Stagionatura 14 anni)">
+                            <option value="Abete della Val di Non 2005">
+                            <option value="Abete Paneveggio 2015">
+                            <option value="Abete Rosso Svizzero (Val Müstair)">
+                            ${woodsList}
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>🍁 Legno Fondo & Fasce</label>
+                        <input type="text" id="f_cost_legnoFondo" list="cost_fondo_list" class="form-control" required value="Acero Marezzato Balcanico 2008 Pezzo Unico" placeholder="Es. Acero Marezzato Balcanico 2008">
+                        <datalist id="cost_fondo_list">
+                            <option value="Acero Marezzato Balcanico 2008 Pezzo Unico">
+                            <option value="Acero Bosniaco a Taglio di Quarto">
+                            <option value="Pioppo Marezzato Maschio">
+                            <option value="Acero Campestre Antico a 2 Pezzi">
+                            ${woodsList}
+                        </datalist>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🔊 Frequenza / Nota Risonanza Tavola (Chladni)</label>
+                        <input type="text" id="f_cost_frequenzaTavola" list="cost_freq_list" class="form-control" value="F# (288 Hz)" placeholder="Es. F# (288 Hz)">
+                        <datalist id="cost_freq_list">
+                            <option value="F# (288 Hz)">
+                            <option value="F (275 Hz)">
+                            <option value="E (260 Hz)">
+                            <option value="G (300 Hz)">
+                            <option value="D (144 Hz)">
+                            <option value="C# (138 Hz)">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>⚖️ Peso Tavola Armonica</label>
+                        <input type="text" id="f_cost_pesoTavola" class="form-control" value="64.2 g (senza catena)" placeholder="Es. 64.2 g (senza catena)">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Avanzamento Lavorazione: <strong id="f_cost_progVal" style="color:var(--accent-gold);">60%</strong></label>
+                        <input type="range" id="f_cost_progresso" class="form-control" min="0" max="100" value="60" oninput="document.getElementById('f_cost_progVal').innerText = this.value + '%'" style="cursor:pointer; padding:0.4rem;">
+                    </div>
+                    <div class="form-group">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
+                            <div>
+                                <label>📅 Data Inizio</label>
+                                <input type="date" id="f_cost_dataInizio" class="form-control" value="${todayIso}">
+                            </div>
+                            <div>
+                                <label>🏁 Consegna Prevista</label>
+                                <input type="date" id="f_cost_consegnaPrevista" class="form-control" value="${estDeliveryIso}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>📝 Note Tecniche & Dettagli di Liuteria</label>
+                    <textarea id="f_cost_note" class="form-control" placeholder="Specifiche su bombature (15.2mm), spessori tavola (2.4-4.2mm), modello anima, vernice a olio programmata..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem; font-size:1rem; padding:0.8rem;">
+                    <i class="lucide-hammer"></i> Registra Strumento in Costruzione
+                </button>
+            </form>
+        `;
     } else {
         // Generic fallback form
         formHTML = `
@@ -598,6 +752,23 @@ window.saveNewRecord = function(e, collectionName) {
             vernice: document.getElementById("f_str_vernice").value || "Finitura tradizionale a olio"
         };
         window.atelierDB.addItem("magazzinoStrumenti", item);
+    } else if (collectionName === 'costruzione') {
+        const item = {
+            id: "cost-" + Date.now(),
+            opNumero: document.getElementById("f_cost_opNumero").value.trim() || `Opus ${Date.now().toString().slice(-2)}`,
+            modello: document.getElementById("f_cost_modello").value.trim() || "Violino d'Autore",
+            committente: document.getElementById("f_cost_committente").value.trim() || "In Vendita (Disponibile)",
+            legnoTavola: document.getElementById("f_cost_legnoTavola").value.trim() || "Abete Rosso Val di Fiemme",
+            legnoFondo: document.getElementById("f_cost_legnoFondo").value.trim() || "Acero Marezzato Balcanico",
+            faseAttuale: document.getElementById("f_cost_faseAttuale").value.trim() || "Intavolazione & Scultura Riccio",
+            progresso: Math.min(100, Math.max(0, parseInt(document.getElementById("f_cost_progresso").value) || 0)),
+            frequenzaTavola: document.getElementById("f_cost_frequenzaTavola").value.trim() || "F# (288 Hz)",
+            pesoTavola: document.getElementById("f_cost_pesoTavola").value.trim() || "64.2 g (senza catena)",
+            dataInizio: document.getElementById("f_cost_dataInizio").value || new Date().toISOString().split('T')[0],
+            consegnaPrevista: document.getElementById("f_cost_consegnaPrevista").value || "",
+            note: document.getElementById("f_cost_note") ? document.getElementById("f_cost_note").value.trim() : ""
+        };
+        window.atelierDB.addItem("costruzione", item);
     }
 
     window.closeModal();
@@ -632,6 +803,27 @@ window.saveNewRecordGeneric = function(e, collectionName) {
     }
     if (window.appController.activeModuleId === collectionName) {
         window.appController.openModule(collectionName);
+    }
+};
+
+window.quickUpdateCostruzione = function(id, delta) {
+    const item = (window.atelierDB.data.costruzione || []).find(i => i.id === id);
+    if (!item) return;
+    const newProg = Math.min(100, Math.max(0, (parseInt(item.progresso) || 0) + delta));
+    window.atelierDB.updateItem('costruzione', id, { progresso: newProg });
+    window.showToast(`${item.opNumero}: progresso avanzato al ${newProg}%`);
+    if (window.appController && window.appController.activeModuleId === 'costruzione') {
+        window.appController.openModule('costruzione');
+    }
+};
+
+window.deleteCostruzioneItem = function(id, opNumero) {
+    if (confirm(`Sei sicuro di voler eliminare ${opNumero || 'questo strumento'} dal registro di costruzione?`)) {
+        window.atelierDB.removeItem('costruzione', id);
+        window.showToast(`${opNumero || 'Strumento'} eliminato dal registro`);
+        if (window.appController && window.appController.activeModuleId === 'costruzione') {
+            window.appController.openModule('costruzione');
+        }
     }
 };
 

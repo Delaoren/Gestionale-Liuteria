@@ -214,24 +214,44 @@ window.AppModules = {
                     ${items.map(item => `
                         <div class="info-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
-                                <span class="badge badge-warning" style="font-size:0.85rem;">${item.opNumero}</span>
+                                <span class="badge badge-warning" style="font-size:0.85rem; font-weight:700;">${item.opNumero}</span>
                                 <span class="badge badge-success">${item.faseAttuale}</span>
                             </div>
                             <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.2rem; margin-bottom:0.4rem;">${item.modello}</h3>
                             <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.8rem;">Committente: <strong style="color:var(--accent-gold);">${item.committente}</strong></p>
                             
-                            <div style="background:rgba(0,0,0,0.3); padding:0.8rem; border-radius:8px; font-size:0.8rem; margin-bottom:1rem; border:1px solid rgba(255,255,255,0.05);">
+                            <div style="background:rgba(0,0,0,0.3); padding:0.8rem; border-radius:8px; font-size:0.8rem; margin-bottom:0.8rem; border:1px solid rgba(255,255,255,0.05);">
                                 <div>🌲 <strong>Tavola:</strong> ${item.legnoTavola}</div>
                                 <div style="margin-top:0.3rem;">🍁 <strong>Fondo:</strong> ${item.legnoFondo}</div>
                                 <div style="margin-top:0.3rem;">🔊 <strong>Nota Risonanza:</strong> ${item.frequenzaTavola} | ⚖️ ${item.pesoTavola}</div>
                             </div>
 
+                            <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.8rem;">
+                                <span>📅 Inizio: <strong style="color:var(--text-primary);">${item.dataInizio || 'N/D'}</strong></span>
+                                <span>🏁 Consegna: <strong style="color:var(--text-primary);">${item.consegnaPrevista || 'N/D'}</strong></span>
+                            </div>
+
+                            ${item.note ? `
+                                <div style="background:rgba(245, 158, 11, 0.08); border-left:3px solid var(--accent-amber); padding:0.5rem 0.7rem; border-radius:4px; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.8rem; font-style:italic;">
+                                    📝 ${item.note}
+                                </div>
+                            ` : ''}
+
                             <div style="margin-bottom:0.4rem; display:flex; justify-content:space-between; font-size:0.8rem;">
                                 <span>Stato Avanzamento Lavoro</span>
                                 <strong style="color:var(--accent-gold);">${item.progresso}%</strong>
                             </div>
-                            <div class="progress-bar-bg">
+                            <div class="progress-bar-bg" style="margin-bottom:0.8rem;">
                                 <div class="progress-bar-fill" style="width: ${item.progresso}%;"></div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="window.quickUpdateCostruzione('${item.id}', 10)" title="Avanza progresso di +10%">
+                                    <i class="lucide-trending-up"></i> +10% Progresso
+                                </button>
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteCostruzioneItem('${item.id}', '${item.opNumero}')" title="Rimuovi strumento">
+                                    <i class="lucide-trash-2"></i> Elimina
+                                </button>
                             </div>
                         </div>
                     `).join('')}
