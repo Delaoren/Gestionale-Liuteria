@@ -222,10 +222,38 @@ class HomeAssistantService {
         // 1. PRIMARY: Query MQTT Telemetry from local server bridge (192.168.68.108:1883)
         if (config.sourceType !== 'ha') {
             try {
-                const res = await fetch('/api/telemetry');
-                if (res.ok) {
+                let res = null;
+                // 1. Prova prima l'endpoint relativo (attivo su :8080 e via proxy Vite su :5173)
+                try {
+                    const r = await fetch('/api/telemetry');
+                    const cType = r.headers.get('content-type') || '';
+                    if (r.ok && cType.includes('application/json')) {
+                        res = r;
+                    }
+                } catch (e) {}
+
+                // 2. Se non ha risposto in JSON e siamo su una porta diversa da 8080, prova la porta 8080 del server locale
+                if (!res && window.location.port !== '8080') {
+                    const fallbackUrls = [
+                        'http://localhost:8080/api/telemetry',
+                        'http://127.0.0.1:8080/api/telemetry',
+                        'http://192.168.68.102:8080/api/telemetry'
+                    ];
+                    for (const fUrl of fallbackUrls) {
+                        try {
+                            const r = await fetch(fUrl, { mode: 'cors' });
+                            const cType = r.headers.get('content-type') || '';
+                            if (r.ok && cType.includes('application/json')) {
+                                res = r;
+                                break;
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                if (res && res.ok) {
                     const data = await res.json();
-                    if (data && (data.status === 'connected' || data.source === 'mqtt')) {
+                    if (data && (data.status === 'connected' || data.source === 'mqtt' || data.source === 'm5stack')) {
                         const tempVal = parseFloat(data.temp);
                         const humVal = parseFloat(data.humidity);
                         if (!isNaN(tempVal) && !isNaN(humVal)) {
@@ -250,7 +278,7 @@ class HomeAssistantService {
                                 emcName: 'EMC Legno',
                                 emcEvaluation: emcEval,
                                 lastUpdate: data.lastUpdate ? new Date(data.lastUpdate) : new Date(),
-                                isSimulated: data.source === 'simulated',
+                                isSimulated: false,
                                 source: data.source || 'mqtt',
                                 device: data.device || 'M5Stack STAMPLC',
                                 sensors: data.sensors,
