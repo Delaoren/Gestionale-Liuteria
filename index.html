@@ -167,10 +167,67 @@
         </div>
     </div>
 
+    <!-- Login / Access Screen (Riservato a fabio.delorenzi@gmail.com) -->
+    <div class="login-overlay" id="loginOverlay" style="display:none;">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo-emblem">
+                    <i data-lucide="music-4" class="lucide-music-4"></i>
+                </div>
+                <h2>Atelier Liuteria De Lorenzi</h2>
+                <p class="login-subtitle">Suite Gestionale & Telemetria Laboratorio</p>
+                <div class="login-auth-badge">
+                    <i data-lucide="shield-check" style="width:14px; height:14px; color:var(--accent-emerald);"></i>
+                    <span>Accesso Riservato • Solo Utenti Autorizzati</span>
+                </div>
+            </div>
+
+            <form id="loginForm" class="login-form">
+                <div class="login-field">
+                    <label for="authEmail">Email Autorizzata</label>
+                    <div class="input-icon-wrapper">
+                        <i data-lucide="mail" class="field-icon"></i>
+                        <input type="email" id="authEmail" required autocomplete="username" placeholder="fabio.delorenzi@gmail.com" value="fabio.delorenzi@gmail.com">
+                    </div>
+                    <small class="field-hint">Consentito esclusivamente a <strong>fabio.delorenzi@gmail.com</strong></small>
+                </div>
+
+                <div class="login-field">
+                    <label for="authPassword">Chiave di Accesso / Password</label>
+                    <div class="input-icon-wrapper">
+                        <i data-lucide="key-round" class="field-icon"></i>
+                        <input type="password" id="authPassword" required autocomplete="current-password" placeholder="Inserisci la password...">
+                        <button type="button" id="togglePwdBtn" class="btn-toggle-pwd" title="Mostra/Nascondi Password">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="login-remember-row">
+                    <label class="remember-label">
+                        <input type="checkbox" id="authRemember" checked>
+                        <span>Rimani collegato su questo dispositivo</span>
+                    </label>
+                </div>
+
+                <div id="loginErrorBox" class="login-error-alert" style="display:none;"></div>
+
+                <button type="submit" class="btn btn-primary btn-submit-login">
+                    <i data-lucide="lock-open"></i> Accedi al Gestionale
+                </button>
+
+                <div class="login-footer-domain">
+                    <i data-lucide="globe"></i> Dominio di 3° livello: <strong>gestionale.liuteriadelorenzi.it</strong>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Data and Application Logic -->
     <script src="./js/data.js"></script>
     <script src="./js/homeAssistant.js"></script>
     <script src="./js/modules/renderers.js"></script>
+    <script src="./js/auth.js"></script>
     <script src="./js/app.js"></script>
 </body>
 </html>
