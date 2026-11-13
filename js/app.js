@@ -35,6 +35,16 @@ const APPS = [
         renderer: window.AppModules.renderCalendarioLavorazioni
     },
     {
+        id: "certificati",
+        name: "Certificati",
+        tag: "Autenticità & Perizie",
+        icon: "award",
+        color: "linear-gradient(135deg, rgba(217, 119, 6, 0.25), rgba(146, 64, 14, 0.45))",
+        borderColor: "#f59e0b",
+        desc: "Creazione e stampa di certificati su carta intestata con nome autore, stato di conservazione, bio, misure e fotografie.",
+        renderer: window.AppModules.renderCertificati
+    },
+    {
         id: "clienti",
         name: "Clienti",
         tag: "Anagrafica & CRM",
@@ -161,7 +171,7 @@ class AppController {
         if (filtered.length === 0) {
             gridContainer.innerHTML = `
                 <div style="grid-column: 1/-1; text-align:center; padding:3rem; color:var(--text-muted);">
-                    <i class="lucide-search-x" style="font-size:3rem; margin-bottom:1rem; display:block;"></i>
+                    <i data-lucide="search-x" class="lucide-search-x" style="font-size:3rem; margin-bottom:1rem; display:block;"></i>
                     <p style="font-size:1.1rem;">Nessuna app trovata per "${filterText}"</p>
                 </div>
             `;
@@ -327,7 +337,7 @@ window.showToast = function(msg) {
 
     const toast = document.createElement("div");
     toast.className = "toast";
-    toast.innerHTML = `<i class="lucide-check-circle" style="color:var(--accent-gold);"></i> <span>${msg}</span>`;
+    toast.innerHTML = `<i data-lucide="check-circle" class="lucide-check-circle" style="color:var(--accent-gold);"></i> <span>${msg}</span>`;
     container.appendChild(toast);
 
     if (window.lucide) window.lucide.createIcons();
@@ -424,7 +434,7 @@ window.openAddModal = function(collectionName) {
                     <textarea id="f_bib_note" class="form-control" placeholder="Dettagli essenziali, spessori della tavola, note di laboratorio o frequenze citate..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-book-plus"></i> Archivia Documento in Biblioteca
+                    <i data-lucide="book-plus" class="lucide-book-plus"></i> Archivia Documento in Biblioteca
                 </button>
             </form>
         `;
@@ -481,7 +491,7 @@ window.openAddModal = function(collectionName) {
                     <textarea id="f_app_note" class="form-control" placeholder="Dettagli sulle lavorazioni da concordare, preferenze acustiche del musicista..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-calendar-plus"></i> Salva Appuntamento
+                    <i data-lucide="calendar-plus" class="lucide-calendar-plus"></i> Salva Appuntamento
                 </button>
             </form>
         `;
@@ -551,7 +561,7 @@ window.openAddModal = function(collectionName) {
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-clock"></i> Pianifica Lavorazione in Atelier
+                    <i data-lucide="clock" class="lucide-clock"></i> Pianifica Lavorazione in Atelier
                 </button>
             </form>
         `;
@@ -597,7 +607,7 @@ window.openAddModal = function(collectionName) {
                     <textarea id="f_note" class="form-control" placeholder="Es. Predilige timbro caldo nei bassi, anima leggermente avanzata, ponticello modello belga..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-user-plus"></i> Salva Cliente
+                    <i data-lucide="user-plus" class="lucide-user-plus"></i> Salva Cliente
                 </button>
             </form>
         `;
@@ -742,7 +752,7 @@ window.openAddModal = function(collectionName) {
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem; font-size:1rem; padding:0.8rem;">
-                    <i class="lucide-hammer"></i> Registra Strumento in Costruzione
+                    <i data-lucide="hammer" class="lucide-hammer"></i> Registra Strumento in Costruzione
                 </button>
             </form>
         `;
@@ -802,7 +812,7 @@ window.openAddModal = function(collectionName) {
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-file-plus"></i> Emetti e Registra Fattura
+                    <i data-lucide="file-plus" class="lucide-file-plus"></i> Emetti e Registra Fattura
                 </button>
             </form>
         `;
@@ -850,7 +860,7 @@ window.openAddModal = function(collectionName) {
                     <textarea id="f_lab_utensili" class="form-control" placeholder="Es. Pialletto a botte 8mm, Sgorga Dastra #7 18mm, Colla di pelle 60°C, Spessimetro rapido"></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-gauge"></i> Registra Stazione Laboratorio
+                    <i data-lucide="gauge" class="lucide-gauge"></i> Registra Stazione Laboratorio
                 </button>
             </form>
         `;
@@ -920,7 +930,7 @@ window.openAddModal = function(collectionName) {
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-trees"></i> Registra Legno nel Magazzino Tonewood
+                    <i data-lucide="trees" class="lucide-trees"></i> Registra Legno nel Magazzino Tonewood
                 </button>
             </form>
         `;
@@ -981,7 +991,7 @@ window.openAddModal = function(collectionName) {
                     <input type="text" id="f_str_vernice" class="form-control" placeholder="Es. Olio di ambra e resine naturali colore ambrato dorato">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-music"></i> Registra Strumento Finito in Showroom
+                    <i data-lucide="music" class="lucide-music"></i> Registra Strumento Finito in Showroom
                 </button>
             </form>
         `;
@@ -1032,7 +1042,7 @@ window.openAddModal = function(collectionName) {
                     <textarea id="f_med_descrizione" class="form-control" placeholder="Dettagli sulle condizioni di ripresa o registrazione, microfoni usati, macro ottica..."></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-upload"></i> Carica Media nell'Archivio
+                    <i data-lucide="upload" class="lucide-upload"></i> Carica Media nell'Archivio
                 </button>
             </form>
         `;
@@ -1072,7 +1082,7 @@ window.openAddModal = function(collectionName) {
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-bar-chart-3"></i> Salva Report Statistico
+                    <i data-lucide="bar-chart-3" class="lucide-bar-chart-3"></i> Salva Report Statistico
                 </button>
             </form>
         `;
@@ -1130,57 +1140,14 @@ window.openAddModal = function(collectionName) {
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-sparkles"></i> Registra Scheda di Restauro
+                    <i data-lucide="sparkles" class="lucide-sparkles"></i> Registra Scheda di Restauro
                 </button>
             </form>
         `;
     } else if (collectionName === 'social') {
-        formHTML = `
-            <form onsubmit="window.saveNewRecord(event, 'social')">
-                <div class="form-group">
-                    <label>Titolo / Argomento Post</label>
-                    <input type="text" id="f_soc_titolo" class="form-control" required placeholder="Es. Showcase Scultura Riccio e Filetto Violino Opus 42">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Piattaforma</label>
-                        <select id="f_soc_piattaforma" class="form-control">
-                            <option value="Instagram">Instagram</option>
-                            <option value="YouTube">YouTube</option>
-                            <option value="Facebook">Facebook</option>
-                            <option value="TikTok">TikTok</option>
-                            <option value="LinkedIn">LinkedIn</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Stato Programmazione</label>
-                        <select id="f_soc_stato" class="form-control">
-                            <option value="Programmato">Programmato</option>
-                            <option value="Bozza">Bozza</option>
-                            <option value="In Revisione">In Revisione</option>
-                            <option value="Pubblicato">Pubblicato</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Data e Ora Pubblicazione</label>
-                        <input type="datetime-local" id="f_soc_data" class="form-control" value="${todayDateTimeLocal}">
-                    </div>
-                    <div class="form-group">
-                        <label>Stima Likes / Interazioni</label>
-                        <input type="text" id="f_soc_likes" class="form-control" value="1.5K" placeholder="Es. 2.4K">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Hashtag Strategici</label>
-                    <input type="text" id="f_soc_hashtag" class="form-control" value="#lutherie #cremona #violinmaker #tonewood #handmade #stradivari" placeholder="Es. #lutherie #cremona...">
-                </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i class="lucide-share-2"></i> Programma Pubblicazione Social
-                </button>
-            </form>
-        `;
+        formHTML = window.buildSocialModalForm(null);
+    } else if (collectionName === 'certificati') {
+        formHTML = window.buildCertificatoModalForm(null);
     } else {
         // Generic fallback form
         formHTML = `
@@ -1198,8 +1165,26 @@ window.openAddModal = function(collectionName) {
         `;
     }
 
+    const modalContainer = modalOverlay.querySelector('.modal-container');
+    if (modalContainer) {
+        if (collectionName === 'social' || collectionName === 'certificati') {
+            modalContainer.style.maxWidth = '820px';
+        } else {
+            modalContainer.style.maxWidth = '';
+        }
+    }
+
     modalBody.innerHTML = formHTML;
     modalOverlay.classList.add("active");
+    if (collectionName === 'certificati') {
+        window.renderCertPhotoDraftList();
+    } else if (collectionName === 'social') {
+        window.renderSocialMediaDraftList();
+        window.setupSocialDropzone();
+    }
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
 };
 
 window.closeModal = function() {
@@ -1371,16 +1356,86 @@ window.saveNewRecord = function(e, collectionName) {
         };
         window.atelierDB.addItem("restauro", item);
     } else if (collectionName === 'social') {
-        const item = {
-            id: "soc-" + Date.now(),
+        const editingId = document.getElementById("f_soc_edit_id") ? document.getElementById("f_soc_edit_id").value.trim() : "";
+        const checkedPlatforms = Array.from(document.querySelectorAll(".soc-platform-checkbox:checked")).map(cb => cb.value);
+        const piattaforme = checkedPlatforms.length > 0 ? checkedPlatforms : ["Instagram"];
+        const statoScelto = document.getElementById("f_soc_stato") ? document.getElementById("f_soc_stato").value : "Programmato";
+        const autoPublish = document.getElementById("f_soc_autopublish") ? document.getElementById("f_soc_autopublish").checked : true;
+        const dataProg = document.getElementById("f_soc_data") ? document.getElementById("f_soc_data").value : new Date().toISOString().slice(0, 16);
+
+        const shouldPublishImmediately = (statoScelto === "Pubblicato");
+
+        const socialObj = {
+            id: editingId || ("soc-" + Date.now()),
             titolo: document.getElementById("f_soc_titolo").value.trim(),
-            piattaforma: document.getElementById("f_soc_piattaforma").value,
-            dataProgrammata: document.getElementById("f_soc_data").value || new Date().toISOString(),
-            hashtag: document.getElementById("f_soc_hashtag").value.trim(),
-            likesPrevisti: document.getElementById("f_soc_likes").value.trim() || "1.0K",
-            stato: document.getElementById("f_soc_stato").value
+            piattaforme: piattaforme,
+            piattaforma: piattaforme.join(", "),
+            formatoPost: document.getElementById("f_soc_formato") ? document.getElementById("f_soc_formato").value : "Post Foto / Video",
+            dataProgrammata: dataProg,
+            hashtag: document.getElementById("f_soc_hashtag") ? document.getElementById("f_soc_hashtag").value.trim() : "",
+            note: document.getElementById("f_soc_note") ? document.getElementById("f_soc_note").value.trim() : "",
+            likesPrevisti: document.getElementById("f_soc_likes") ? document.getElementById("f_soc_likes").value.trim() || "1.5K" : "1.5K",
+            stato: shouldPublishImmediately ? "Programmato" : statoScelto,
+            autoPublish: autoPublish,
+            errorePubblicazione: "",
+            updatedAt: new Date().toISOString(),
+            mediaAttachments: Array.isArray(window.socialMediaDrafts) ? JSON.parse(JSON.stringify(window.socialMediaDrafts)) : []
         };
-        window.atelierDB.addItem("social", item);
+
+        if (editingId) {
+            window.atelierDB.updateItem("social", editingId, socialObj);
+        } else {
+            window.atelierDB.addItem("social", socialObj);
+        }
+
+        if (typeof window.syncSocialWithServer === "function") {
+            window.syncSocialWithServer();
+        }
+
+        if (shouldPublishImmediately) {
+            setTimeout(() => {
+                window.publishSocialPostNow(socialObj.id, false);
+            }, 120);
+        }
+    } else if (collectionName === 'certificati') {
+        window.syncCertPhotoCaptionsFromDOM();
+        const editingId = document.getElementById("f_cert_edit_id") ? document.getElementById("f_cert_edit_id").value.trim() : "";
+        const certObj = {
+            id: editingId || ("cert-" + Date.now()),
+            numeroCertificato: document.getElementById("f_cert_numero").value.trim() || `CERT-${new Date().getFullYear()}-001`,
+            dataEmissione: document.getElementById("f_cert_data").value || new Date().toISOString().split('T')[0],
+            luogoEmissione: document.getElementById("f_cert_luogo").value.trim() || "Bottega Liuteria De Lorenzi",
+            tipologiaCertificato: document.getElementById("f_cert_tipoDoc").value || "Certificato di Autenticità d'Autore",
+            strumento: document.getElementById("f_cert_strumento").value.trim(),
+            tipologiaStrumento: document.getElementById("f_cert_tipologiaStrumento").value || "Violino 4/4",
+            modello: document.getElementById("f_cert_modello").value.trim() || "Modello Classico Cremonese",
+            annoCostruzione: document.getElementById("f_cert_anno").value.trim() || String(new Date().getFullYear()),
+            autore: document.getElementById("f_cert_autore").value.trim() || "Maestro Fabio De Lorenzi",
+            etichetta: document.getElementById("f_cert_etichetta").value.trim(),
+            statoConservazione: document.getElementById("f_cert_statoCons").value.trim() || "Eccellente — Stato Integro d'Autore",
+            noteConservazione: document.getElementById("f_cert_noteCons").value.trim(),
+            bioAutore: document.getElementById("f_cert_bio").value.trim(),
+            destinatario: document.getElementById("f_cert_destinatario").value.trim(),
+            misure: {
+                lunghezzaCassa: document.getElementById("f_cert_m_cassa").value.trim() || "-",
+                larghezzaSuperiore: document.getElementById("f_cert_m_sup").value.trim() || "-",
+                larghezzaCC: document.getElementById("f_cert_m_cc").value.trim() || "-",
+                larghezzaInferiore: document.getElementById("f_cert_m_inf").value.trim() || "-",
+                altezzaFasceSup: document.getElementById("f_cert_m_fasceSup").value.trim() || "-",
+                altezzaFasceInf: document.getElementById("f_cert_m_fasceInf").value.trim() || "-",
+                diapason: document.getElementById("f_cert_m_diapason").value.trim() || "-",
+                lunghezzaManico: document.getElementById("f_cert_m_manico").value.trim() || "-"
+            },
+            fotografie: Array.isArray(window.certPhotoDrafts) ? JSON.parse(JSON.stringify(window.certPhotoDrafts)) : []
+        };
+
+        if (editingId) {
+            window.atelierDB.updateItem("certificati", editingId, certObj);
+            window.selectedCertificateId = editingId;
+        } else {
+            window.atelierDB.addItem("certificati", certObj);
+            window.selectedCertificateId = certObj.id;
+        }
     }
 
     window.closeModal();
@@ -1448,6 +1503,616 @@ window.quickUpdateCostruzione = function(id, delta) {
 
 window.deleteCostruzioneItem = function(id, opNumero) {
     window.deleteRecord('costruzione', id, opNumero);
+};
+
+// ==========================================================================
+// CERTIFICATI SU CARTA INTESTATA: GESTIONE FORM, FOTO, MISURE E STAMPA A4
+// ==========================================================================
+
+window.certPhotoDrafts = [];
+
+window.DEFAULT_LUTHIER_BIO = "Il Maestro Liutaio Fabio De Lorenzi dedica la propria ricerca all'arte liutaria classica italiana, coniugando il metodo costruttivo tradizionale cremonese con lo studio acustico-modale dei legni da risonanza stagionati naturalmente. Ogni strumento è interamente scolpito e verniciato a mano nella propria bottega.";
+
+window.buildCertificatoModalForm = function(existingCert = null) {
+    const todayIso = new Date().toISOString().split('T')[0];
+    const existingList = (window.atelierDB && window.atelierDB.data.certificati) || [];
+    const nextNum = String(existingList.length + 1).padStart(3, '0');
+    const suggestedCode = `CERT-${new Date().getFullYear()}-${nextNum}`;
+
+    const c = existingCert || {
+        id: "",
+        numeroCertificato: suggestedCode,
+        dataEmissione: todayIso,
+        luogoEmissione: "Bottega Liuteria De Lorenzi",
+        tipologiaCertificato: "Certificato di Autenticità d'Autore",
+        strumento: "",
+        tipologiaStrumento: "Violino 4/4",
+        modello: "Ispirato ad Antonio Stradivari 1715 'Il Cremonese'",
+        annoCostruzione: String(new Date().getFullYear()),
+        autore: "Maestro Fabio De Lorenzi",
+        etichetta: `Fabio De Lorenzi fecit anno Domini ${new Date().getFullYear()}`,
+        statoConservazione: "Eccellente — Stato Integro d'Autore",
+        noteConservazione: "Strumento in perfetto stato di conservazione, integro in ogni sua parte originale. Tavola armonica in abete rosso della Val di Fiemme; fondo in acero marezzato balcanico. Vernice originale ad olio d'ambra.",
+        bioAutore: window.DEFAULT_LUTHIER_BIO,
+        destinatario: "",
+        misure: {
+            lunghezzaCassa: "355.5 mm",
+            larghezzaSuperiore: "167.5 mm",
+            larghezzaCC: "111.5 mm",
+            larghezzaInferiore: "207.8 mm",
+            altezzaFasceSup: "30.0 mm",
+            altezzaFasceInf: "31.8 mm",
+            diapason: "195.0 mm",
+            lunghezzaManico: "130.0 mm"
+        },
+        fotografie: [
+            { url: "/assets/violin-1.jpg", didascalia: "Tavola Armonica (Vista Frontale)" },
+            { url: "/assets/cremonese.jpg", didascalia: "Fondo in Acero Marezzato & Profilo" }
+        ]
+    };
+
+    const m = c.misure || {};
+    window.certPhotoDrafts = Array.isArray(c.fotografie) ? JSON.parse(JSON.stringify(c.fotografie)) : [];
+
+    const clientsOptions = ((window.atelierDB && window.atelierDB.data.clienti) || [])
+        .map(cl => `<option value="${cl.nome}">`).join('');
+
+    const showroomInstruments = ((window.atelierDB && window.atelierDB.data.magazzinoStrumenti) || []);
+    const buildInstruments = ((window.atelierDB && window.atelierDB.data.costruzione) || []);
+    const restoreInstruments = ((window.atelierDB && window.atelierDB.data.restauro) || []);
+
+    return `
+        <form onsubmit="window.saveNewRecord(event, 'certificati')">
+            <input type="hidden" id="f_cert_edit_id" value="${c.id || ''}">
+
+            ${!existingCert ? `
+                <div style="background:rgba(245, 158, 11, 0.08); border:1px solid rgba(245, 158, 11, 0.3); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1.2rem;">
+                    <label style="font-size:0.8rem; color:var(--accent-gold); font-weight:700; display:block; margin-bottom:0.35rem;">
+                        ⚡ Precompila Rapido da Strumento in Archivio (Opzionale)
+                    </label>
+                    <select class="form-control" onchange="window.prefillCertFromInstrument(this.value)" style="font-size:0.85rem; padding:0.5rem 0.8rem;">
+                        <option value="">-- Seleziona uno strumento da Magazzino / Costruzione / Restauro --</option>
+                        ${showroomInstruments.map(s => `<option value="str:${s.id}">🎻 [Showroom] ${s.nome} (${s.modello} - ${s.annoCostruzione})</option>`).join('')}
+                        ${buildInstruments.map(b => `<option value="cost:${b.id}">🔨 [Costruzione] ${b.opNumero} - ${b.modello}</option>`).join('')}
+                        ${restoreInstruments.map(r => `<option value="res:${r.id}">✨ [Restauro] ${r.strumento} (${r.codice})</option>`).join('')}
+                    </select>
+                </div>
+            ` : ''}
+
+            <!-- 1. Dati Intestazione e Identificazione -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin-bottom:0.8rem;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">1. Intestazione & Identificazione Strumento</strong>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>N° Registro Certificato</label>
+                    <input type="text" id="f_cert_numero" class="form-control" required value="${c.numeroCertificato || suggestedCode}">
+                </div>
+                <div class="form-group">
+                    <label>Data Emissione</label>
+                    <input type="date" id="f_cert_data" class="form-control" required value="${c.dataEmissione || todayIso}">
+                </div>
+                <div class="form-group">
+                    <label>Luogo di Emissione</label>
+                    <input type="text" id="f_cert_luogo" class="form-control" value="${c.luogoEmissione || 'Bottega Liuteria De Lorenzi'}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Titolo su Carta Intestata</label>
+                    <select id="f_cert_tipoDoc" class="form-control">
+                        <option value="Certificato di Autenticità d'Autore" ${c.tipologiaCertificato === "Certificato di Autenticità d'Autore" ? 'selected' : ''}>Certificato di Autenticità d'Autore</option>
+                        <option value="Perizia Tecnica & Stato di Conservazione" ${c.tipologiaCertificato === "Perizia Tecnica & Stato di Conservazione" ? 'selected' : ''}>Perizia Tecnica & Stato di Conservazione</option>
+                        <option value="Certificato di Attribuzione & Expertise Liutaria" ${c.tipologiaCertificato === "Certificato di Attribuzione & Expertise Liutaria" ? 'selected' : ''}>Certificato di Attribuzione & Expertise Liutaria</option>
+                        <option value="Certificato di Restauro Conservativo" ${c.tipologiaCertificato === "Certificato di Restauro Conservativo" ? 'selected' : ''}>Certificato di Restauro Conservativo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipologia Strumento</label>
+                    <select id="f_cert_tipologiaStrumento" class="form-control">
+                        <option value="Violino 4/4" ${c.tipologiaStrumento === 'Violino 4/4' ? 'selected' : ''}>Violino 4/4</option>
+                        <option value="Viola" ${c.tipologiaStrumento === 'Viola' ? 'selected' : ''}>Viola d'Arco</option>
+                        <option value="Violoncello" ${c.tipologiaStrumento === 'Violoncello' ? 'selected' : ''}>Violoncello</option>
+                        <option value="Contrabbasso" ${c.tipologiaStrumento === 'Contrabbasso' ? 'selected' : ''}>Contrabbasso</option>
+                        <option value="Viola d'Amore / Strumento Storico" ${c.tipologiaStrumento === "Viola d'Amore / Strumento Storico" ? 'selected' : ''}>Viola d'Amore / Strumento Storico</option>
+                        <option value="Arco da Concerto" ${c.tipologiaStrumento === 'Arco da Concerto' ? 'selected' : ''}>Arco da Concerto</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Denominazione Strumento</label>
+                    <input type="text" id="f_cert_strumento" class="form-control" required value="${c.strumento || ''}" placeholder="Es. Violino Master 'La Fenice' Opus 42">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Anno / Epoca di Costruzione</label>
+                    <input type="text" id="f_cert_anno" class="form-control" required value="${c.annoCostruzione || ''}" placeholder="Es. 2026 o Fine XVIII Sec.">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Modello / Scuola di Riferimento</label>
+                    <input type="text" id="f_cert_modello" class="form-control" value="${c.modello || ''}" placeholder="Es. Antonio Stradivari 1715 'Il Cremonese'">
+                </div>
+                <div class="form-group">
+                    <label>Etichetta / Cartiglio Interno</label>
+                    <input type="text" id="f_cert_etichetta" class="form-control" value="${c.etichetta || ''}" placeholder="Es. Fabio De Lorenzi fecit anno Domini 2026">
+                </div>
+            </div>
+
+            <!-- 2. Nome dell'Autore e Breve Biografia -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">2. Autore & Breve Biografia dell'Autore</strong>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nome dell'Autore / Maestro Liutaio</label>
+                    <input type="text" id="f_cert_autore" class="form-control" required value="${c.autore || 'Maestro Fabio De Lorenzi'}" placeholder="Es. Maestro Fabio De Lorenzi">
+                </div>
+                <div class="form-group">
+                    <label>Intestatario / Proprietario (Opzionale)</label>
+                    <input type="text" id="f_cert_destinatario" list="cert_clienti_list" class="form-control" value="${c.destinatario || ''}" placeholder="Es. Maestro Marco Rossi">
+                    <datalist id="cert_clienti_list">${clientsOptions}</datalist>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+                    <label style="margin-bottom:0;">Breve Biografia dell'Autore</label>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;" onclick="document.getElementById('f_cert_bio').value = window.DEFAULT_LUTHIER_BIO;">
+                        Ripristina Bio Maestro De Lorenzi
+                    </button>
+                </div>
+                <textarea id="f_cert_bio" class="form-control" rows="3" required placeholder="Profilo biografico, formazione, ricerca acustica e stile costruttivo dell'autore...">${c.bioAutore || window.DEFAULT_LUTHIER_BIO}</textarea>
+            </div>
+
+            <!-- 3. Stato di Conservazione -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">3. Stato di Conservazione & Vernice</strong>
+            </div>
+
+            <div class="form-group">
+                <label>Valutazione Stato di Conservazione</label>
+                <input type="text" id="f_cert_statoCons" list="cert_stato_list" class="form-control" required value="${c.statoConservazione || 'Eccellente — Stato Integro d\'Autore'}" placeholder="Es. Eccellente — Stato Integro d'Autore">
+                <datalist id="cert_stato_list">
+                    <option value="Eccellente — Stato Integro d'Autore">
+                    <option value="Ottimo — Pari al Nuovo">
+                    <option value="Molto Buono — Lievi segni d'uso compatibili con l'epoca">
+                    <option value="Buono — Restaurato conservativamente a regola d'arte">
+                    <option value="Storico — Con interventi di restauro documentati">
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label>Descrizione Analitica Stato di Conservazione, Legni e Vernice</label>
+                <textarea id="f_cert_noteCons" class="form-control" rows="3" required placeholder="Descrivi l'integrità strutturale della tavola armonica, del fondo, delle fasce, del riccio e la composizione/colore della vernice...">${c.noteConservazione || ''}</textarea>
+            </div>
+
+            <!-- 4. Misure Rilevate -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">4. Rilievi Metrici e Misure (in mm)</strong>
+                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.7rem;" onclick="window.applyCertMeasurePreset('violino')">Preset Violino 4/4</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.7rem;" onclick="window.applyCertMeasurePreset('viola')">Preset Viola 41.5</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.7rem;" onclick="window.applyCertMeasurePreset('violoncello')">Preset Violoncello</button>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap:0.75rem; margin-bottom:1.2rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Lunghezza Cassa</label>
+                    <input type="text" id="f_cert_m_cassa" class="form-control" value="${m.lunghezzaCassa || '355.5 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Largh. Superiore</label>
+                    <input type="text" id="f_cert_m_sup" class="form-control" value="${m.larghezzaSuperiore || '167.5 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Largh. nelle CC</label>
+                    <input type="text" id="f_cert_m_cc" class="form-control" value="${m.larghezzaCC || '111.5 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Largh. Inferiore</label>
+                    <input type="text" id="f_cert_m_inf" class="form-control" value="${m.larghezzaInferiore || '207.8 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Fasce Superiori</label>
+                    <input type="text" id="f_cert_m_fasceSup" class="form-control" value="${m.altezzaFasceSup || '30.0 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Fasce Inferiori</label>
+                    <input type="text" id="f_cert_m_fasceInf" class="form-control" value="${m.altezzaFasceInf || '31.8 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Diapason (Mensura)</label>
+                    <input type="text" id="f_cert_m_diapason" class="form-control" value="${m.diapason || '195.0 mm'}">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.76rem;">Lunghezza Manico</label>
+                    <input type="text" id="f_cert_m_manico" class="form-control" value="${m.lunghezzaManico || '130.0 mm'}">
+                </div>
+            </div>
+
+            <!-- 5. Fotografie dello Strumento -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">5. Fotografie dello Strumento</strong>
+            </div>
+
+            <div style="background:rgba(0,0,0,0.35); border:1px dashed rgba(245, 158, 11, 0.4); border-radius:10px; padding:1rem; margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:0.8rem;">
+                    <div>
+                        <strong style="color:#fff; font-size:0.88rem; display:block;">Aggiungi Fotografie (Tavola, Fondo, Profilo, Riccio, Cartiglio)</strong>
+                        <small style="color:var(--text-muted);">Puoi caricare file immagine dal tuo PC/telefono oppure scegliere dall'archivio.</small>
+                    </div>
+                    <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.45rem 0.9rem; font-size:0.8rem;">
+                        <i data-lucide="camera" class="lucide-camera"></i> Carica Foto dal PC
+                        <input type="file" accept="image/*" multiple onchange="window.handleCertPhotoUpload(event)" style="display:none;">
+                    </label>
+                </div>
+
+                <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center; padding-top:0.6rem; border-top:1px solid rgba(255,255,255,0.06);">
+                    <span style="font-size:0.75rem; color:var(--text-secondary);">Foto rapide Atelier:</span>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="window.addCertGalleryPhoto('./assets/violin-1.jpg', 'Tavola Armonica (Fronte)')">+ Violino Fronte</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="window.addCertGalleryPhoto('./assets/cremonese.jpg', 'Fondo in Acero Marezzato')">+ Fondo Cremonese</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="window.addCertGalleryPhoto('./assets/viola-1.jpg', 'Viola d\\'Arco - Vista Completa')">+ Viola</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="window.addCertGalleryPhoto('./assets/cello-1.jpg', 'Violoncello - Tavola e C-Bouts')">+ Violoncello</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.5rem; font-size:0.72rem;" onclick="window.addCertGalleryPhoto('./assets/craft-1.jpg', 'Dettaglio Riccio e Filettatura')">+ Dettaglio Riccio</button>
+                </div>
+
+                <div id="certPhotoDraftListContainer" style="margin-top:0.9rem; display:flex; flex-direction:column; gap:0.5rem;"></div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem; padding:0.85rem; font-size:0.95rem;">
+                <i data-lucide="award" class="lucide-award"></i> ${existingCert ? 'Salva Modifiche al Certificato' : 'Genera Certificato su Carta Intestata'}
+            </button>
+        </form>
+    `;
+};
+
+window.renderCertPhotoDraftList = function() {
+    const container = document.getElementById("certPhotoDraftListContainer");
+    if (!container) return;
+    const drafts = window.certPhotoDrafts || [];
+    if (drafts.length === 0) {
+        container.innerHTML = `<div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:0.5rem;">Nessuna foto allegata. Clicca su "Carica Foto dal PC" per inserire le immagini dello strumento.</div>`;
+        return;
+    }
+    container.innerHTML = drafts.map((f, idx) => `
+        <div style="display:flex; align-items:center; gap:0.75rem; background:rgba(255,255,255,0.04); padding:0.45rem 0.65rem; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+            <img src="${f.url}" alt="Foto ${idx + 1}" onerror="this.src='/assets/violin-1.jpg'" style="width:46px; height:46px; object-fit:cover; border-radius:6px; border:1px solid var(--accent-gold); flex-shrink:0;">
+            <div style="flex:1;">
+                <label style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.15rem;">Didascalia Tavola ${idx + 1}</label>
+                <input type="text" class="form-control cert-photo-caption-input" data-idx="${idx}" value="${(f.didascalia || '').replace(/"/g, '&quot;')}" placeholder="Es. Tavola Armonica (Fronte)" style="padding:0.35rem 0.65rem; font-size:0.82rem;">
+            </div>
+            <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.55rem; color:#ef4444;" onclick="window.removeCertDraftPhoto(${idx})" title="Rimuovi foto">
+                &times;
+            </button>
+        </div>
+    `).join('');
+};
+
+window.syncCertPhotoCaptionsFromDOM = function() {
+    const inputs = document.querySelectorAll(".cert-photo-caption-input");
+    inputs.forEach(inp => {
+        const idx = parseInt(inp.getAttribute("data-idx"), 10);
+        if (!isNaN(idx) && window.certPhotoDrafts[idx]) {
+            window.certPhotoDrafts[idx].didascalia = inp.value.trim() || `Tavola ${idx + 1}`;
+        }
+    });
+};
+
+window.addCertGalleryPhoto = function(url, caption) {
+    window.syncCertPhotoCaptionsFromDOM();
+    window.certPhotoDrafts.push({ url: url, didascalia: caption });
+    window.renderCertPhotoDraftList();
+};
+
+window.removeCertDraftPhoto = function(idx) {
+    window.syncCertPhotoCaptionsFromDOM();
+    window.certPhotoDrafts.splice(idx, 1);
+    window.renderCertPhotoDraftList();
+};
+
+window.handleCertPhotoUpload = function(event) {
+    const files = Array.from((event.target && event.target.files) || []);
+    if (!files.length) return;
+    window.syncCertPhotoCaptionsFromDOM();
+
+    const defaultCaptions = [
+        "Tavola Armonica (Vista Frontale)",
+        "Fondo in Acero Marezzato (Vista Posteriore)",
+        "Profilo Laterale & Fascia",
+        "Scultura del Riccio e Cassetta Piroli",
+        "Dettaglio Effe e Cartiglio Interno"
+    ];
+
+    files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                // Ridimensiona a max 900px per garantire leggerezza in LocalStorage e nitidezza in stampa A4
+                const maxDim = 900;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.84);
+
+                const nextIdx = window.certPhotoDrafts.length;
+                const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+                const suggestedCaption = defaultCaptions[nextIdx] || cleanName || `Tavola Fotografica ${nextIdx + 1}`;
+
+                window.certPhotoDrafts.push({
+                    url: compressedDataUrl,
+                    didascalia: suggestedCaption
+                });
+                window.renderCertPhotoDraftList();
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    event.target.value = "";
+};
+
+window.applyCertMeasurePreset = function(type) {
+    const presets = {
+        violino: {
+            cassa: "355.5 mm",
+            sup: "167.5 mm",
+            cc: "111.5 mm",
+            inf: "207.8 mm",
+            fasceSup: "30.0 mm",
+            fasceInf: "31.8 mm",
+            diapason: "195.0 mm",
+            manico: "130.0 mm"
+        },
+        viola: {
+            cassa: "415.0 mm",
+            sup: "198.0 mm",
+            cc: "134.0 mm",
+            inf: "246.0 mm",
+            fasceSup: "37.5 mm",
+            fasceInf: "39.5 mm",
+            diapason: "223.0 mm",
+            manico: "148.0 mm"
+        },
+        violoncello: {
+            cassa: "755.0 mm",
+            sup: "348.0 mm",
+            cc: "242.0 mm",
+            inf: "440.0 mm",
+            fasceSup: "118.0 mm",
+            fasceInf: "124.0 mm",
+            diapason: "400.0 mm",
+            manico: "280.0 mm"
+        }
+    };
+    const p = presets[type];
+    if (!p) return;
+    document.getElementById("f_cert_m_cassa").value = p.cassa;
+    document.getElementById("f_cert_m_sup").value = p.sup;
+    document.getElementById("f_cert_m_cc").value = p.cc;
+    document.getElementById("f_cert_m_inf").value = p.inf;
+    document.getElementById("f_cert_m_fasceSup").value = p.fasceSup;
+    document.getElementById("f_cert_m_fasceInf").value = p.fasceInf;
+    document.getElementById("f_cert_m_diapason").value = p.diapason;
+    document.getElementById("f_cert_m_manico").value = p.manico;
+};
+
+window.prefillCertFromInstrument = function(val) {
+    if (!val) return;
+    const [source, id] = val.split(':');
+    if (source === 'str') {
+        const s = window.atelierDB.getItem('magazzinoStrumenti', id);
+        if (!s) return;
+        document.getElementById("f_cert_strumento").value = s.nome || "";
+        document.getElementById("f_cert_tipologiaStrumento").value = s.tipologia || "Violino 4/4";
+        document.getElementById("f_cert_modello").value = s.modello || "";
+        document.getElementById("f_cert_anno").value = String(s.annoCostruzione || new Date().getFullYear());
+        document.getElementById("f_cert_etichetta").value = `Fabio De Lorenzi fecit anno Domini ${s.annoCostruzione || new Date().getFullYear()} — ${s.codice || ''}`;
+        document.getElementById("f_cert_noteCons").value = `Strumento d'autore in perfetto stato di conservazione, integro in ogni sua parte originale. Vernice: ${s.vernice || 'tradizionale a olio'}.`;
+        if ((s.tipologia || '').toLowerCase().includes('viola')) window.applyCertMeasurePreset('viola');
+        else if ((s.tipologia || '').toLowerCase().includes('cello')) window.applyCertMeasurePreset('violoncello');
+        else window.applyCertMeasurePreset('violino');
+    } else if (source === 'cost') {
+        const b = window.atelierDB.getItem('costruzione', id);
+        if (!b) return;
+        document.getElementById("f_cert_strumento").value = `${b.modello} (${b.opNumero})`;
+        document.getElementById("f_cert_modello").value = b.modello || "";
+        document.getElementById("f_cert_destinatario").value = b.committente && !b.committente.includes('Vendita') ? b.committente : "";
+        document.getElementById("f_cert_noteCons").value = `Strumento nuovo d'autore (${b.opNumero}). Tavola armonica: ${b.legnoTavola}. Fondo e fasce: ${b.legnoFondo}. Frequenza tavola: ${b.frequenzaTavola}.`;
+    } else if (source === 'res') {
+        const r = window.atelierDB.getItem('restauro', id);
+        if (!r) return;
+        document.getElementById("f_cert_tipoDoc").value = "Perizia Tecnica & Stato di Conservazione";
+        document.getElementById("f_cert_strumento").value = r.strumento || "";
+        document.getElementById("f_cert_destinatario").value = r.proprietario || "";
+        document.getElementById("f_cert_statoCons").value = "Buono — Restaurato conservativamente a regola d'arte";
+        document.getElementById("f_cert_noteCons").value = `Diagnosi storica: ${r.diagnosi} Interventi eseguiti in Atelier: ${r.interventiPrevisti}`;
+    }
+};
+
+window.openEditCertificatoModal = function(certId) {
+    const cert = window.atelierDB.getItem("certificati", certId);
+    if (!cert) return;
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+
+    modalTitle.innerText = `Modifica Certificato: ${cert.numeroCertificato}`;
+    modalBody.innerHTML = window.buildCertificatoModalForm(cert);
+    modalOverlay.classList.add("active");
+    window.renderCertPhotoDraftList();
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.selectCertificatePreview = function(certId, scrollToPreview = false) {
+    window.selectedCertificateId = certId;
+    if (window.appController && window.appController.activeModuleId === 'certificati') {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules.renderCertificati) {
+            window.AppModules.renderCertificati(container);
+            window.appController.setupLucideIcons();
+            if (scrollToPreview) {
+                const panel = document.getElementById("certPreviewPanel");
+                if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    }
+};
+
+window.openCertificateForInstrument = function(instrId) {
+    const s = window.atelierDB.getItem("magazzinoStrumenti", instrId);
+    if (!s) return;
+    const certs = window.atelierDB.data.certificati || [];
+    const match = certs.find(c =>
+        (c.strumento && s.nome && c.strumento.toLowerCase().includes(s.nome.toLowerCase())) ||
+        (s.nome && c.strumento && s.nome.toLowerCase().includes(c.strumento.toLowerCase()))
+    );
+    window.appController.openModule('certificati');
+    if (match) {
+        window.selectCertificatePreview(match.id, true);
+        window.showToast(`Certificato ${match.numeroCertificato} aperto su Carta Intestata`);
+    } else {
+        window.openAddModal('certificati');
+        setTimeout(() => {
+            window.prefillCertFromInstrument(`str:${instrId}`);
+        }, 50);
+    }
+};
+
+window.printCertificate = function(certId) {
+    const cert = window.atelierDB.getItem("certificati", certId);
+    if (!cert) return;
+
+    const paperHTML = window.AppModules.buildCertificatoPaperHTML(cert);
+    const origin = window.location.origin;
+    const baseHref = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
+    const printWin = window.open('', '_blank', 'width=1024,height=900');
+    if (!printWin) {
+        window.showToast("Abilita i pop-up nel browser per stampare il certificato A4.");
+        return;
+    }
+
+    const stylesEl = document.querySelector('link[href*="styles.css"]');
+    const stylesHref = stylesEl ? stylesEl.href : `${baseHref}css/styles.css`;
+
+    printWin.document.open();
+    printWin.document.write(`<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <base href="${baseHref}">
+    <title>${cert.numeroCertificato} - ${cert.strumento} | Liuteria De Lorenzi</title>
+    <link rel="stylesheet" href="${stylesHref}">
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
+        body {
+            background: #1a1815;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .print-Floating-bar {
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            width: 100%;
+            background: #121620;
+            border-bottom: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        }
+        .print-sheet-wrapper {
+            padding: 1.5rem;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        @media print {
+            html, body {
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .print-Floating-bar {
+                display: none !important;
+            }
+            .print-sheet-wrapper {
+                padding: 0 !important;
+                margin: 0 !important;
+                display: block !important;
+            }
+            .cert-letterhead-sheet {
+                box-shadow: none !important;
+                margin: 0 auto !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-Floating-bar">
+        <div>
+            <strong style="color:#fbbf24; font-family:'Cinzel', serif;">LIUTERIA DE LORENZI</strong>
+            <span style="margin-left:0.75rem; font-size:0.85rem; color:#9ca3af;">Anteprima di Stampa A4 su Carta Intestata &bull; <strong>${cert.numeroCertificato}</strong></span>
+        </div>
+        <div style="display:flex; gap:0.6rem;">
+            <button onclick="window.print()" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#000; border:none; padding:0.5rem 1.1rem; border-radius:6px; font-weight:700; cursor:pointer;">
+                🖨️ Stampa / Salva in PDF
+            </button>
+            <button onclick="window.close()" style="background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); padding:0.5rem 0.9rem; border-radius:6px; cursor:pointer;">
+                ✕ Chiudi
+            </button>
+        </div>
+    </div>
+    <div class="print-sheet-wrapper">
+        ${paperHTML}
+    </div>
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 450);
+        });
+    </script>
+</body>
+</html>`);
+    printWin.document.close();
 };
 
 // ==========================================================================
@@ -1903,9 +2568,1798 @@ window.saveHaConfig = function(e) {
     window.showToast("Configurazione salvata con successo! Aggiornamento telemetria in corso...");
 };
 
+// ==========================================================================
+// SOCIAL STUDIO: UPLOAD FOTO & VIDEO GRANDI DIMENSIONI (INDEXEDDB) & SCHEDULER
+// ==========================================================================
+
+window.SOCIAL_PLATFORMS_CATALOG = [
+    { id: "Instagram", label: "Instagram", sub: "Post, Carosello, Reel", icon: "instagram", color: "#e1306c", bg: "rgba(225, 48, 108, 0.14)", border: "rgba(225, 48, 108, 0.45)" },
+    { id: "Facebook", label: "Facebook", sub: "Pagina Atelier & Video HD", icon: "facebook", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.14)", border: "rgba(59, 130, 246, 0.45)" },
+    { id: "YouTube", label: "YouTube", sub: "Showcase 4K & Shorts", icon: "youtube", color: "#ef4444", bg: "rgba(239, 68, 68, 0.14)", border: "rgba(239, 68, 68, 0.45)" },
+    { id: "TikTok", label: "TikTok", sub: "Clip & Timelapse Liuteria", icon: "video", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.14)", border: "rgba(6, 182, 212, 0.45)" },
+    { id: "LinkedIn", label: "LinkedIn", sub: "Network & Collezionisti", icon: "linkedin", color: "#0ea5e9", bg: "rgba(14, 165, 233, 0.14)", border: "rgba(14, 165, 233, 0.45)" }
+];
+
+window.formatSocialBytes = function(bytes) {
+    if (!bytes || bytes <= 0) return "0 MB";
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
+    if (mb >= 1) return mb.toFixed(1) + " MB";
+    return Math.max(1, Math.round(bytes / 1024)) + " KB";
+};
+
+/**
+ * IndexedDB Storage Engine for Large Photo & Video Files (supports >500MB / 4K Videos)
+ */
+class SocialMediaStorageEngine {
+    constructor() {
+        this.dbName = "AtelierLiuteriaSocialMediaDB_v1";
+        this.storeName = "media_blobs";
+        this.db = null;
+        this.objectUrlCache = {};
+    }
+
+    init() {
+        return new Promise((resolve) => {
+            if (this.db) return resolve(this.db);
+            if (!window.indexedDB) {
+                console.warn("[SocialMediaDB] IndexedDB non supportato dal browser.");
+                return resolve(null);
+            }
+            const req = window.indexedDB.open(this.dbName, 1);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName, { keyPath: "id" });
+                }
+            };
+            req.onsuccess = (e) => {
+                this.db = e.target.result;
+                resolve(this.db);
+            };
+            req.onerror = (e) => {
+                console.warn("[SocialMediaDB] Errore apertura IndexedDB:", e);
+                resolve(null);
+            };
+        });
+    }
+
+    async saveBlob(id, fileOrBlob, metadata = {}) {
+        const db = await this.init();
+        // Create immediate in-memory ObjectURL so playback works right away
+        if (fileOrBlob instanceof Blob) {
+            if (this.objectUrlCache[id]) {
+                URL.revokeObjectURL(this.objectUrlCache[id]);
+            }
+            this.objectUrlCache[id] = URL.createObjectURL(fileOrBlob);
+        }
+        if (!db) return false;
+
+        return new Promise((resolve) => {
+            try {
+                const tx = db.transaction([this.storeName], "readwrite");
+                const store = tx.objectStore(this.storeName);
+                store.put({
+                    id: id,
+                    blob: fileOrBlob,
+                    name: metadata.name || fileOrBlob.name || id,
+                    mimeType: metadata.mimeType || fileOrBlob.type || "application/octet-stream",
+                    sizeBytes: metadata.sizeBytes || fileOrBlob.size || 0,
+                    createdAt: new Date().toISOString()
+                });
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = (err) => {
+                    console.warn("[SocialMediaDB] Errore salvataggio blob:", err);
+                    resolve(false);
+                };
+            } catch (err) {
+                console.warn("[SocialMediaDB] Eccezione salvataggio blob:", err);
+                resolve(false);
+            }
+        });
+    }
+
+    async getObjectUrl(id) {
+        if (!id) return null;
+        if (this.objectUrlCache[id]) return this.objectUrlCache[id];
+        const db = await this.init();
+        if (!db) return null;
+
+        return new Promise((resolve) => {
+            try {
+                const tx = db.transaction([this.storeName], "readonly");
+                const store = tx.objectStore(this.storeName);
+                const req = store.get(id);
+                req.onsuccess = () => {
+                    const res = req.result;
+                    if (res && res.blob instanceof Blob) {
+                        const objUrl = URL.createObjectURL(res.blob);
+                        this.objectUrlCache[id] = objUrl;
+                        resolve(objUrl);
+                    } else {
+                        resolve(null);
+                    }
+                };
+                req.onerror = () => resolve(null);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    }
+
+    async getBlob(id) {
+        if (!id) return null;
+        const db = await this.init();
+        if (!db) return null;
+        return new Promise((resolve) => {
+            try {
+                const tx = db.transaction([this.storeName], "readonly");
+                const store = tx.objectStore(this.storeName);
+                const req = store.get(id);
+                req.onsuccess = () => {
+                    const res = req.result;
+                    resolve((res && res.blob instanceof Blob) ? res.blob : null);
+                };
+                req.onerror = () => resolve(null);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    }
+
+    async deleteBlob(id) {
+        if (!id) return;
+        if (this.objectUrlCache[id]) {
+            URL.revokeObjectURL(this.objectUrlCache[id]);
+            delete this.objectUrlCache[id];
+        }
+        const db = await this.init();
+        if (!db) return;
+        try {
+            const tx = db.transaction([this.storeName], "readwrite");
+            tx.objectStore(this.storeName).delete(id);
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    async hydrateDOMMedia(rootEl = document) {
+        const elements = (rootEl || document).querySelectorAll("[data-social-media-id]");
+        for (const el of elements) {
+            const mediaId = el.getAttribute("data-social-media-id");
+            if (!mediaId) continue;
+            const objUrl = await this.getObjectUrl(mediaId);
+            if (objUrl) {
+                if (el.tagName === "VIDEO") {
+                    if (el.src !== objUrl) {
+                        el.src = objUrl;
+                    }
+                } else if (el.tagName === "IMG") {
+                    el.src = objUrl;
+                } else if (el.tagName === "A") {
+                    el.href = objUrl;
+                }
+            }
+        }
+    }
+}
+
+window.socialMediaDB = new SocialMediaStorageEngine();
+window.socialMediaDrafts = [];
+window.socialFilterState = 'all';
+window.socialPlatformFilter = 'all';
+
+window.setSocialFilter = function(filterId) {
+    window.socialFilterState = filterId;
+    if (window.appController && window.appController.activeModuleId === 'social') {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules.renderSocial) {
+            window.AppModules.renderSocial(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.setSocialPlatformFilter = function(platformId) {
+    window.socialPlatformFilter = platformId;
+    if (window.appController && window.appController.activeModuleId === 'social') {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules.renderSocial) {
+            window.AppModules.renderSocial(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.buildSocialModalForm = function(existingPost = null) {
+    const dDefault = new Date();
+    dDefault.setHours(dDefault.getHours() + 2, 0, 0, 0);
+    const localIso = new Date(dDefault.getTime() - dDefault.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+    const p = existingPost || {
+        id: "",
+        titolo: "",
+        piattaforme: ["Instagram", "Facebook"],
+        formatoPost: "Post Foto / Carosello HD",
+        dataProgrammata: localIso,
+        stato: "Programmato",
+        autoPublish: true,
+        likesPrevisti: "1.8K",
+        hashtag: "#lutherie #cremona #violinmaker #tonewood #handmade #stradivari #liuteriadelorenzi",
+        note: "",
+        mediaAttachments: []
+    };
+
+    const normalizedDate = p.dataProgrammata
+        ? (p.dataProgrammata.includes('T') ? p.dataProgrammata.slice(0, 16) : p.dataProgrammata.replace(' ', 'T').slice(0, 16))
+        : localIso;
+
+    const selectedPlats = Array.isArray(p.piattaforme) && p.piattaforme.length > 0
+        ? p.piattaforme
+        : (p.piattaforma ? p.piattaforma.split(',').map(s => s.trim()) : ["Instagram"]);
+
+    window.socialMediaDrafts = Array.isArray(p.mediaAttachments)
+        ? JSON.parse(JSON.stringify(p.mediaAttachments))
+        : [];
+
+    const archiveMedia = (window.atelierDB && window.atelierDB.data.media) || [];
+
+    return `
+        <form onsubmit="window.saveNewRecord(event, 'social')">
+            <input type="hidden" id="f_soc_edit_id" value="${p.id || ''}">
+
+            <!-- 1. CARICAMENTO MATERIALE FOTOGRAFICO E VIDEO (ANCHE GRANDI DIMENSIONI) -->
+            <div style="border-left:3px solid var(--accent-cyan); padding-left:0.75rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-cyan); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">1. Materiale Fotografico & Video (Anche Grandi Dimensioni)</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Supporto nativo multi-file per Foto High-Res (JPG, PNG, WEBP, RAW) e Video 4K/FullHD (MP4, MOV, WEBM, MKV > 500MB).</span>
+                </div>
+                <span class="badge badge-info" style="font-size:0.7rem;">
+                    <i data-lucide="hard-drive"></i> IndexedDB Large-File Engine
+                </span>
+            </div>
+
+            <!-- Drag & Drop Zone -->
+            <div id="socialDropzone" style="background:linear-gradient(135deg, rgba(6, 182, 212, 0.07), rgba(245, 158, 11, 0.06)); border:2px dashed rgba(6, 182, 212, 0.45); border-radius:12px; padding:1.3rem 1.2rem; text-align:center; margin-bottom:1rem; transition:all 0.25s ease;">
+                <div style="display:flex; justify-content:center; gap:0.8rem; margin-bottom:0.6rem;">
+                    <div style="width:44px; height:44px; border-radius:10px; background:rgba(16, 185, 129, 0.16); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center;">
+                        <i data-lucide="camera" style="width:22px; height:22px;"></i>
+                    </div>
+                    <div style="width:44px; height:44px; border-radius:10px; background:rgba(244, 63, 94, 0.16); color:#f43f5e; display:flex; align-items:center; justify-content:center;">
+                        <i data-lucide="film" style="width:22px; height:22px;"></i>
+                    </div>
+                </div>
+                <h4 style="color:#fff; font-size:0.98rem; margin-bottom:0.25rem;">Trascina qui Foto e Video oppure selezionali dal dispositivo</h4>
+                <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.9rem;">
+                    Nessun limite di compressione: i video 4K e le foto pesanti vengono salvati in streaming diretto nel database multimediale locale.
+                </p>
+
+                <div style="display:flex; justify-content:center; gap:0.65rem; flex-wrap:wrap;">
+                    <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.55rem 1.1rem; font-size:0.84rem;">
+                        <i data-lucide="image-plus"></i> + Carica Foto High-Res
+                        <input type="file" accept="image/*" multiple onchange="window.handleSocialMediaUpload(event)" style="display:none;">
+                    </label>
+                    <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.55rem 1.1rem; font-size:0.84rem; border-color:rgba(244, 63, 94, 0.45); color:#fda4af; background:rgba(244, 63, 94, 0.12);">
+                        <i data-lucide="video"></i> + Carica Video (4K / Grandi Dimensioni)
+                        <input type="file" accept="video/*" multiple onchange="window.handleSocialMediaUpload(event)" style="display:none;">
+                    </label>
+                    <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.55rem 1rem; font-size:0.82rem;">
+                        <i data-lucide="folder-up"></i> Foto + Video Insieme
+                        <input type="file" accept="image/*,video/*" multiple onchange="window.handleSocialMediaUpload(event)" style="display:none;">
+                    </label>
+                </div>
+
+                <!-- Quick Add from Atelier Media Library -->
+                <div style="display:flex; justify-content:center; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-top:0.85rem; padding-top:0.75rem; border-top:1px solid rgba(255,255,255,0.06);">
+                    <span style="font-size:0.73rem; color:var(--text-muted);">Libreria Rapida Atelier:</span>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.addQuickAtelierSocialMedia('image', './assets/violin-1.jpg', 'violino_master_fronte_4k.jpg', 16252928, '3840×2160 px')">+ Foto Violino 4K</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.addQuickAtelierSocialMedia('image', './assets/cremonese.jpg', 'fondo_acero_marezzato_raw.jpg', 22020096, '4500×3000 px')">+ Foto Fondo Marezzato</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.addQuickAtelierSocialMedia('image', './assets/craft-1.jpg', 'scultura_riccio_macro.jpg', 14680064, '4000×3000 px')">+ Macro Riccio</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem; color:#fda4af;" onclick="window.addQuickAtelierSocialMedia('video', '', 'timelapse_sgorbiatura_fondo_4k.mp4', 440401920, '3840×2160 (4K UHD)', '04:15', './assets/craft-2.jpg')">+ Video 4K Timelapse (420 MB)</button>
+                </div>
+            </div>
+
+            <!-- Live Upload Progress Box (shown when processing large files) -->
+            <div id="socialUploadProgressBox" style="display:none; background:rgba(6, 182, 212, 0.12); border:1px solid var(--accent-cyan); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; margin-bottom:0.4rem;">
+                    <span id="socialUploadStatusText" style="color:#fff; font-weight:600;">Caricamento file multimediale in corso...</span>
+                    <strong id="socialUploadPercentText" style="color:var(--accent-gold); font-family:var(--font-mono);">0%</strong>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="socialUploadProgressBar" class="progress-bar-fill" style="width:0%; background:linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald));"></div>
+                </div>
+            </div>
+
+            <!-- Uploaded Media List Preview -->
+            <div id="socialMediaDraftListContainer" style="margin-bottom:1.25rem; display:flex; flex-direction:column; gap:0.55rem;"></div>
+
+            <!-- 2. SELEZIONE DEI SOCIAL SCELTI (MULTI-PIATTAFORMA) -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">2. Scegli i Social su cui Pubblicare</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Seleziona uno o più canali social per la pubblicazione simultanea alla data stabilita.</span>
+                </div>
+                <div style="display:flex; gap:0.4rem;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.22rem 0.6rem; font-size:0.72rem;" onclick="window.toggleAllSocialPlatforms(true)">Seleziona Tutti</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.22rem 0.6rem; font-size:0.72rem;" onclick="window.toggleAllSocialPlatforms(false)">Deseleziona</button>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap:0.6rem; margin-bottom:1.25rem;">
+                ${window.SOCIAL_PLATFORMS_CATALOG.map(plat => {
+                    const isChecked = selectedPlats.some(sp => sp.toLowerCase().includes(plat.id.toLowerCase()));
+                    return `
+                        <label class="social-platform-OptionCard" style="display:flex; align-items:center; gap:0.6rem; padding:0.65rem 0.8rem; border-radius:10px; cursor:pointer; background:${isChecked ? plat.bg : 'rgba(255,255,255,0.03)'}; border:1.5px solid ${isChecked ? plat.border : 'rgba(255,255,255,0.08)'}; transition:all 0.2s ease;" onclick="setTimeout(() => window.syncSocialPlatformCardStyles(), 10)">
+                            <input type="checkbox" class="soc-platform-checkbox" value="${plat.id}" ${isChecked ? 'checked' : ''} style="accent-color:${plat.color}; width:16px; height:16px; cursor:pointer;">
+                            <div style="overflow:hidden;">
+                                <div style="color:#fff; font-weight:700; font-size:0.84rem; display:flex; align-items:center; gap:0.3rem;">
+                                    <i data-lucide="${plat.icon}" style="width:14px; height:14px; color:${plat.color};"></i> ${plat.label}
+                                </div>
+                                <div style="font-size:0.68rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${plat.sub}</div>
+                            </div>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+
+            <!-- 3. PROGRAMMAZIONE DATA E ORA STABILITA -->
+            <div style="border-left:3px solid var(--accent-emerald); padding-left:0.75rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-emerald); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">3. Data e Ora Stabilita per la Pubblicazione</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Imposta quando il post verrà pubblicato automaticamente sui social scelti.</span>
+                </div>
+                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.7rem;" onclick="window.setSocialSchedulePreset(0, 18, 0)">Oggi 18:00</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.7rem;" onclick="window.setSocialSchedulePreset(1, 12, 30)">Domani 12:30</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.7rem;" onclick="window.setSocialSchedulePreset(3, 19, 0)">+3 Giorni 19:00</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.7rem;" onclick="window.setSocialSchedulePreset(7, 18, 0)">+1 Settimana</button>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>📅 Data e Ora di Pubblicazione Stabilita</label>
+                    <input type="datetime-local" id="f_soc_data" class="form-control" required value="${normalizedDate}">
+                </div>
+                <div class="form-group">
+                    <label>Stato Programmazione</label>
+                    <select id="f_soc_stato" class="form-control">
+                        <option value="Programmato" ${p.stato === 'Programmato' ? 'selected' : ''}>⏱️ Programmato (Pubblica alla data stabilita)</option>
+                        <option value="In Montaggio" ${p.stato === 'In Montaggio' ? 'selected' : ''}>🎬 In Montaggio / Post-Produzione</option>
+                        <option value="Bozza" ${p.stato === 'Bozza' ? 'selected' : ''}>📝 Bozza (Non pubblicare ancora)</option>
+                        <option value="Pubblicato" ${p.stato === 'Pubblicato' ? 'selected' : ''}>✅ Pubblicato Subito</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.3); border-radius:8px; padding:0.65rem 0.9rem; margin-bottom:1.1rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+                <label style="display:flex; align-items:center; gap:0.55rem; cursor:pointer; margin:0; font-size:0.82rem; color:#fff;">
+                    <input type="checkbox" id="f_soc_autopublish" ${p.autoPublish !== false ? 'checked' : ''} style="accent-color:var(--accent-emerald); width:16px; height:16px; cursor:pointer;">
+                    <span><strong>Pubblicazione Automatica alla Data Stabilita</strong> sui social selezionati</span>
+                </label>
+                <span style="font-size:0.72rem; color:var(--accent-emerald); font-weight:600;">Scheduler Attivo</span>
+            </div>
+
+            <!-- 4. CONTENUTO DEL POST, FORMATO E HASHTAG -->
+            <div style="border-left:3px solid var(--accent-violet); padding-left:0.75rem; margin-bottom:0.75rem;">
+                <strong style="color:var(--accent-violet); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">4. Titolo, Didascalia & Hashtag</strong>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Titolo / Argomento del Post</label>
+                    <input type="text" id="f_soc_titolo" class="form-control" required value="${(p.titolo || '').replace(/"/g, '&quot;')}" placeholder="Es. Showcase Scultura Riccio e Prova Acustica Violino Opus 42">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Formato Contenuto</label>
+                    <select id="f_soc_formato" class="form-control">
+                        <option value="Post Foto / Carosello HD" ${p.formatoPost === 'Post Foto / Carosello HD' ? 'selected' : ''}>Post Foto / Carosello HD</option>
+                        <option value="Video 4K / Reel Showcase" ${p.formatoPost === 'Video 4K / Reel Showcase' ? 'selected' : ''}>Video 4K / Reel Showcase</option>
+                        <option value="Reel / Short Verticale (9:16)" ${p.formatoPost === 'Reel / Short Verticale (9:16)' ? 'selected' : ''}>Reel / Short Verticale (9:16)</option>
+                        <option value="Video Lungo YouTube 4K (16:9)" ${p.formatoPost === 'Video Lungo YouTube 4K (16:9)' ? 'selected' : ''}>Video Lungo YouTube 4K (16:9)</option>
+                        <option value="Storia / Dietro le Quinte Bottega" ${p.formatoPost === 'Storia / Dietro le Quinte Bottega' ? 'selected' : ''}>Storia / Dietro le Quinte Bottega</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Testo del Post / Didascalia Completa (Caption)</label>
+                <textarea id="f_soc_note" class="form-control" rows="3" placeholder="Scrivi qui la descrizione del post da pubblicare sui social scelti (es. dettagli sulla vernice ad olio d'ambra, legni della Val di Fiemme, prova del suono)...">${p.note || ''}</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                    <label>Hashtag Strategici</label>
+                    <input type="text" id="f_soc_hashtag" class="form-control" value="${(p.hashtag || '').replace(/"/g, '&quot;')}" placeholder="#lutherie #cremona #violinmaker #tonewood">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Target Engagement / Likes</label>
+                    <input type="text" id="f_soc_likes" class="form-control" value="${p.likesPrevisti || '1.8K'}" placeholder="Es. 2.5K">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:0.75rem; margin-top:0.8rem; flex-wrap:wrap;">
+                <button type="submit" class="btn btn-primary" style="flex:2; justify-content:center; padding:0.85rem; font-size:0.95rem;">
+                    <i data-lucide="calendar-check"></i> ${existingPost ? 'Salva Modifiche & Programmazione' : 'Salva e Programma sui Social Scelti'}
+                </button>
+                <button type="button" class="btn btn-secondary" style="flex:1; justify-content:center; padding:0.85rem; font-size:0.9rem; border-color:rgba(16,185,129,0.45); color:var(--accent-emerald);" onclick="document.getElementById('f_soc_stato').value='Pubblicato'; this.closest('form').requestSubmit();">
+                    <i data-lucide="send"></i> Pubblica Subito Ora
+                </button>
+            </div>
+        </form>
+    `;
+};
+
+window.syncSocialPlatformCardStyles = function() {
+    const cards = document.querySelectorAll(".social-platform-OptionCard");
+    cards.forEach(card => {
+        const cb = card.querySelector(".soc-platform-checkbox");
+        if (!cb) return;
+        const plat = window.SOCIAL_PLATFORMS_CATALOG.find(p => p.id === cb.value);
+        if (cb.checked && plat) {
+            card.style.background = plat.bg;
+            card.style.borderColor = plat.border;
+        } else {
+            card.style.background = "rgba(255,255,255,0.03)";
+            card.style.borderColor = "rgba(255,255,255,0.08)";
+        }
+    });
+};
+
+window.toggleAllSocialPlatforms = function(checkAll) {
+    document.querySelectorAll(".soc-platform-checkbox").forEach(cb => {
+        cb.checked = !!checkAll;
+    });
+    window.syncSocialPlatformCardStyles();
+};
+
+window.setSocialSchedulePreset = function(daysAhead, hours, minutes) {
+    const inp = document.getElementById("f_soc_data");
+    if (!inp) return;
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    d.setHours(hours, minutes, 0, 0);
+    const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    inp.value = localIso;
+};
+
+window.setupSocialDropzone = function() {
+    const dz = document.getElementById("socialDropzone");
+    if (!dz) return;
+    dz.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "var(--accent-gold)";
+        dz.style.background = "rgba(245, 158, 11, 0.14)";
+    });
+    dz.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(6, 182, 212, 0.45)";
+        dz.style.background = "linear-gradient(135deg, rgba(6, 182, 212, 0.07), rgba(245, 158, 11, 0.06))";
+    });
+    dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(6, 182, 212, 0.45)";
+        dz.style.background = "linear-gradient(135deg, rgba(6, 182, 212, 0.07), rgba(245, 158, 11, 0.06))";
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            window.processSocialFiles(Array.from(e.dataTransfer.files));
+        }
+    });
+};
+
+window.handleSocialMediaUpload = function(event) {
+    const files = Array.from((event.target && event.target.files) || []);
+    if (!files.length) return;
+    window.processSocialFiles(files);
+    event.target.value = "";
+};
+
+window.handleDirectSocialPageUpload = function(event) {
+    const files = Array.from((event.target && event.target.files) || []);
+    if (!files.length) return;
+    event.target.value = "";
+    window.openAddModal('social');
+    setTimeout(() => {
+        window.processSocialFiles(files);
+    }, 60);
+};
+
+window.processSocialFiles = async function(files) {
+    const progBox = document.getElementById("socialUploadProgressBox");
+    const progBar = document.getElementById("socialUploadProgressBar");
+    const statusText = document.getElementById("socialUploadStatusText");
+    const pctText = document.getElementById("socialUploadPercentText");
+
+    if (progBox) progBox.style.display = "block";
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name);
+        const mediaId = "smed-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+        const sizeStr = window.formatSocialBytes(file.size);
+
+        if (statusText) statusText.innerText = `[${i + 1}/${files.length}] Elaborazione ${isVideo ? 'Video' : 'Foto'} "${file.name}" (${sizeStr})...`;
+        if (pctText) pctText.innerText = "25%";
+        if (progBar) progBar.style.width = "25%";
+
+        let metaInfo = {
+            dimensions: isVideo ? "Video HD/4K" : "Foto High-Res",
+            duration: "",
+            thumbnailDataUrl: ""
+        };
+
+        try {
+            if (isVideo) {
+                metaInfo = await window.extractVideoMetadataAndThumbnail(file);
+            } else {
+                metaInfo = await window.extractImageMetadataAndThumbnail(file);
+            }
+        } catch (err) {
+            console.warn("Impossibile estrarre anteprima file:", err);
+        }
+
+        if (statusText) statusText.innerText = `[${i + 1}/${files.length}] Salvataggio stream binario (${sizeStr}) in IndexedDB...`;
+        if (pctText) pctText.innerText = "75%";
+        if (progBar) progBar.style.width = "75%";
+
+        await window.socialMediaDB.saveBlob(mediaId, file, {
+            name: file.name,
+            mimeType: file.type || (isVideo ? "video/mp4" : "image/jpeg"),
+            sizeBytes: file.size
+        });
+
+        // Upload also to local/Ubuntu server so 24/7 background scheduler can post even when browser is closed
+        let serverMediaUrl = "";
+        try {
+            if (statusText) statusText.innerText = `[${i + 1}/${files.length}] Sincronizzazione file con Server Scheduler 24/7...`;
+            const upResp = await fetch("/api/social/upload-media", {
+                method: "POST",
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream",
+                    "X-Media-Id": mediaId,
+                    "X-Media-Name": encodeURIComponent(file.name),
+                    "X-Media-Mime": file.type || (isVideo ? "video/mp4" : "image/jpeg")
+                },
+                body: file
+            });
+            if (upResp.ok) {
+                const upJson = await upResp.json();
+                if (upJson && upJson.url) {
+                    serverMediaUrl = upJson.url;
+                }
+            }
+        } catch (e) {
+            // Static mode fallback: IndexedDB is used
+        }
+
+        window.socialMediaDrafts.push({
+            id: mediaId,
+            name: file.name,
+            kind: isVideo ? "video" : "image",
+            mimeType: file.type || (isVideo ? "video/mp4" : "image/jpeg"),
+            sizeBytes: file.size,
+            sizeFormatted: sizeStr,
+            dimensions: metaInfo.dimensions || (isVideo ? "1920×1080 (HD)" : "High-Res"),
+            duration: metaInfo.duration || "",
+            thumbnailDataUrl: metaInfo.thumbnailDataUrl || (isVideo ? "./assets/violin-1.jpg" : ""),
+            url: serverMediaUrl || "",
+            isIndexedDB: true
+        });
+
+        // Auto-FILL title if empty
+        const titleInput = document.getElementById("f_soc_titolo");
+        if (titleInput && !titleInput.value.trim()) {
+            const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+            titleInput.value = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+        }
+        // Auto-select video format if video uploaded
+        const fmtSelect = document.getElementById("f_soc_formato");
+        if (isVideo && fmtSelect) {
+            fmtSelect.value = "Video 4K / Reel Showcase";
+        }
+
+        if (pctText) pctText.innerText = "100%";
+        if (progBar) progBar.style.width = "100%";
+        window.renderSocialMediaDraftList();
+    }
+
+    setTimeout(() => {
+        if (progBox) progBox.style.display = "none";
+    }, 800);
+
+    window.showToast(`${files.length} file multimediale/i caricato/i con successo!`);
+};
+
+window.extractImageMetadataAndThumbnail = function(file) {
+    return new Promise((resolve) => {
+        const objUrl = URL.createObjectURL(file);
+        const img = new Image();
+        const timer = setTimeout(() => {
+            URL.revokeObjectURL(objUrl);
+            resolve({ dimensions: "Foto High-Res", duration: "", thumbnailDataUrl: "./assets/violin-1.jpg" });
+        }, 4000);
+
+        img.onload = function() {
+            clearTimeout(timer);
+            const origW = img.width;
+            const origH = img.height;
+            const maxDim = 520;
+            let w = origW;
+            let h = origH;
+            if (w > maxDim || h > maxDim) {
+                if (w > h) {
+                    h = Math.round((h * maxDim) / w);
+                    w = maxDim;
+                } else {
+                    w = Math.round((w * maxDim) / h);
+                    h = maxDim;
+                }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            const thumb = canvas.toDataURL("image/jpeg", 0.78);
+            URL.revokeObjectURL(objUrl);
+            resolve({
+                dimensions: `${origW}×${origH} px`,
+                duration: "",
+                thumbnailDataUrl: thumb
+            });
+        };
+        img.onerror = function() {
+            clearTimeout(timer);
+            URL.revokeObjectURL(objUrl);
+            resolve({ dimensions: "Foto High-Res", duration: "", thumbnailDataUrl: "./assets/violin-1.jpg" });
+        };
+        img.src = objUrl;
+    });
+};
+
+window.extractVideoMetadataAndThumbnail = function(file) {
+    return new Promise((resolve) => {
+        const objUrl = URL.createObjectURL(file);
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.muted = true;
+        video.playsInline = true;
+
+        let resolved = false;
+        const finish = (res) => {
+            if (resolved) return;
+            resolved = true;
+            clearTimeout(timer);
+            URL.revokeObjectURL(objUrl);
+            resolve(res);
+        };
+
+        const timer = setTimeout(() => {
+            finish({
+                dimensions: "Video 4K / HD",
+                duration: "",
+                thumbnailDataUrl: "./assets/violin-1.jpg"
+            });
+        }, 3500);
+
+        const formatDur = (sec) => {
+            if (!sec || !isFinite(sec)) return "";
+            const total = Math.round(sec);
+            const m = Math.floor(total / 60);
+            const s = total % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        };
+
+        video.onloadedmetadata = function() {
+            const vw = video.videoWidth || 1920;
+            const vh = video.videoHeight || 1080;
+            const tag = (vw >= 3840 || vh >= 3840) ? " (4K UHD)" : (vw >= 1920 || vh >= 1920) ? " (Full HD)" : "";
+            const dims = `${vw}×${vh}${tag}`;
+            const dur = formatDur(video.duration);
+
+            video.currentTime = Math.min(1.0, (video.duration || 2) * 0.25);
+            video.onseeked = function() {
+                try {
+                    const maxDim = 480;
+                    let cw = vw;
+                    let ch = vh;
+                    if (cw > maxDim || ch > maxDim) {
+                        if (cw > ch) {
+                            ch = Math.round((ch * maxDim) / cw);
+                            cw = maxDim;
+                        } else {
+                            cw = Math.round((cw * maxDim) / ch);
+                            ch = maxDim;
+                        }
+                    }
+                    const canvas = document.createElement("canvas");
+                    canvas.width = cw;
+                    canvas.height = ch;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(video, 0, 0, cw, ch);
+                    const thumb = canvas.toDataURL("image/jpeg", 0.76);
+                    finish({ dimensions: dims, duration: dur, thumbnailDataUrl: thumb });
+                } catch (e) {
+                    finish({ dimensions: dims, duration: dur, thumbnailDataUrl: "./assets/violin-1.jpg" });
+                }
+            };
+        };
+
+        video.onerror = function() {
+            finish({
+                dimensions: "Video 4K / HD",
+                duration: "",
+                thumbnailDataUrl: "./assets/violin-1.jpg"
+            });
+        };
+
+        video.src = objUrl;
+    });
+};
+
+window.addQuickAtelierSocialMedia = function(kind, url, name, sizeBytes, dimensions, duration = "", thumbUrl = "") {
+    window.socialMediaDrafts.push({
+        id: "smed-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+        name: name,
+        kind: kind,
+        mimeType: kind === 'video' ? 'video/mp4' : 'image/jpeg',
+        sizeBytes: sizeBytes,
+        sizeFormatted: window.formatSocialBytes(sizeBytes),
+        dimensions: dimensions,
+        duration: duration,
+        url: url,
+        thumbnailDataUrl: thumbUrl || url || "./assets/violin-1.jpg",
+        isIndexedDB: false
+    });
+    window.renderSocialMediaDraftList();
+};
+
+window.removeSocialMediaDraft = function(idx) {
+    const removed = window.socialMediaDrafts[idx];
+    if (removed && removed.isIndexedDB && removed.id) {
+        window.socialMediaDB.deleteBlob(removed.id);
+    }
+    window.socialMediaDrafts.splice(idx, 1);
+    window.renderSocialMediaDraftList();
+};
+
+window.renderSocialMediaDraftList = function() {
+    const container = document.getElementById("socialMediaDraftListContainer");
+    if (!container) return;
+    const drafts = window.socialMediaDrafts || [];
+
+    if (drafts.length === 0) {
+        container.innerHTML = `
+            <div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:0.65rem; background:rgba(0,0,0,0.25); border-radius:8px; border:1px solid rgba(255,255,255,0.05);">
+                Nessun file allegato al momento. Carica una o più <strong>Foto</strong> o <strong>Video (anche 4K di grandi dimensioni)</strong> qui sopra.
+            </div>
+        `;
+        return;
+    }
+
+    const totalSize = drafts.reduce((acc, m) => acc + (m.sizeBytes || 0), 0);
+
+    container.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; color:var(--text-secondary); padding:0 0.2rem;">
+            <span><strong>File Allegati al Post (${drafts.length}):</strong></span>
+            <span>Dimensione Totale: <strong style="color:var(--accent-gold); font-family:var(--font-mono);">${window.formatSocialBytes(totalSize)}</strong></span>
+        </div>
+        ${drafts.map((m, idx) => {
+            const isVid = m.kind === 'video' || (m.mimeType && m.mimeType.startsWith('video/'));
+            return `
+                <div style="display:flex; align-items:center; gap:0.8rem; background:rgba(255,255,255,0.04); padding:0.55rem 0.75rem; border-radius:10px; border:1px solid ${isVid ? 'rgba(244, 63, 94, 0.35)' : 'rgba(16, 185, 129, 0.3)'};">
+                    <div style="width:60px; height:48px; border-radius:6px; overflow:hidden; background:#000; position:relative; flex-shrink:0; border:1px solid rgba(255,255,255,0.15);">
+                        <img src="${m.thumbnailDataUrl || m.url || './assets/violin-1.jpg'}" alt="${m.name}" onerror="this.src='./assets/violin-1.jpg'" style="width:100%; height:100%; object-fit:cover;">
+                        <span style="position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.8); color:#fff; font-size:0.6rem; padding:1px 4px; border-radius:3px; font-weight:700;">
+                            ${isVid ? '🎬 VID' : '📷 IMG'}
+                        </span>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="color:#fff; font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${m.name}
+                        </div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.15rem;">
+                            <span style="color:${isVid ? '#fda4af' : 'var(--accent-emerald)'}; font-weight:700;">${isVid ? 'Video' : 'Fotografia'}</span>
+                            <span>• ${m.dimensions || 'HD'}</span>
+                            ${m.duration ? `<span>• ⏱️ ${m.duration}</span>` : ''}
+                            <span style="color:var(--accent-gold); font-family:var(--font-mono);">• ${m.sizeFormatted || window.formatSocialBytes(m.sizeBytes)}</span>
+                            ${m.isIndexedDB ? `<span style="color:var(--accent-cyan);">• ✓ Salvato in IndexedDB</span>` : ''}
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.55rem; color:#ef4444; flex-shrink:0;" onclick="window.removeSocialMediaDraft(${idx})" title="Rimuovi file">
+                        &times;
+                    </button>
+                </div>
+            `;
+        }).join('')}
+    `;
+};
+
+window.openEditSocialModal = function(postId) {
+    const post = window.atelierDB.getItem("social", postId);
+    if (!post) return;
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector('.modal-container');
+    if (modalContainer) modalContainer.style.maxWidth = '820px';
+
+    modalTitle.innerText = `Modifica Post & Media Social: ${post.titolo}`;
+    modalBody.innerHTML = window.buildSocialModalForm(post);
+    modalOverlay.classList.add("active");
+    window.renderSocialMediaDraftList();
+    window.setupSocialDropzone();
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.deleteSocialPost = function(postId, title) {
+    const post = window.atelierDB.getItem("social", postId);
+    if (!confirm(`Sei sicuro di voler eliminare il post "${title || 'selezionato'}" e i relativi file multimediali?`)) return;
+    if (post && Array.isArray(post.mediaAttachments)) {
+        post.mediaAttachments.forEach(m => {
+            if (m.isIndexedDB && m.id) {
+                window.socialMediaDB.deleteBlob(m.id);
+            }
+        });
+    }
+    window.atelierDB.removeItem("social", postId);
+    if (typeof window.syncSocialWithServer === "function") {
+        window.syncSocialWithServer();
+    }
+    window.showToast("Post e file multimediali rimossi con successo.");
+    if (window.appController && window.appController.activeModuleId === 'social') {
+        window.appController.openModule('social');
+    }
+};
+
+window.openSocialPreviewModal = async function(postId) {
+    const post = window.atelierDB.getItem("social", postId);
+    if (!post) return;
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector('.modal-container');
+    if (modalContainer) modalContainer.style.maxWidth = '840px';
+
+    const platforms = Array.isArray(post.piattaforme) && post.piattaforme.length > 0
+        ? post.piattaforme
+        : (post.piattaforma ? post.piattaforma.split(',').map(s => s.trim()) : ["Instagram"]);
+    const mediaList = Array.isArray(post.mediaAttachments) ? post.mediaAttachments : [];
+
+    modalTitle.innerText = `Anteprima Player & Programmazione Multi-Social`;
+
+    modalBody.innerHTML = `
+        <div>
+            <!-- Status & Platforms Header -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; background:rgba(0,0,0,0.35); padding:0.9rem 1.1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); margin-bottom:1.2rem;">
+                <div>
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.3rem;">Canali Social Scelti per la Pubblicazione</div>
+                    <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                        ${platforms.map(pName => `
+                            <span class="badge badge-info" style="font-size:0.78rem; padding:0.3rem 0.7rem;">
+                                <i data-lucide="share-2"></i> ${pName}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <span class="badge ${post.stato === 'Pubblicato' ? 'badge-success' : post.stato === 'Programmato' ? 'badge-info' : 'badge-warning'}" style="font-size:0.8rem;">
+                        ${post.stato}
+                    </span>
+                    <div style="font-size:0.78rem; color:var(--accent-gold); margin-top:0.3rem;">
+                        📅 Data stabilita: <strong>${(post.dataProgrammata || '').replace('T', ' ')}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Media Player / Gallery Viewer -->
+            ${mediaList.length > 0 ? `
+                <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.2rem;">
+                    ${mediaList.map((m, idx) => {
+                        const isVid = m.kind === 'video' || (m.mimeType && m.mimeType.startsWith('video/'));
+                        return `
+                            <div style="background:#080a0f; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden;">
+                                <div style="padding:0.55rem 0.9rem; background:rgba(255,255,255,0.04); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; font-size:0.78rem;">
+                                    <span style="color:#fff; font-weight:600;">
+                                        ${isVid ? '🎬 Video Player HD/4K' : '📷 Fotografia High-Res'} (${idx + 1}/${mediaList.length}): <strong>${m.name}</strong>
+                                    </span>
+                                    <div style="display:flex; align-items:center; gap:0.6rem;">
+                                        <span style="color:var(--accent-gold); font-family:var(--font-mono);">${m.dimensions || ''} • ${m.sizeFormatted || window.formatSocialBytes(m.sizeBytes)}</span>
+                                        <a data-social-media-id="${m.id}" href="${m.url || m.thumbnailDataUrl || '#'}" download="${m.name || 'media_atelier'}" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.72rem;">
+                                            <i data-lucide="download"></i> Scarica File
+                                        </a>
+                                    </div>
+                                </div>
+                                <div style="display:flex; align-items:center; justify-content:center; max-height:430px; background:#000; position:relative;">
+                                    ${isVid ? `
+                                        <video data-social-media-id="${m.id}" ${m.url ? `src="${m.url}"` : ''} poster="${m.thumbnailDataUrl || './assets/violin-1.jpg'}" controls playsinline style="width:100%; max-height:420px; object-fit:contain;"></video>
+                                    ` : `
+                                        <img data-social-media-id="${m.id}" src="${m.url || m.thumbnailDataUrl || './assets/violin-1.jpg'}" alt="${m.name}" style="width:100%; max-height:420px; object-fit:contain;">
+                                    `}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            ` : ''}
+
+            <!-- Post Copy & Hashtags -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1.1rem; margin-bottom:1.2rem;">
+                <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.15rem; margin-bottom:0.5rem;">${post.titolo}</h4>
+                ${post.note ? `<p style="font-size:0.88rem; color:var(--text-primary); white-space:pre-line; margin-bottom:0.8rem;">${post.note}</p>` : ''}
+                <div style="font-size:0.82rem; color:var(--accent-cyan); font-weight:600;">${post.hashtag || ''}</div>
+            </div>
+
+            ${Array.isArray(post.esitoPubblicazione) && post.esitoPubblicazione.length > 0 ? `
+                <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.3); border-radius:10px; padding:0.9rem 1.1rem; margin-bottom:1.2rem;">
+                    <strong style="color:var(--accent-emerald); font-size:0.84rem; display:block; margin-bottom:0.4rem;">✓ Registro Pubblicazione Multi-Social Completata:</strong>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        ${post.esitoPubblicazione.map(ep => `
+                            <span class="badge badge-success">${ep.piattaforma}: ${ep.stato} (${ep.timestamp})</span>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Modal Footer Actions -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+                <button type="button" class="btn btn-secondary" onclick="window.openEditSocialModal('${post.id}')">
+                    <i data-lucide="edit-3"></i> Modifica Post / Media / Data
+                </button>
+                <div style="display:flex; gap:0.6rem;">
+                    ${post.stato !== 'Pubblicato' ? `
+                        <button type="button" class="btn btn-primary" onclick="window.publishSocialPostNow('${post.id}')">
+                            <i data-lucide="send"></i> Pubblica Ora sui Social Scelti (${platforms.join(', ')})
+                        </button>
+                    ` : ''}
+                    <button type="button" class="btn btn-secondary" onclick="window.closeModal()">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+    if (window.socialMediaDB) {
+        await window.socialMediaDB.hydrateDOMMedia(modalBody);
+    }
+};
+
+// ==========================================================================
+// SOCIAL WEBHOOK BRIDGE (MAKE.COM / ZAPIER / N8N) & SERVER-SIDE SCHEDULER SYNC
+// ==========================================================================
+
+window.getSocialIntegrationConfig = function() {
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    if (!window.atelierDB.data.settings.socialIntegration) {
+        window.atelierDB.data.settings.socialIntegration = {
+            enabled: false,
+            provider: "make",
+            webhookUrl: "",
+            instagramWebhookUrl: "",
+            facebookWebhookUrl: "",
+            webhookSecret: "",
+            payloadFormat: "multipart",
+            publicBaseUrl: "",
+            instagramAccountLabel: "@liuteriadelorenzi",
+            facebookPageLabel: "Liuteria De Lorenzi",
+            lastTestStatus: "unconfigured",
+            lastTestTime: "",
+            lastTestMessage: ""
+        };
+    }
+    return window.atelierDB.data.settings.socialIntegration;
+};
+
+window.isSocialWebhookConfigured = function(cfgObj = null) {
+    const cfg = cfgObj || window.getSocialIntegrationConfig();
+    return Boolean(
+        (cfg.webhookUrl && cfg.webhookUrl.trim()) ||
+        (cfg.instagramWebhookUrl && cfg.instagramWebhookUrl.trim()) ||
+        (cfg.facebookWebhookUrl && cfg.facebookWebhookUrl.trim())
+    );
+};
+
+window.syncSocialWithServer = async function() {
+    if (!window.atelierDB || !window.atelierDB.data) return;
+    const cfg = window.getSocialIntegrationConfig();
+    const posts = Array.isArray(window.atelierDB.data.social) ? window.atelierDB.data.social : [];
+
+    try {
+        const resp = await fetch("/api/social/sync-posts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ posts: posts, config: cfg })
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && data.success) {
+            let changed = false;
+            if (Array.isArray(data.posts)) {
+                const oldJson = JSON.stringify(window.atelierDB.data.social);
+                const newJson = JSON.stringify(data.posts);
+                if (oldJson !== newJson) {
+                    window.atelierDB.data.social = data.posts;
+                    changed = true;
+                }
+            }
+            if (data.config && typeof data.config === "object") {
+                const localHasUrl = window.isSocialWebhookConfigured(cfg);
+                const serverHasUrl = window.isSocialWebhookConfigured(data.config);
+                if (serverHasUrl && !localHasUrl) {
+                    window.atelierDB.data.settings.socialIntegration = { ...cfg, ...data.config };
+                    changed = true;
+                }
+            }
+            if (changed) {
+                window.atelierDB.saveData();
+                if (window.appController && window.appController.activeModuleId === "social") {
+                    const container = document.getElementById("moduleContentContainer");
+                    if (container && window.AppModules.renderSocial) {
+                        window.AppModules.renderSocial(container);
+                        window.appController.setupLucideIcons();
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Server Python non raggiungibile (modalità statica): continua con LocalStorage/IndexedDB
+    }
+};
+
+window.resolveMediaBlobForBrowserWebhook = async function(mediaItem) {
+    if (!mediaItem) return null;
+    // 1. Check IndexedDB
+    if (window.socialMediaDB && mediaItem.id) {
+        const idbBlob = await window.socialMediaDB.getBlob(mediaItem.id);
+        if (idbBlob) return idbBlob;
+    }
+    // 2. Check URL / asset / dataURL
+    const srcUrl = mediaItem.url || mediaItem.thumbnailDataUrl || "";
+    if (srcUrl) {
+        try {
+            const r = await fetch(srcUrl);
+            if (r.ok) return await r.blob();
+        } catch (e) {
+            // ignore
+        }
+    }
+    return null;
+};
+
+window.dispatchSocialWebhookFromBrowser = async function(post, cfg, isTest = false) {
+    const mainUrl = (cfg.webhookUrl || "").trim();
+    const igUrl = (cfg.instagramWebhookUrl || "").trim();
+    const fbUrl = (cfg.facebookWebhookUrl || "").trim();
+    const payloadFmt = (cfg.payloadFormat || "multipart").trim().toLowerCase();
+    const providerName = (cfg.provider || "make").toUpperCase();
+
+    const platforms = Array.isArray(post.piattaforme) && post.piattaforme.length > 0
+        ? post.piattaforme
+        : (post.piattaforma ? post.piattaforma.split(",").map(s => s.trim()).filter(Boolean) : ["Instagram", "Facebook"]);
+
+    const urlTargets = new Map();
+    platforms.forEach(p => {
+        const pLow = p.toLowerCase();
+        let targetU = mainUrl;
+        if (pLow.includes("instagram") && igUrl) targetU = igUrl;
+        else if (pLow.includes("facebook") && fbUrl) targetU = fbUrl;
+        if (targetU) {
+            if (!urlTargets.has(targetU)) urlTargets.set(targetU, []);
+            urlTargets.get(targetU).push(p);
+        }
+    });
+
+    if (urlTargets.size === 0) {
+        const fallback = mainUrl || igUrl || fbUrl;
+        if (fallback) urlTargets.set(fallback, platforms);
+    }
+
+    if (urlTargets.size === 0) {
+        return {
+            success: false,
+            code: "MISSING_WEBHOOK",
+            error: "Accessi Social non configurati: inserisci l'URL del Webhook (Make.com / Zapier / n8n) per Instagram e Facebook."
+        };
+    }
+
+    const titolo = (post.titolo || "Post Liuteria De Lorenzi").trim();
+    const note = (post.note || "").trim();
+    const hashtag = (post.hashtag || "").trim();
+    const captionFull = [titolo, note, hashtag].filter(Boolean).join("\n\n");
+    const mediaList = Array.isArray(post.mediaAttachments) ? post.mediaAttachments : [];
+    const primaryMedia = mediaList[0] || null;
+    const primaryBlob = primaryMedia ? await window.resolveMediaBlobForBrowserWebhook(primaryMedia) : null;
+    const nowIso = new Date().toISOString();
+    const nowTimeStr = new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+
+    const esitoList = [];
+    const errors = [];
+
+    for (const [targetUrl, targetPlats] of urlTargets.entries()) {
+        const wantsIg = targetPlats.some(p => p.toLowerCase().includes("instagram"));
+        const wantsFb = targetPlats.some(p => p.toLowerCase().includes("facebook"));
+
+        try {
+            let fetchOptions;
+            if (payloadFmt === "multipart" && primaryBlob) {
+                const fd = new FormData();
+                fd.append("event", isTest ? "test_webhook" : "publish_social_post");
+                fd.append("is_test", isTest ? "true" : "false");
+                fd.append("atelier", "Liuteria De Lorenzi - Cremona");
+                fd.append("post_id", post.id || "soc-test");
+                fd.append("title", titolo);
+                fd.append("caption", note || titolo);
+                fd.append("hashtags", hashtag);
+                fd.append("caption_full", captionFull);
+                fd.append("formato_post", post.formatoPost || "Post Foto / Carosello HD");
+                fd.append("platforms", JSON.stringify(targetPlats));
+                fd.append("platforms_csv", targetPlats.join(", "));
+                fd.append("publish_instagram", wantsIg ? "true" : "false");
+                fd.append("publish_facebook", wantsFb ? "true" : "false");
+                fd.append("instagram_account", cfg.instagramAccountLabel || "@liuteriadelorenzi");
+                fd.append("facebook_page", cfg.facebookPageLabel || "Liuteria De Lorenzi");
+                fd.append("media_type", (primaryMedia && primaryMedia.kind === "video") ? "VIDEO" : "IMAGE");
+                fd.append("scheduled_at", post.dataProgrammata || nowIso);
+                fd.append("published_at", nowIso);
+                fd.append("file", primaryBlob, (primaryMedia && primaryMedia.name) || "media_atelier.jpg");
+                fetchOptions = { method: "POST", body: fd };
+            } else {
+                const payloadObj = {
+                    event: isTest ? "test_webhook" : "publish_social_post",
+                    is_test: isTest,
+                    atelier: "Liuteria De Lorenzi - Cremona",
+                    post_id: post.id || "soc-test",
+                    title: titolo,
+                    caption: note || titolo,
+                    hashtags: hashtag,
+                    caption_full: captionFull,
+                    formato_post: post.formatoPost || "Post Foto / Carosello HD",
+                    platforms: targetPlats,
+                    platforms_csv: targetPlats.join(", "),
+                    publish_instagram: wantsIg,
+                    publish_facebook: wantsFb,
+                    instagram_account: cfg.instagramAccountLabel || "@liuteriadelorenzi",
+                    facebook_page: cfg.facebookPageLabel || "Liuteria De Lorenzi",
+                    media_type: (primaryMedia && primaryMedia.kind === "video") ? "VIDEO" : "IMAGE",
+                    media_filename: (primaryMedia && primaryMedia.name) || "",
+                    scheduled_at: post.dataProgrammata || nowIso,
+                    published_at: nowIso
+                };
+                fetchOptions = {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payloadObj)
+                };
+            }
+
+            const resp = await fetch(targetUrl, fetchOptions);
+            if (resp.ok) {
+                targetPlats.forEach(pName => {
+                    esitoList.push({
+                        piattaforma: pName,
+                        stato: `Pubblicato via ${providerName} (HTTP ${resp.status})`,
+                        timestamp: nowTimeStr
+                    });
+                });
+            } else {
+                errors.push(`HTTP ${resp.status} su ${targetPlats.join(", ")}`);
+            }
+        } catch (err) {
+            errors.push(`Errore connessione Webhook (${targetPlats.join(", ")}): ${err.message || err}`);
+        }
+    }
+
+    if (errors.length === 0 && esitoList.length > 0) {
+        return {
+            success: true,
+            httpStatus: 200,
+            esito: esitoList,
+            publishedAt: nowIso
+        };
+    }
+    return {
+        success: false,
+        code: "WEBHOOK_ERROR",
+        error: errors.join(" | ")
+    };
+};
+
+window.publishSocialPostNow = async function(postId, isAutomatic = false) {
+    const post = window.atelierDB.getItem("social", postId);
+    if (!post) return;
+
+    const cfg = window.getSocialIntegrationConfig();
+    const platforms = Array.isArray(post.piattaforme) && post.piattaforme.length > 0
+        ? post.piattaforme
+        : (post.piattaforma ? post.piattaforma.split(",").map(s => s.trim()) : ["Instagram", "Facebook"]);
+
+    // 1. Verifica che gli accessi (Webhook URL) siano configurati!
+    if (!window.isSocialWebhookConfigured(cfg)) {
+        const errMsg = "Accesso Webhook non configurato per Instagram e Facebook. Clicca su 'Configura Accessi IG & FB' e inserisci l'URL del tuo Webhook (Make.com / Zapier / n8n).";
+        window.atelierDB.updateItem("social", postId, {
+            stato: "Errore Accessi",
+            errorePubblicazione: errMsg,
+            updatedAt: new Date().toISOString()
+        });
+        window.showToast("⚠️ Pubblicazione bloccata: manca il Webhook per Instagram e Facebook!");
+        if (window.appController && window.appController.activeModuleId === "social") {
+            window.appController.openModule("social");
+        }
+        if (!isAutomatic) {
+            window.openSocialConfigModal();
+        }
+        return;
+    }
+
+    if (!isAutomatic) {
+        window.showToast(`⏳ Invio in corso a ${platforms.join(" & ")} tramite Webhook...`);
+    }
+
+    // Assicurati che eventuali file in IndexedDB siano stati caricati sul server prima dell'invio
+    if (Array.isArray(post.mediaAttachments) && window.socialMediaDB) {
+        for (const m of post.mediaAttachments) {
+            if (m.isIndexedDB && m.id && !m.url) {
+                try {
+                    const blob = await window.socialMediaDB.getBlob(m.id);
+                    if (blob) {
+                        const upR = await fetch("/api/social/upload-media", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": m.mimeType || blob.type || "application/octet-stream",
+                                "X-Media-Id": m.id,
+                                "X-Media-Name": encodeURIComponent(m.name || "media.jpg"),
+                                "X-Media-Mime": m.mimeType || blob.type || "image/jpeg"
+                            },
+                            body: blob
+                        });
+                        if (upR.ok) {
+                            const upData = await upR.json();
+                            if (upData && upData.url) m.url = upData.url;
+                        }
+                    }
+                } catch (e) {
+                    // ignore if static mode
+                }
+            }
+        }
+    }
+
+    let result = null;
+    try {
+        const resp = await fetch("/api/social/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                postId: post.id,
+                post: post,
+                config: cfg,
+                test: false
+            })
+        });
+        if (resp.ok) {
+            result = await resp.json();
+        } else {
+            result = await window.dispatchSocialWebhookFromBrowser(post, cfg, false);
+        }
+    } catch (e) {
+        result = await window.dispatchSocialWebhookFromBrowser(post, cfg, false);
+    }
+
+    if (result && result.success) {
+        window.atelierDB.updateItem("social", postId, {
+            stato: "Pubblicato",
+            dataPubblicazioneEffettiva: result.publishedAt || new Date().toISOString(),
+            esitoPubblicazione: result.esito || platforms.map(p => ({
+                piattaforma: p,
+                stato: "Pubblicato via Webhook",
+                timestamp: new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })
+            })),
+            errorePubblicazione: "",
+            updatedAt: new Date().toISOString()
+        });
+
+        const mediaCount = Array.isArray(post.mediaAttachments) ? post.mediaAttachments.length : 0;
+        const msgPrefix = isAutomatic ? "⏰ [Pubblicazione Automatica]" : "🚀 Post inviato con successo";
+        window.showToast(`${msgPrefix} su ${platforms.join(", ")}: "${post.titolo}" (${mediaCount} file)`);
+    } else {
+        const errMsg = (result && result.error) || "Errore durante la chiamata al Webhook.";
+        window.atelierDB.updateItem("social", postId, {
+            stato: (result && result.code === "MISSING_WEBHOOK") ? "Errore Accessi" : "Errore Invio",
+            errorePubblicazione: errMsg,
+            updatedAt: new Date().toISOString()
+        });
+        window.showToast(`❌ Errore pubblicazione Social: ${errMsg}`);
+    }
+
+    if (window.appController && window.appController.activeModuleId === "social") {
+        window.appController.openModule("social");
+    }
+    const modalOverlay = document.getElementById("modalOverlay");
+    if (modalOverlay && modalOverlay.classList.contains("active") && !isAutomatic && result && result.success) {
+        window.openSocialPreviewModal(postId);
+    }
+};
+
+window.checkScheduledSocialPosts = async function(manualClick = false) {
+    if (!window.atelierDB || !window.atelierDB.data || !Array.isArray(window.atelierDB.data.social)) return;
+
+    // 1. Sincronizza prima con lo scheduler 24/7 del server Python
+    await window.syncSocialWithServer();
+
+    const now = Date.now();
+    let processedAny = 0;
+
+    for (const post of window.atelierDB.data.social) {
+        if (post.stato === "Programmato" && post.autoPublish !== false && post.dataProgrammata) {
+            const norm = post.dataProgrammata.includes("T") ? post.dataProgrammata : post.dataProgrammata.replace(" ", "T");
+            const targetTime = new Date(norm).getTime();
+            if (!isNaN(targetTime) && targetTime <= now) {
+                await window.publishSocialPostNow(post.id, !manualClick);
+                processedAny++;
+            }
+        }
+    }
+
+    if (manualClick && processedAny === 0) {
+        const waiting = window.atelierDB.data.social.filter(p => p.stato === "Programmato").length;
+        const cfgOk = window.isSocialWebhookConfigured();
+        if (!cfgOk) {
+            window.showToast(`⚠️ Attenzione: ${waiting} post in coda ma il Webhook per Instagram & Facebook non è ancora configurato!`);
+        } else {
+            window.showToast(`✓ Coda verificata: ${waiting} post programmati in attesa dell'orario stabilito (Webhook IG & FB attivo).`);
+        }
+        if (window.appController && window.appController.activeModuleId === "social") {
+            window.appController.openModule("social");
+        }
+    }
+};
+
+window.openSocialConfigModal = function() {
+    const cfg = window.getSocialIntegrationConfig();
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "820px";
+
+    modalTitle.innerText = "🔗 Configurazione Accessi Automatici Instagram & Facebook (Opzione B — Webhook)";
+
+    modalBody.innerHTML = `
+        <form onsubmit="window.saveSocialConfigFromModal(event)">
+            <!-- Spiegazione architettura Opzione B -->
+            <div style="background:linear-gradient(135deg, rgba(225, 48, 108, 0.12), rgba(59, 130, 246, 0.12)); border:1px solid rgba(225, 48, 108, 0.35); border-radius:10px; padding:1rem 1.15rem; margin-bottom:1.2rem;">
+                <div style="display:flex; align-items:center; gap:0.65rem; margin-bottom:0.35rem;">
+                    <i data-lucide="share-2" style="color:#e1306c; width:20px; height:20px;"></i>
+                    <strong style="color:#fff; font-size:0.95rem;">Ponte Automatico verso Instagram & Facebook (Make.com / Zapier / n8n)</strong>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-secondary); margin:0; line-height:1.45;">
+                    Quando scatta la data e l'ora stabilita (anche a browser chiuso grazie al servizio 24/7 su Server Ubuntu), il Gestionale invia automaticamente <strong>Foto High-Res / Video 4K, Titolo, Didascalia e Hashtag</strong> al tuo Webhook, che li pubblica istantaneamente sulla tua pagina <strong>Facebook</strong> e sul profilo <strong>Instagram</strong>.
+                </p>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Piattaforma Automazione Scelta</label>
+                    <select id="f_soc_cfg_provider" class="form-control">
+                        <option value="make" ${cfg.provider === "make" ? "selected" : ""}>Make.com (Consigliato — Gratuito fino a 1.000 post/mese)</option>
+                        <option value="zapier" ${cfg.provider === "zapier" ? "selected" : ""}>Zapier (Webhooks by Zapier)</option>
+                        <option value="n8n" ${cfg.provider === "n8n" ? "selected" : ""}>n8n (Self-Hosted o Cloud)</option>
+                        <option value="custom" ${cfg.provider === "custom" ? "selected" : ""}>Webhook HTTP Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Formato Trasmissione Media & Dati</label>
+                    <select id="f_soc_cfg_format" class="form-control">
+                        <option value="multipart" ${cfg.payloadFormat !== "json" ? "selected" : ""}>📦 Multipart File Diretto (Consigliato — Invia il file binario anche da rete locale)</option>
+                        <option value="json" ${cfg.payloadFormat === "json" ? "selected" : ""}>📄 JSON Payload (Metadati + Base64 / URL Pubblico)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Webhook URL Principale -->
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="color:var(--accent-gold); font-weight:700;">
+                    🌐 URL Webhook Principale (Unico per Instagram + Facebook) *
+                </label>
+                <input type="url" id="f_soc_cfg_webhook" class="form-control" value="${(cfg.webhookUrl || "").replace(/"/g, "&quot;")}" placeholder="Es. https://hook.eu1.make.com/xxxxxxxxxxxxxxxxxxxx oppure https://hooks.zapier.com/..." style="font-family:var(--font-mono); font-size:0.85rem;">
+                <small style="color:var(--text-muted); font-size:0.74rem; display:block; margin-top:0.25rem;">
+                    Incolla qui l'URL del modulo <strong>Custom Webhook</strong> creato su Make.com (o Zapier/n8n). Riceverà i flag <code>publish_instagram</code> e <code>publish_facebook</code>, il testo <code>caption_full</code> e il file allegato <code>file</code>.
+                </small>
+            </div>
+
+            <!-- URL separati opzionali -->
+            <details style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem;">
+                <summary style="cursor:pointer; font-size:0.82rem; color:var(--accent-cyan); font-weight:600;">
+                    Opzionale: Usa due Webhook separati (uno per Instagram e uno per Facebook) o Token di sicurezza
+                </summary>
+                <div style="margin-top:0.85rem;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>URL Webhook Dedicato solo a Instagram (opzionale)</label>
+                            <input type="url" id="f_soc_cfg_ig_webhook" class="form-control" value="${(cfg.instagramWebhookUrl || "").replace(/"/g, "&quot;")}" placeholder="Lascia vuoto per usare il Webhook principale" style="font-family:var(--font-mono); font-size:0.8rem;">
+                        </div>
+                        <div class="form-group">
+                            <label>URL Webhook Dedicato solo a Facebook (opzionale)</label>
+                            <input type="url" id="f_soc_cfg_fb_webhook" class="form-control" value="${(cfg.facebookWebhookUrl || "").replace(/"/g, "&quot;")}" placeholder="Lascia vuoto per usare il Webhook principale" style="font-family:var(--font-mono); font-size:0.8rem;">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>URL Pubblico Gestionale (opzionale)</label>
+                            <input type="url" id="f_soc_cfg_public_base" class="form-control" value="${(cfg.publicBaseUrl || "").replace(/"/g, "&quot;")}" placeholder="Es. https://gestionale.liuteriadelorenzi.it">
+                        </div>
+                        <div class="form-group">
+                            <label>Secret / Bearer Token Header (opzionale)</label>
+                            <input type="text" id="f_soc_cfg_secret" class="form-control" value="${(cfg.webhookSecret || "").replace(/"/g, "&quot;")}" placeholder="Opzionale">
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Etichette Profili -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label><i data-lucide="instagram" style="width:14px; height:14px; color:#e1306c;"></i> Nome Profilo Instagram Collegato</label>
+                    <input type="text" id="f_soc_cfg_ig_label" class="form-control" value="${(cfg.instagramAccountLabel || "@liuteriadelorenzi").replace(/"/g, "&quot;")}" placeholder="@liuteriadelorenzi">
+                </div>
+                <div class="form-group">
+                    <label><i data-lucide="facebook" style="width:14px; height:14px; color:#3b82f6;"></i> Nome Pagina Facebook Collegata</label>
+                    <input type="text" id="f_soc_cfg_fb_label" class="form-control" value="${(cfg.facebookPageLabel || "Liuteria De Lorenzi").replace(/"/g, "&quot;")}" placeholder="Liuteria De Lorenzi">
+                </div>
+            </div>
+
+            <!-- Box Esito Test Live -->
+            <div id="socialWebhookTestResultBox" style="display:${cfg.lastTestMessage ? 'block' : 'none'}; background:${cfg.lastTestStatus === 'connected' ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)'}; border:1px solid ${cfg.lastTestStatus === 'connected' ? 'var(--accent-emerald)' : '#f43f5e'}; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#fff;">
+                <strong>${cfg.lastTestStatus === 'connected' ? '✅ Ultimo Test:' : '⚠️ Stato Test:'}</strong> ${cfg.lastTestMessage || ''} ${cfg.lastTestTime ? `<span style="color:var(--text-muted);">(${cfg.lastTestTime})</span>` : ''}
+            </div>
+
+            <!-- Guida Passo-Passo Make.com -->
+            <div style="background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:1rem 1.15rem; margin-bottom:1.2rem;">
+                <strong style="color:var(--accent-cyan); font-size:0.84rem; display:block; margin-bottom:0.45rem;">
+                    📋 Guida Rapida in 3 Passi per collegare Instagram e Facebook su Make.com:
+                </strong>
+                <ol style="margin:0; padding-left:1.2rem; font-size:0.78rem; color:var(--text-secondary); line-height:1.55;">
+                    <li>Accedi a <strong>make.com</strong> → clicca <em>Create a new scenario</em> → aggiungi il modulo <strong>Webhooks → Custom webhook</strong> → clicca <em>Add</em>, copia l'URL generato e incollalo nel campo <strong>URL Webhook Principale</strong> qui sopra.</li>
+                    <li>Clicca sul pulsante <strong>"🧪 Salva & Invia Post di Prova"</strong> qui sotto: Make.com riceverà subito la struttura dati pronta (<code>caption_full</code>, <code>publish_instagram</code>, <code>publish_facebook</code> e il file foto/video <code>file</code>).</li>
+                    <li>Su Make.com aggiungi un modulo <strong>Flow Control → Router</strong> con 2 rami:
+                        <br>• <strong>Ramo Facebook:</strong> modulo <em>Facebook Pages → Create a Post with a Photo</em> (mappa <code>Data = file</code> e <code>Message = caption_full</code>, con filtro <code>publish_facebook = true</code>).
+                        <br>• <strong>Ramo Instagram:</strong> modulo <em>Instagram for Business → Create a Photo Post / Reel</em> (mappa <code>Caption = caption_full</code>, con filtro <code>publish_instagram = true</code>). Attiva lo scenario su <strong>ON</strong>!
+                    </li>
+                </ol>
+            </div>
+
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                <button type="submit" class="btn btn-primary" style="flex:2; justify-content:center; padding:0.85rem; font-size:0.92rem;">
+                    <i data-lucide="save"></i> Salva Accessi Webhook IG & FB
+                </button>
+                <button type="button" class="btn btn-secondary" style="flex:1.5; justify-content:center; padding:0.85rem; font-size:0.88rem; border-color:rgba(16,185,129,0.5); color:var(--accent-emerald);" onclick="window.testSocialWebhookNow(true)">
+                    <i data-lucide="zap"></i> 🧪 Salva & Invia Post di Prova
+                </button>
+            </div>
+        </form>
+    `;
+
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.readSocialConfigFormValues = function() {
+    const cfg = window.getSocialIntegrationConfig();
+    const webhookUrl = document.getElementById("f_soc_cfg_webhook") ? document.getElementById("f_soc_cfg_webhook").value.trim() : cfg.webhookUrl;
+    const igUrl = document.getElementById("f_soc_cfg_ig_webhook") ? document.getElementById("f_soc_cfg_ig_webhook").value.trim() : cfg.instagramWebhookUrl;
+    const fbUrl = document.getElementById("f_soc_cfg_fb_webhook") ? document.getElementById("f_soc_cfg_fb_webhook").value.trim() : cfg.facebookWebhookUrl;
+
+    return {
+        ...cfg,
+        enabled: Boolean(webhookUrl || igUrl || fbUrl),
+        provider: document.getElementById("f_soc_cfg_provider") ? document.getElementById("f_soc_cfg_provider").value : (cfg.provider || "make"),
+        payloadFormat: document.getElementById("f_soc_cfg_format") ? document.getElementById("f_soc_cfg_format").value : (cfg.payloadFormat || "multipart"),
+        webhookUrl: webhookUrl,
+        instagramWebhookUrl: igUrl,
+        facebookWebhookUrl: fbUrl,
+        publicBaseUrl: document.getElementById("f_soc_cfg_public_base") ? document.getElementById("f_soc_cfg_public_base").value.trim() : (cfg.publicBaseUrl || ""),
+        webhookSecret: document.getElementById("f_soc_cfg_secret") ? document.getElementById("f_soc_cfg_secret").value.trim() : (cfg.webhookSecret || ""),
+        instagramAccountLabel: document.getElementById("f_soc_cfg_ig_label") ? document.getElementById("f_soc_cfg_ig_label").value.trim() || "@liuteriadelorenzi" : "@liuteriadelorenzi",
+        facebookPageLabel: document.getElementById("f_soc_cfg_fb_label") ? document.getElementById("f_soc_cfg_fb_label").value.trim() || "Liuteria De Lorenzi" : "Liuteria De Lorenzi"
+    };
+};
+
+window.saveSocialConfigFromModal = async function(event) {
+    if (event) event.preventDefault();
+    const updatedCfg = window.readSocialConfigFormValues();
+    window.atelierDB.data.settings.socialIntegration = updatedCfg;
+
+    // Se alcuni post erano in stato "Errore Accessi" e ora il webhook c'è, riportali in "Programmato"
+    if (updatedCfg.enabled && Array.isArray(window.atelierDB.data.social)) {
+        window.atelierDB.data.social.forEach(p => {
+            if (p.stato === "Errore Accessi") {
+                p.stato = "Programmato";
+                p.errorePubblicazione = "";
+                p.updatedAt = new Date().toISOString();
+            }
+        });
+    }
+
+    window.atelierDB.saveData();
+
+    try {
+        await fetch("/api/social/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedCfg)
+        });
+        await window.syncSocialWithServer();
+    } catch (e) {
+        // ignore if static
+    }
+
+    window.closeModal();
+    window.showToast(updatedCfg.enabled
+        ? "✅ Accessi Webhook Instagram & Facebook salvati e attivi!"
+        : "Impostazioni Social salvate (nessun URL Webhook inserito).");
+
+    if (window.appController && window.appController.activeModuleId === "social") {
+        window.appController.openModule("social");
+    }
+};
+
+window.testSocialWebhookNow = async function(fromModal = false) {
+    const cfg = fromModal ? window.readSocialConfigFormValues() : window.getSocialIntegrationConfig();
+    window.atelierDB.data.settings.socialIntegration = cfg;
+    window.atelierDB.saveData();
+
+    const resBox = document.getElementById("socialWebhookTestResultBox");
+    if (!window.isSocialWebhookConfigured(cfg)) {
+        const msg = "Inserisci prima l'URL del Webhook (es. https://hook.eu1.make.com/...) nel campo 'URL Webhook Principale'.";
+        if (resBox) {
+            resBox.style.display = "block";
+            resBox.style.background = "rgba(244, 63, 94, 0.14)";
+            resBox.style.borderColor = "#f43f5e";
+            resBox.innerHTML = `<strong>⚠️ URL Mancante:</strong> ${msg}`;
+        } else {
+            window.showToast("⚠️ " + msg);
+            window.openSocialConfigModal();
+        }
+        return;
+    }
+
+    if (resBox) {
+        resBox.style.display = "block";
+        resBox.style.background = "rgba(6, 182, 212, 0.14)";
+        resBox.style.borderColor = "var(--accent-cyan)";
+        resBox.innerHTML = `<strong>⏳ Invio pacchetto di prova in corso a Make/Zapier/n8n...</strong>`;
+    } else {
+        window.showToast("⏳ Test connessione Webhook IG & FB in corso...");
+    }
+
+    const samplePost = {
+        id: "soc-test-" + Date.now(),
+        titolo: "Test Connessione Automatica Instagram & Facebook — Liuteria De Lorenzi",
+        note: "Verifica collegamento Webhook dal Gestionale Bottega Liuteria De Lorenzi (Cremona). Pubblicazione automatica di Foto High-Res e Video 4K attiva.",
+        hashtag: "#liuteriadelorenzi #cremona #violinmaker #lutherie #stradivari",
+        piattaforme: ["Instagram", "Facebook"],
+        formatoPost: "Post Foto / Carosello HD",
+        dataProgrammata: new Date().toISOString().slice(0, 16),
+        mediaAttachments: [
+            {
+                id: "smed-test-sample",
+                name: "violin-1.jpg",
+                kind: "image",
+                mimeType: "image/jpeg",
+                url: "./assets/violin-1.jpg",
+                thumbnailDataUrl: "./assets/violin-1.jpg"
+            }
+        ]
+    };
+
+    let result = null;
+    try {
+        const resp = await fetch("/api/social/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ test: true, config: cfg, post: samplePost })
+        });
+        if (resp.ok) {
+            result = await resp.json();
+        } else {
+            result = await window.dispatchSocialWebhookFromBrowser(samplePost, cfg, true);
+        }
+    } catch (e) {
+        result = await window.dispatchSocialWebhookFromBrowser(samplePost, cfg, true);
+    }
+
+    const nowStr = new Date().toLocaleString("it-IT");
+    cfg.lastTestTime = nowStr;
+    if (result && result.success) {
+        cfg.lastTestStatus = "connected";
+        cfg.lastTestMessage = `Connessione Webhook verificata con successo (HTTP ${result.httpStatus || 200})!`;
+        window.atelierDB.saveData();
+        if (resBox) {
+            resBox.style.background = "rgba(16, 185, 129, 0.15)";
+            resBox.style.borderColor = "var(--accent-emerald)";
+            resBox.innerHTML = `<strong>✅ ${cfg.lastTestMessage}</strong><br><span style="font-size:0.76rem; color:var(--text-secondary);">Il Webhook ha ricevuto titolo, didascalia, hashtag, flag Instagram/Facebook e foto di prova (${nowStr}).</span>`;
+        }
+        window.showToast("✅ Test Webhook Instagram & Facebook riuscito!");
+    } else {
+        cfg.lastTestStatus = "error";
+        cfg.lastTestMessage = (result && result.error) || "Impossibile contattare l'URL Webhook specificato.";
+        window.atelierDB.saveData();
+        if (resBox) {
+            resBox.style.background = "rgba(244, 63, 94, 0.15)";
+            resBox.style.borderColor = "#f43f5e";
+            resBox.innerHTML = `<strong>❌ Errore Test Webhook:</strong> ${cfg.lastTestMessage}`;
+        }
+        window.showToast(`❌ Errore Test Webhook: ${cfg.lastTestMessage}`);
+    }
+
+    if (window.appController && window.appController.activeModuleId === "social" && !fromModal) {
+        window.appController.openModule("social");
+    }
+};
+
+window.startSocialScheduler = function() {
+    if (window._socialSchedulerInterval) clearInterval(window._socialSchedulerInterval);
+    // Primo sync immediato all'avvio con il Server 24/7
+    setTimeout(() => {
+        window.syncSocialWithServer();
+    }, 800);
+    // Controllo e sincronizzazione ogni 15 secondi
+    window._socialSchedulerInterval = setInterval(() => {
+        window.checkScheduledSocialPosts(false);
+    }, 15000);
+};
+
+// ==========================================================================
+// SERVER AUTO-UPDATE MODAL (GITHUB BRANCH 'main' + OTA HTTP)
+// ==========================================================================
+window.openServerUpdateModal = async function() {
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "720px";
+
+    modalTitle.innerText = "🔄 Auto-Update Server Ubuntu (GitHub branch 'main' + OTA HTTP)";
+    modalBody.innerHTML = `<div style="padding:1.5rem; text-align:center; color:var(--text-secondary);">Lettura stato aggiornamento dal server in corso...</div>`;
+    modalOverlay.classList.add("active");
+
+    let upd = {
+        repo: "Delaoren/Gestionale-Liuteria",
+        branch: "main",
+        autoUpdateEnabled: true,
+        intervalSeconds: 120,
+        currentCommit: "N/D",
+        lastCheckTime: "In attesa",
+        lastUpdateTime: "N/D",
+        status: "ready",
+        lastMessage: "Auto-Update attivo",
+        history: []
+    };
+
+    try {
+        const r = await fetch("/api/system/update-status");
+        if (r.ok) {
+            const j = await r.json();
+            if (j && j.update) upd = j.update;
+        }
+    } catch (e) {
+        upd.lastMessage = "Modalità statica o endpoint OTA non ancora caricato sul server.";
+    }
+
+    const hist = Array.isArray(upd.history) ? upd.history : [];
+
+    modalBody.innerHTML = `
+        <div>
+            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.08)); border:1px solid rgba(16, 185, 129, 0.35); border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.2rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.4rem;">
+                    <strong style="color:#fff; font-size:0.96rem;">✅ Aggiornamento Automatico Combinato Attivo (Zero SSH)</strong>
+                    <span class="badge badge-success">Branch: ${upd.branch || "main"}</span>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-secondary); margin:0; line-height:1.45;">
+                    Il server Ubuntu controlla autonomamente <strong>GitHub (${upd.repo} → branch <code>${upd.branch}</code>)</strong> ogni ${upd.intervalSeconds || 120} secondi e accetta aggiornamenti istantanei <strong>OTA via HTTP</strong> direttamente dallo script di sincronizzazione su Windows, senza bisogno di <code>trasferisci_a_ubuntu.bat</code>.
+                </p>
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.8rem; margin-bottom:1.2rem;">
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:0.75rem 0.9rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Repository & Branch</div>
+                    <div style="font-size:0.88rem; color:#fff; font-weight:700; margin-top:0.2rem;">${upd.repo}</div>
+                    <div style="font-size:0.76rem; color:var(--accent-cyan);">Branch: <code>${upd.branch}</code></div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:0.75rem 0.9rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Commit Attuale sul Server</div>
+                    <div style="font-size:0.92rem; color:var(--accent-gold); font-family:var(--font-mono); font-weight:700; margin-top:0.2rem;">${(upd.currentCommit || "N/D").slice(0, 12)}</div>
+                    <div style="font-size:0.73rem; color:var(--text-secondary);">Ultimo check: ${upd.lastCheckTime || "N/D"}</div>
+                </div>
+            </div>
+
+            <div id="serverUpdateLiveStatusBox" style="background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:0.8rem 1rem; margin-bottom:1.2rem; font-size:0.82rem; color:#e5e7eb;">
+                <strong>Stato:</strong> ${upd.lastMessage || "Pronto"}
+            </div>
+
+            ${hist.length > 0 ? `
+                <div style="margin-bottom:1.2rem;">
+                    <strong style="font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:0.45rem;">Cronologia Ultimi Aggiornamenti Automatici:</strong>
+                    <div style="display:flex; flex-direction:column; gap:0.35rem; max-height:150px; overflow-y:auto;">
+                        ${hist.slice(0, 6).map(h => `
+                            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:0.4rem 0.7rem; border-radius:6px; font-size:0.75rem;">
+                                <span><strong>${h.source}</strong> • Commit <code>${h.commit}</code> (${h.filesCount} file)</span>
+                                <span style="color:var(--text-muted); font-family:var(--font-mono);">${h.timestamp}</span>
+                            </div>
+                        `).join("")}
+                    </div>
+                </div>
+            ` : ""}
+
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-primary" style="flex:2; justify-content:center; padding:0.8rem;" onclick="window.triggerServerGithubUpdateNow(false)">
+                    <i data-lucide="refresh-cw"></i> Controlla & Aggiorna Ora da GitHub (branch main)
+                </button>
+                <button type="button" class="btn btn-secondary" style="flex:1; justify-content:center; padding:0.8rem;" onclick="window.triggerServerGithubUpdateNow(true)">
+                    <i data-lucide="download-cloud"></i> Forza Riallineamento
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.triggerServerGithubUpdateNow = async function(force = false) {
+    const box = document.getElementById("serverUpdateLiveStatusBox");
+    if (box) {
+        box.style.borderColor = "var(--accent-cyan)";
+        box.innerHTML = `<strong>⏳ Controllo branch 'main' su GitHub (Delaoren/Gestionale-Liuteria) in corso...</strong>`;
+    }
+    try {
+        const r = await fetch("/api/system/check-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ force: force })
+        });
+        const data = await r.json();
+        if (data && data.success) {
+            if (box) {
+                box.style.borderColor = "var(--accent-emerald)";
+                box.innerHTML = `<strong>✅ ${data.message}</strong>`;
+            }
+            window.showToast(data.updated ? "🚀 Server aggiornato da GitHub! Ricarico l'interfaccia..." : "✓ Server già allineato all'ultimo commit su main.");
+            if (data.updated) {
+                setTimeout(() => window.location.reload(), 1600);
+            }
+        } else {
+            if (box) {
+                box.style.borderColor = "#f43f5e";
+                box.innerHTML = `<strong>❌ Errore:</strong> ${(data && data.error) || "Impossibile verificare aggiornamenti"}`;
+            }
+        }
+    } catch (e) {
+        if (box) {
+            box.style.borderColor = "#f43f5e";
+            box.innerHTML = `<strong>❌ Errore di connessione al server:</strong> ${e.message || e}`;
+        }
+    }
+};
+
 document.addEventListener("DOMContentLoaded", () => {
+    if (window.socialMediaDB) {
+        window.socialMediaDB.init();
+    }
     window.appController = new AppController();
     if (window.haService) {
         window.haService.init();
     }
+    window.startSocialScheduler();
 });

@@ -49,13 +49,16 @@
 
         isDomainAllowed() {
             const host = window.location.hostname.toLowerCase();
-            // Consenti localhost, indirizzi di rete locale (LAN bottega) e Tailscale
+            // Consenti localhost, indirizzi di rete locale (LAN bottega) e Tailscale (IP 100.x.x.x o MagicDNS .ts.net / hostname locale)
             if (
                 host === "localhost" ||
                 host === "127.0.0.1" ||
                 host.startsWith("192.168.") ||
                 host.startsWith("10.") ||
-                host.startsWith("100.")
+                host.startsWith("100.") ||
+                host.endsWith(".ts.net") ||
+                host.endsWith(".local") ||
+                !host.includes(".")
             ) {
                 return true;
             }

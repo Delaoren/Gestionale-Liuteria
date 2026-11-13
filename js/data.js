@@ -11,6 +11,15 @@ const _getTodayIso = () => {
     return `${y}-${m}-${day}`;
 };
 
+const _getFutureDateTimeIso = (daysAhead = 2, timeStr = "18:00") => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}T${timeStr}`;
+};
+
 const defaultData = {
     settings: {
         atelierName: "Liuteria De Lorenzi",
@@ -21,13 +30,32 @@ const defaultData = {
         lastSync: new Date().toISOString(),
         homeAssistant: {
             enabled: true,
-            host: "http://homeassistant.local:8123",
+            sourceType: "mqtt",
+            mqttBroker: "192.168.68.108",
+            mqttPort: 1883,
+            mqttTopic: "",
+            host: "http://192.168.68.108:8123",
             token: "",
             tempEntityId: "sensor.temperatura_laboratorio",
             humidityEntityId: "sensor.umidita_laboratorio",
-            pollingInterval: 30,
+            pollingInterval: 10,
             status: "ready",
             useSimulationFallback: true
+        },
+        socialIntegration: {
+            enabled: false,
+            provider: "make",
+            webhookUrl: "",
+            instagramWebhookUrl: "",
+            facebookWebhookUrl: "",
+            webhookSecret: "",
+            payloadFormat: "multipart",
+            publicBaseUrl: "",
+            instagramAccountLabel: "@liuteriadelorenzi",
+            facebookPageLabel: "Liuteria De Lorenzi",
+            lastTestStatus: "unconfigured",
+            lastTestTime: "",
+            lastTestMessage: ""
         }
     },
     // 1. Biblioteca (Library)
@@ -146,7 +174,73 @@ const defaultData = {
             strumento: "Viola d'Amore XVIII Sec."
         }
     ],
-    // 4. Clienti
+    // 4. Certificati (Certificates of Authenticity & Expertise)
+    certificati: [
+        {
+            id: "cert-1",
+            numeroCertificato: "CERT-2026-001",
+            dataEmissione: _getTodayIso(),
+            luogoEmissione: "Bottega Liuteria De Lorenzi",
+            tipologiaCertificato: "Certificato di Autenticità d'Autore",
+            strumento: "Violino Master 'La Fenice' Opus 38",
+            tipologiaStrumento: "Violino 4/4",
+            modello: "Ispirato ad Antonio Stradivari 1715 'Il Cremonese'",
+            annoCostruzione: "2024",
+            autore: "Maestro Fabio De Lorenzi",
+            etichetta: "Fabio De Lorenzi fecit anno Domini 2024 — Opus XXXVIII",
+            statoConservazione: "Eccellente — Stato Integro d'Autore",
+            noteConservazione: "Strumento in perfetto stato di conservazione, integro in ogni sua parte originale. Tavola armonica in abete rosso della Val di Fiemme a venatura medio-fina regolare; fondo in due pezzi di acero marezzato balcanico a fiammatura profonda ascendente. Vernice originale ad olio d'ambra di colore arancio-dorato su fondo ambrato luminoso.",
+            bioAutore: "Il Maestro Liutaio Fabio De Lorenzi dedica la propria ricerca all'arte liutaria classica italiana, coniugando il metodo costruttivo tradizionale cremonese con lo studio acustico-modale dei legni da risonanza stagionati naturalmente. Ogni strumento è interamente scolpito e verniciato a mano nella propria bottega.",
+            destinatario: "Maestro Marco Rossi",
+            misure: {
+                lunghezzaCassa: "355.5 mm",
+                larghezzaSuperiore: "167.5 mm",
+                larghezzaCC: "111.5 mm",
+                larghezzaInferiore: "207.8 mm",
+                altezzaFasceSup: "30.0 mm",
+                altezzaFasceInf: "31.8 mm",
+                diapason: "195.0 mm",
+                lunghezzaManico: "130.0 mm"
+            },
+            fotografie: [
+                { url: "./assets/violin-1.jpg", didascalia: "Tavola Armonica (Vista Frontale)" },
+                { url: "./assets/cremonese.jpg", didascalia: "Fondo in Acero Marezzato & Profilo" },
+                { url: "./assets/craft-1.jpg", didascalia: "Dettaglio Scultura Riccio e Filettatura" }
+            ]
+        },
+        {
+            id: "cert-2",
+            numeroCertificato: "CERT-2026-002",
+            dataEmissione: "2026-10-12",
+            luogoEmissione: "Bottega Liuteria De Lorenzi",
+            tipologiaCertificato: "Perizia Tecnica & Stato di Conservazione",
+            strumento: "Viola d'Arco 'Gaspare' 41.5 cm",
+            tipologiaStrumento: "Viola",
+            modello: "Modello Gaspare da Salò (Brescia)",
+            annoCostruzione: "2025",
+            autore: "Maestro Fabio De Lorenzi",
+            etichetta: "Fabio De Lorenzi fecit anno 2025 — Modello Gaspare da Salò",
+            statoConservazione: "Ottimo — Pari al Nuovo",
+            noteConservazione: "Cassa armonica perfettamente integra, priva di fessurazioni o restauri. Tavola in abete di Paneveggio e fondo in pioppo marezzato maschio selezionato per la ricchezza timbrica nel registro grave. Vernice a spirito e resine naturali di tonalità bruno-ambrata calda.",
+            bioAutore: "Il Maestro Liutaio Fabio De Lorenzi realizza violini, viole e violoncelli da concerto seguendo la grande tradizione liutaria italiana, con particolare attenzione alla proiezione sonora, alla prontezza d'emissione e alla formulazione storica delle vernici naturali.",
+            destinatario: "Conservatorio G. Verdi - Prof.ssa Bianchi",
+            misure: {
+                lunghezzaCassa: "415.0 mm",
+                larghezzaSuperiore: "198.0 mm",
+                larghezzaCC: "134.0 mm",
+                larghezzaInferiore: "246.0 mm",
+                altezzaFasceSup: "37.5 mm",
+                altezzaFasceInf: "39.5 mm",
+                diapason: "223.0 mm",
+                lunghezzaManico: "148.0 mm"
+            },
+            fotografie: [
+                { url: "./assets/viola-1.jpg", didascalia: "Tavola Armonica e C-Bouts" },
+                { url: "./assets/craft-2.jpg", didascalia: "Dettaglio Vernice e Bombatura" }
+            ]
+        }
+    ],
+    // 5. Clienti
     clienti: [
         {
             id: "cli-1",
@@ -474,33 +568,97 @@ const defaultData = {
     social: [
         {
             id: "soc-1",
-            piattaforma: "Instagram",
+            piattaforma: "Instagram, Facebook",
+            piattaforme: ["Instagram", "Facebook"],
+            formatoPost: "Carosello Foto High-Res",
             titolo: "Dettaglio del filetto e riflessi di rifrazione della vernice all'ambra",
-            dataProgrammata: "2026-09-28 18:00",
+            dataProgrammata: _getFutureDateTimeIso(2, "18:00"),
             stato: "Programmato",
+            autoPublish: true,
             hashtag: "#lutherie #violinmaker #cremona #woodworking #stradivari #artisan",
             likesPrevisti: 1450,
-            note: "Foto macro ad alta risoluzione con luce radente calda."
+            note: "Foto macro ad alta risoluzione con luce radente calda. Mostrare l'incastro del filetto in ebano e pero sulle punte.",
+            mediaAttachments: [
+                {
+                    id: "smed-default-1",
+                    name: "dettaglio_filetto_vernice_4k.jpg",
+                    kind: "image",
+                    mimeType: "image/jpeg",
+                    sizeBytes: 18454937,
+                    sizeFormatted: "17.6 MB",
+                    dimensions: "4000×3000 px",
+                    url: "./assets/craft-1.jpg",
+                    thumbnailDataUrl: "./assets/craft-1.jpg",
+                    isIndexedDB: false
+                },
+                {
+                    id: "smed-default-2",
+                    name: "fondo_acero_marezzato_macro.jpg",
+                    kind: "image",
+                    mimeType: "image/jpeg",
+                    sizeBytes: 15204352,
+                    sizeFormatted: "14.5 MB",
+                    dimensions: "3840×2160 px",
+                    url: "./assets/cremonese.jpg",
+                    thumbnailDataUrl: "./assets/cremonese.jpg",
+                    isIndexedDB: false
+                }
+            ]
         },
         {
             id: "soc-2",
-            piattaforma: "YouTube Showcase",
-            titolo: "Prova del Suono: Violino Master Opus 38 vs Violino di Fabbrica",
-            dataProgrammata: "2026-10-01 14:00",
-            stato: "In Montaggio",
-            hashtag: "#soundtest #violin #classicalmusic #luthier #acoustics",
+            piattaforma: "YouTube, Instagram, TikTok",
+            piattaforme: ["YouTube", "Instagram", "TikTok"],
+            formatoPost: "Video 4K / Reel Showcase",
+            titolo: "Prova del Suono & Scultura: Violino Master Opus 38 in Sala Acustica",
+            dataProgrammata: _getFutureDateTimeIso(5, "14:00"),
+            stato: "Programmato",
+            autoPublish: true,
+            hashtag: "#soundtest #violin #classicalmusic #luthier #acoustics #4kvideo",
             likesPrevisti: 3800,
-            note: "Includere grafico spettrogramma delle armoniche a 440Hz."
+            note: "Video 4K masterizzato con microfoni Neumann KM184 e grafico spettrogramma delle armoniche a 440Hz.",
+            mediaAttachments: [
+                {
+                    id: "smed-default-3",
+                    name: "showcase_acustico_opus38_4k_master.mp4",
+                    kind: "video",
+                    mimeType: "video/mp4",
+                    sizeBytes: 440401920,
+                    sizeFormatted: "420.0 MB",
+                    dimensions: "3840×2160 (4K UHD)",
+                    duration: "03:42",
+                    url: "",
+                    thumbnailDataUrl: "./assets/violin-1.jpg",
+                    isIndexedDB: false
+                }
+            ]
         },
         {
             id: "soc-3",
-            piattaforma: "Facebook Atelier Page",
+            piattaforma: "Facebook, LinkedIn",
+            piattaforme: ["Facebook", "LinkedIn"],
+            formatoPost: "Evento & Galleria Fotografica",
             titolo: "Porte Aperte in Atelier: Incontro sulla scelta dei legni da risonanza",
-            dataProgrammata: "2026-10-10 10:00",
+            dataProgrammata: _getFutureDateTimeIso(10, "10:00"),
             stato: "Bozza",
-            hashtag: "#atelierliuteria #valdifiemme #artigianatoitaliano",
+            autoPublish: false,
+            hashtag: "#atelierliuteria #valdifiemme #artigianatoitaliano #tonewood",
             likesPrevisti: 600,
-            note: "Invitare gli studenti del Conservatorio e collezionisti."
+            note: "Invitare gli studenti del Conservatorio, solisti e collezionisti.",
+            mediaAttachments: [
+                {
+                    id: "smed-default-4",
+                    name: "atelier_legni_risonanza_banner.png",
+                    kind: "image",
+                    mimeType: "image/png",
+                    sizeBytes: 9437184,
+                    sizeFormatted: "9.0 MB",
+                    dimensions: "2560×1440 px",
+                    url: "./assets/lutherie_banner.png",
+                    thumbnailDataUrl: "./assets/lutherie_banner.png",
+                    isIndexedDB: false
+                }
+            ]
         }
     ]
 };
@@ -519,6 +677,9 @@ class DataStore {
                     if (!parsed.settings.homeAssistant) {
                         parsed.settings.homeAssistant = JSON.parse(JSON.stringify(defaultData.settings.homeAssistant));
                     }
+                    if (!parsed.settings.socialIntegration) {
+                        parsed.settings.socialIntegration = JSON.parse(JSON.stringify(defaultData.settings.socialIntegration));
+                    }
                     if (parsed.settings.atelierName === "Atelier Liuteria Master" || !parsed.settings.atelierName) {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";
                     }
@@ -529,6 +690,49 @@ class DataStore {
                     if (sample) {
                         sample.data = _getTodayIso();
                     }
+                }
+                if (!parsed.certificati || !Array.isArray(parsed.certificati)) {
+                    parsed.certificati = JSON.parse(JSON.stringify(defaultData.certificati));
+                    this.saveData(parsed);
+                } else {
+                    parsed.certificati.forEach(c => {
+                        if (Array.isArray(c.fotografie)) {
+                            c.fotografie.forEach(f => {
+                                if (f.url && f.url.startsWith('/assets/')) {
+                                    f.url = '.' + f.url;
+                                }
+                            });
+                        }
+                    });
+                }
+                if (Array.isArray(parsed.social)) {
+                    parsed.social.forEach((s, idx) => {
+                        const defItem = defaultData.social.find(d => d.id === s.id) || defaultData.social[idx];
+                        if (!Array.isArray(s.piattaforme) || s.piattaforme.length === 0) {
+                            if (defItem && Array.isArray(defItem.piattaforme)) {
+                                s.piattaforme = [...defItem.piattaforme];
+                                s.piattaforma = defItem.piattaforma;
+                            } else if (s.piattaforma) {
+                                s.piattaforme = s.piattaforma.split(',').map(p => p.trim()).filter(Boolean);
+                            } else {
+                                s.piattaforme = ["Instagram"];
+                            }
+                        }
+                        if (!Array.isArray(s.mediaAttachments)) {
+                            s.mediaAttachments = (defItem && Array.isArray(defItem.mediaAttachments))
+                                ? JSON.parse(JSON.stringify(defItem.mediaAttachments))
+                                : [];
+                        }
+                        if (s.autoPublish === undefined) {
+                            s.autoPublish = s.stato === "Programmato";
+                        }
+                        if (!s.formatoPost && defItem && defItem.formatoPost) {
+                            s.formatoPost = defItem.formatoPost;
+                        }
+                        if (s.dataProgrammata === "2026-09-28 18:00" || s.dataProgrammata === "2026-10-01 14:00" || s.dataProgrammata === "2026-10-10 10:00") {
+                            if (defItem) s.dataProgrammata = defItem.dataProgrammata;
+                        }
+                    });
                 }
                 return parsed;
             }

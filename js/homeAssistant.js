@@ -79,36 +79,58 @@ class HomeAssistantService {
     }
 
     /**
-     * Unified API Request Method (supports Local Python Proxy to bypass CORS, and direct fetch)
+     * Build ordered list of candidate backend URLs (relative + Ubuntu server 192.168.68.108:8080 + local fallback)
+     */
+    getBackendUrls(apiPath) {
+        const config = this.getConfig();
+        const brokerHost = (config.mqttBroker || '192.168.68.108').trim();
+        const urls = [];
+        if (window.location.protocol.startsWith('http')) {
+            urls.push(apiPath);
+        }
+        urls.push(`http://${brokerHost}:8080${apiPath}`);
+        urls.push(`http://192.168.68.108:8080${apiPath}`);
+        urls.push(`http://localhost:8080${apiPath}`);
+        urls.push(`http://127.0.0.1:8080${apiPath}`);
+        return [...new Set(urls)];
+    }
+
+    async fetchBackendApi(apiPath, options = {}) {
+        const urls = this.getBackendUrls(apiPath);
+        for (const url of urls) {
+            try {
+                const fetchOpts = url.startsWith('http') ? { ...options, mode: 'cors' } : options;
+                const r = await fetch(url, fetchOpts);
+                const cType = r.headers.get('content-type') || '';
+                if (r.ok && cType.includes('application/json')) {
+                    return r;
+                }
+            } catch (e) {}
+        }
+        return null;
+    }
+
+    /**
+     * Unified API Request Method (supports Local/Ubuntu Python Proxy to bypass CORS, and direct fetch)
      */
     async makeRequest(endpoint, targetHost, targetToken) {
         const cleanHost = (targetHost || this.getConfig().host || '').trim().replace(/\/$/, '');
         const authToken = targetToken !== undefined ? targetToken : (this.getConfig().token || '');
         const targetUrl = `${cleanHost}${endpoint}`;
 
-        // 1. Check if running on local Python server (http://localhost:8080)
-        const isLocalServer = window.location.protocol.startsWith('http') && 
-                              (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        // 1. Try Python server proxy (/api/ha-proxy on current host or 192.168.68.108:8080)
+        try {
+            const proxyRes = await this.fetchBackendApi('/api/ha-proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: targetUrl, token: authToken })
+            });
 
-        if (isLocalServer) {
-            try {
-                const proxyRes = await fetch('/api/ha-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: targetUrl, token: authToken })
-                });
-
-                if (proxyRes.ok) {
-                    return await proxyRes.json();
-                } else if (proxyRes.status === 401) {
-                    throw new Error("Errore 401: Token Home Assistant non autorizzato o non valido.");
-                } else if (proxyRes.status === 404) {
-                    throw new Error(`Errore 404: Risorsa non trovata in Home Assistant (${endpoint})`);
-                }
-            } catch (proxyErr) {
-                if (proxyErr.message && proxyErr.message.includes('401')) throw proxyErr;
-                // If local proxy network error, continue to direct fetch
+            if (proxyRes && proxyRes.ok) {
+                return await proxyRes.json();
             }
+        } catch (proxyErr) {
+            if (proxyErr.message && proxyErr.message.includes('401')) throw proxyErr;
         }
 
         // 2. Direct browser fetch
@@ -219,84 +241,54 @@ class HomeAssistantService {
         const config = this.getConfig();
         if (!config.enabled) return;
 
-        // 1. PRIMARY: Query MQTT Telemetry from local server bridge (192.168.68.108:1883)
-        if (config.sourceType !== 'ha') {
-            try {
-                let res = null;
-                // 1. Prova prima l'endpoint relativo (attivo su :8080 e via proxy Vite su :5173)
-                try {
-                    const r = await fetch('/api/telemetry');
-                    const cType = r.headers.get('content-type') || '';
-                    if (r.ok && cType.includes('application/json')) {
-                        res = r;
-                    }
-                } catch (e) {}
+        // 1. PRIMARY: Query MQTT & ESPHome Telemetry from Ubuntu server bridge (192.168.68.108:8080)
+        try {
+            const res = await this.fetchBackendApi('/api/telemetry');
+            if (res && res.ok) {
+                const data = await res.json();
+                if (data && (data.status === 'connected' || data.source === 'mqtt' || data.source === 'm5stack')) {
+                    const tempVal = parseFloat(data.temp);
+                    const humVal = parseFloat(data.humidity);
+                    if (!isNaN(tempVal) && !isNaN(humVal)) {
+                        this.status = 'connected';
+                        this.lastError = null;
 
-                // 2. Se non ha risposto in JSON e siamo su una porta diversa da 8080, prova la porta 8080 del server locale
-                if (!res && window.location.port !== '8080') {
-                    const fallbackUrls = [
-                        'http://localhost:8080/api/telemetry',
-                        'http://127.0.0.1:8080/api/telemetry',
-                        'http://192.168.68.102:8080/api/telemetry'
-                    ];
-                    for (const fUrl of fallbackUrls) {
-                        try {
-                            const r = await fetch(fUrl, { mode: 'cors' });
-                            const cType = r.headers.get('content-type') || '';
-                            if (r.ok && cType.includes('application/json')) {
-                                res = r;
-                                break;
-                            }
-                        } catch (e) {}
-                    }
-                }
+                        const emcVal = (data.emc !== undefined && data.emc !== null) ? parseFloat(data.emc) : this.calculateEMC(tempVal, humVal);
+                        const emcEval = this.evaluateEMC(emcVal);
+                        const deviceLabel = data.source === 'm5stack'
+                            ? (data.device || 'M5Stack STAMPLC')
+                            : (data.topic ? `MQTT (${data.topic})` : `Broker MQTT`);
 
-                if (res && res.ok) {
-                    const data = await res.json();
-                    if (data && (data.status === 'connected' || data.source === 'mqtt' || data.source === 'm5stack')) {
-                        const tempVal = parseFloat(data.temp);
-                        const humVal = parseFloat(data.humidity);
-                        if (!isNaN(tempVal) && !isNaN(humVal)) {
-                            this.status = 'connected';
-                            this.lastError = null;
+                        this.lastReadings = {
+                            temp: Math.round(tempVal * 10) / 10,
+                            tempUnit: '°C',
+                            tempName: deviceLabel,
+                            humidity: Math.round(humVal * 10) / 10,
+                            humidityUnit: '% RH',
+                            humidityName: deviceLabel,
+                            emc: emcVal,
+                            emcUnit: '%',
+                            emcName: 'EMC Legno',
+                            emcEvaluation: emcEval,
+                            lastUpdate: data.lastUpdate ? new Date(data.lastUpdate) : new Date(),
+                            isSimulated: false,
+                            source: data.source || 'mqtt',
+                            device: data.device || 'M5Stack STAMPLC',
+                            sensors: data.sensors,
+                            topic: data.topic,
+                            broker: data.broker,
+                            evaluation: this.evaluateClimate(tempVal, humVal)
+                        };
 
-                            const emcVal = (data.emc !== undefined && data.emc !== null) ? parseFloat(data.emc) : this.calculateEMC(tempVal, humVal);
-                            const emcEval = this.evaluateEMC(emcVal);
-                            const deviceLabel = data.source === 'm5stack'
-                                ? (data.device || 'M5Stack STAMPLC')
-                                : (data.topic ? `MQTT (${data.topic})` : `Broker MQTT`);
-
-                            this.lastReadings = {
-                                temp: Math.round(tempVal * 10) / 10,
-                                tempUnit: '°C',
-                                tempName: deviceLabel,
-                                humidity: Math.round(humVal * 10) / 10,
-                                humidityUnit: '% RH',
-                                humidityName: deviceLabel,
-                                emc: emcVal,
-                                emcUnit: '%',
-                                emcName: 'EMC Legno',
-                                emcEvaluation: emcEval,
-                                lastUpdate: data.lastUpdate ? new Date(data.lastUpdate) : new Date(),
-                                isSimulated: false,
-                                source: data.source || 'mqtt',
-                                device: data.device || 'M5Stack STAMPLC',
-                                sensors: data.sensors,
-                                topic: data.topic,
-                                broker: data.broker,
-                                evaluation: this.evaluateClimate(tempVal, humVal)
-                            };
-
-                            this.recordHistory(this.lastReadings.temp, this.lastReadings.humidity, 'connected', emcVal);
-                            this.syncWithAtelierDB(this.lastReadings.temp, this.lastReadings.humidity, emcVal);
-                            this.updateUI();
-                            return;
-                        }
+                        this.recordHistory(this.lastReadings.temp, this.lastReadings.humidity, 'connected', emcVal);
+                        this.syncWithAtelierDB(this.lastReadings.temp, this.lastReadings.humidity, emcVal);
+                        this.updateUI();
+                        return;
                     }
                 }
-            } catch (mqttErr) {
-                // If local server is not running, proceed to fallback/HA check
             }
+        } catch (mqttErr) {
+            // Proceed to secondary HA check if server is unreachable
         }
 
         // 2. SECONDARY: Query Home Assistant REST API
@@ -611,6 +603,9 @@ class HomeAssistantService {
             const container = document.getElementById("moduleContentContainer");
             if (container && window.AppModules && window.AppModules.renderLaboratorio) {
                 window.AppModules.renderLaboratorio(container);
+                if (window.appController.setupLucideIcons) {
+                    window.appController.setupLucideIcons();
+                }
             }
         }
 
@@ -619,6 +614,9 @@ class HomeAssistantService {
             const container = document.getElementById("moduleContentContainer");
             if (container && window.AppModules && window.AppModules.renderMagazzinoLegno) {
                 window.AppModules.renderMagazzinoLegno(container);
+                if (window.appController.setupLucideIcons) {
+                    window.appController.setupLucideIcons();
+                }
             }
         }
     }
@@ -704,8 +702,8 @@ class HomeAssistantService {
      */
     async getMqttTopics() {
         try {
-            const res = await fetch('/api/mqtt/topics');
-            if (res.ok) return await res.json();
+            const res = await this.fetchBackendApi('/api/mqtt/topics');
+            if (res && res.ok) return await res.json();
         } catch (e) {}
         return { status: 'offline', topics: [] };
     }
@@ -715,13 +713,13 @@ class HomeAssistantService {
      */
     async sendMqttTest(topic, temp, hum) {
         try {
-            const res = await fetch('/api/mqtt/test-publish', {
+            const res = await this.fetchBackendApi('/api/mqtt/test-publish', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topic, temp, humidity: hum })
             });
-            if (res.ok) return await res.json();
-            return { success: false, error: `HTTP ${res.status}` };
+            if (res && res.ok) return await res.json();
+            return { success: false, error: res ? `HTTP ${res.status}` : 'Server telemetria non raggiungibile' };
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -732,12 +730,12 @@ class HomeAssistantService {
      */
     async saveMqttConfig(broker, port, topic) {
         try {
-            const res = await fetch('/api/mqtt/config', {
+            const res = await this.fetchBackendApi('/api/mqtt/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ broker, port, topic })
             });
-            if (res.ok) return await res.json();
+            if (res && res.ok) return await res.json();
         } catch (e) {}
         return { success: false };
     }

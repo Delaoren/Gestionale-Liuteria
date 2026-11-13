@@ -1,0 +1,23 @@
+[Unit]
+Description=Atelier Liuteria Master - Suite Gestionale & Bridge MQTT/ESPHome
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/atelier-liuteria
+Environment="PYTHONUNBUFFERED=1"
+Environment="NO_BROWSER=1"
+Environment="PORT=8080"
+Environment="MQTT_BROKER=192.168.68.108"
+Environment="MQTT_PORT=1883"
+Environment="ESPHOME_HOST=192.168.68.101"
+ExecStart=/opt/atelier-liuteria/.venv/bin/python /opt/atelier-liuteria/server.py --no-browser
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

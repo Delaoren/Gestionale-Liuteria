@@ -10,12 +10,23 @@ import http.server
 import socketserver
 import urllib.request
 import urllib.error
+import urllib.parse
 import json
 import os
 import sys
 import threading
 import time
 import webbrowser
+import base64
+import mimetypes
+import uuid
+import re
+import hashlib
+import subprocess
+import tarfile
+import io
+import shutil
+from datetime import datetime
 
 try:
     import paho.mqtt.client as mqtt
@@ -23,11 +34,11 @@ try:
 except ImportError:
     HAS_PAHO = False
 
-PORT = 8080
+PORT = int(os.environ.get("PORT", 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MQTT_BROKER = "192.168.68.108"
-DEFAULT_MQTT_PORT = 1883
-DEFAULT_ESPHOME_HOST = "192.168.68.101"
+DEFAULT_MQTT_BROKER = os.environ.get("MQTT_BROKER", "192.168.68.108")
+DEFAULT_MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
+DEFAULT_ESPHOME_HOST = os.environ.get("ESPHOME_HOST", "192.168.68.101")
 
 def calculate_emc(temp_c, hum_pct):
     """
@@ -321,6 +332,813 @@ class MqttBridge(threading.Thread):
 # Global bridge reference
 mqtt_bridge_instance = None
 
+# ==============================================================================
+# SOCIAL WEBHOOK BRIDGE (MAKE.COM / ZAPIER / N8N) & 24/7 SERVER SCHEDULER
+# ==============================================================================
+SOCIAL_UPLOADS_DIR = os.path.join(DIRECTORY, "social_uploads")
+SOCIAL_STATE_FILE = os.path.join(DIRECTORY, "social_state.json")
+os.makedirs(SOCIAL_UPLOADS_DIR, exist_ok=True)
+
+social_lock = threading.Lock()
+
+social_state = {
+    "config": {
+        "enabled": False,
+        "provider": "make",
+        "webhookUrl": "",
+        "instagramWebhookUrl": "",
+        "facebookWebhookUrl": "",
+        "webhookSecret": "",
+        "payloadFormat": "multipart",
+        "publicBaseUrl": "",
+        "instagramAccountLabel": "@liuteriadelorenzi",
+        "facebookPageLabel": "Liuteria De Lorenzi",
+        "lastTestStatus": "unconfigured",
+        "lastTestTime": "",
+        "lastTestMessage": ""
+    },
+    "posts": [],
+    "mediaFiles": {},
+    "history": []
+}
+
+def load_social_state():
+    global social_state
+    with social_lock:
+        if os.path.exists(SOCIAL_STATE_FILE):
+            try:
+                with open(SOCIAL_STATE_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        if "config" in loaded and isinstance(loaded["config"], dict):
+                            social_state["config"].update(loaded["config"])
+                        if "posts" in loaded and isinstance(loaded["posts"], list):
+                            social_state["posts"] = loaded["posts"]
+                        if "mediaFiles" in loaded and isinstance(loaded["mediaFiles"], dict):
+                            social_state["mediaFiles"] = loaded["mediaFiles"]
+                        if "history" in loaded and isinstance(loaded["history"], list):
+                            social_state["history"] = loaded["history"][:30]
+            except Exception as e:
+                print(f"[SocialScheduler] Errore caricamento social_state.json: {e}")
+
+def save_social_state():
+    with social_lock:
+        try:
+            with open(SOCIAL_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(social_state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[SocialScheduler] Errore salvataggio social_state.json: {e}")
+
+load_social_state()
+
+def resolve_social_media_file(media_item):
+    """Restituisce (bytes_data, filename, mime_type, rel_url) per un allegato social"""
+    if not isinstance(media_item, dict):
+        return None, None, None, ""
+
+    m_id = media_item.get("id", "")
+    m_name = media_item.get("name") or "media_atelier.jpg"
+    m_mime = media_item.get("mimeType") or mimetypes.guess_type(m_name)[0] or "image/jpeg"
+    m_url = media_item.get("url") or ""
+    m_thumb = media_item.get("thumbnailDataUrl") or ""
+
+    # 1. Check uploaded files in social_uploads/
+    if m_id and m_id in social_state.get("mediaFiles", {}):
+        info = social_state["mediaFiles"][m_id]
+        disk_path = os.path.join(DIRECTORY, info.get("relPath", ""))
+        if os.path.isfile(disk_path):
+            try:
+                with open(disk_path, "rb") as f:
+                    return f.read(), info.get("name", m_name), info.get("mimeType", m_mime), "/" + info.get("relPath", "").replace("\\", "/")
+            except Exception:
+                pass
+
+    # 2. Check if m_url points to /social_uploads/... or ./assets/...
+    for candidate_url in [m_url, m_thumb]:
+        if not candidate_url or candidate_url.startswith("data:") or candidate_url.startswith("http"):
+            continue
+        clean_rel = candidate_url.lstrip("./").lstrip("/")
+        disk_path = os.path.join(DIRECTORY, clean_rel.replace("/", os.sep))
+        if os.path.isfile(disk_path):
+            try:
+                with open(disk_path, "rb") as f:
+                    guessed_mime = mimetypes.guess_type(disk_path)[0] or m_mime
+                    return f.read(), os.path.basename(disk_path), guessed_mime, "/" + clean_rel
+            except Exception:
+                pass
+
+    # 3. Check if thumbnailDataUrl is a base64 Data-URL
+    if m_thumb.startswith("data:") and ";base64," in m_thumb:
+        try:
+            header, b64_part = m_thumb.split(";base64,", 1)
+            data_mime = header.replace("data:", "").strip() or m_mime
+            raw_bytes = base64.b64decode(b64_part)
+            return raw_bytes, m_name, data_mime, ""
+        except Exception:
+            pass
+
+    return None, m_name, m_mime, m_url
+
+def build_multipart_request(fields, files):
+    """Costruisce un body multipart/form-data standard per Make.com / Zapier / n8n"""
+    boundary = f"----AtelierLiuteriaBoundary{uuid.uuid4().hex}"
+    body_parts = []
+
+    for key, val in fields.items():
+        val_str = str(val if val is not None else "")
+        body_parts.append(f"--{boundary}\r\n".encode("utf-8"))
+        body_parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+        body_parts.append(f"{val_str}\r\n".encode("utf-8"))
+
+    for field_name, filename, mime_type, file_bytes in files:
+        safe_fn = filename.replace('"', '_')
+        body_parts.append(f"--{boundary}\r\n".encode("utf-8"))
+        body_parts.append(f'Content-Disposition: form-data; name="{field_name}"; filename="{safe_fn}"\r\n'.encode("utf-8"))
+        body_parts.append(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+        body_parts.append(file_bytes)
+        body_parts.append(b"\r\n")
+
+    body_parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(body_parts), f"multipart/form-data; boundary={boundary}"
+
+def dispatch_social_webhook(post, config_override=None, is_test=False):
+    """
+    Invia il post (testo, hashtag, piattaforme Instagram/Facebook e file foto/video)
+    al Webhook configurato (Make.com / Zapier / n8n).
+    """
+    cfg = dict(social_state.get("config", {}))
+    if isinstance(config_override, dict):
+        cfg.update(config_override)
+
+    main_url = (cfg.get("webhookUrl") or "").strip()
+    ig_url = (cfg.get("instagramWebhookUrl") or "").strip()
+    fb_url = (cfg.get("facebookWebhookUrl") or "").strip()
+    secret = (cfg.get("webhookSecret") or "").strip()
+    payload_fmt = (cfg.get("payloadFormat") or "multipart").strip().lower()
+    public_base = (cfg.get("publicBaseUrl") or "").strip().rstrip("/")
+    provider_name = (cfg.get("provider") or "make").upper()
+
+    platforms = post.get("piattaforme")
+    if not isinstance(platforms, list) or len(platforms) == 0:
+        raw_p = post.get("piattaforma") or "Instagram, Facebook"
+        platforms = [p.strip() for p in raw_p.split(",") if p.strip()]
+
+    wants_ig = any("instagram" in p.lower() for p in platforms)
+    wants_fb = any("facebook" in p.lower() for p in platforms)
+
+    # Costruisci mappa URL target -> piattaforme servite da quell'URL
+    url_targets = {}
+    for p in platforms:
+        p_low = p.lower()
+        target_u = main_url
+        if "instagram" in p_low and ig_url:
+            target_u = ig_url
+        elif "facebook" in p_low and fb_url:
+            target_u = fb_url
+        if target_u:
+            url_targets.setdefault(target_u, []).append(p)
+
+    # Se è un test o nessuna piattaforma ha matchato ma main_url/ig_url/fb_url esiste
+    if not url_targets:
+        fallback_u = main_url or ig_url or fb_url
+        if fallback_u:
+            url_targets[fallback_u] = platforms
+
+    if not url_targets:
+        return {
+            "success": False,
+            "code": "MISSING_WEBHOOK",
+            "error": "Accessi Social non configurati: manca l'URL del Webhook (Make.com / Zapier / n8n) per Instagram e Facebook."
+        }
+
+    titolo = (post.get("titolo") or "Post Liuteria De Lorenzi").strip()
+    note = (post.get("note") or "").strip()
+    hashtag = (post.get("hashtag") or "").strip()
+    formato_post = (post.get("formatoPost") or "Post Foto / Carosello HD").strip()
+    data_prog = post.get("dataProgrammata") or time.strftime("%Y-%m-%dT%H:%M")
+
+    caption_parts = [p for p in [titolo, note, hashtag] if p]
+    caption_full = "\n\n".join(caption_parts)
+
+    media_list = post.get("mediaAttachments") if isinstance(post.get("mediaAttachments"), list) else []
+    resolved_files = []
+    media_meta_list = []
+
+    for idx, m in enumerate(media_list):
+        f_bytes, f_name, f_mime, rel_url = resolve_social_media_file(m)
+        full_media_url = f"{public_base}{rel_url}" if (public_base and rel_url) else rel_url
+        is_vid = (m.get("kind") == "video") or (f_mime and f_mime.startswith("video/"))
+        m_entry = {
+            "index": idx + 1,
+            "id": m.get("id", f"media-{idx+1}"),
+            "name": f_name or m.get("name", f"file_{idx+1}"),
+            "kind": "video" if is_vid else "image",
+            "mimeType": f_mime or "image/jpeg",
+            "sizeBytes": len(f_bytes) if f_bytes else m.get("sizeBytes", 0),
+            "dimensions": m.get("dimensions", ""),
+            "url": full_media_url
+        }
+        if f_bytes:
+            field_key = "file" if idx == 0 else f"file_{idx+1}"
+            resolved_files.append((field_key, m_entry["name"], m_entry["mimeType"], f_bytes))
+            # Se formato JSON e file immagine <= 12MB, includi base64 per cloud webhook
+            if payload_fmt == "json" and len(f_bytes) <= 12 * 1024 * 1024:
+                m_entry["base64"] = base64.b64encode(f_bytes).decode("ascii")
+        media_meta_list.append(m_entry)
+
+    # Se non c'è nessun file allegato ma è un test, allega l'immagine di default del violino se presente
+    if is_test and not resolved_files:
+        sample_path = os.path.join(DIRECTORY, "assets", "violin-1.jpg")
+        if os.path.isfile(sample_path):
+            try:
+                with open(sample_path, "rb") as f:
+                    s_bytes = f.read()
+                resolved_files.append(("file", "violin-1.jpg", "image/jpeg", s_bytes))
+                media_meta_list.append({
+                    "index": 1,
+                    "id": "test-media-1",
+                    "name": "violin-1.jpg",
+                    "kind": "image",
+                    "mimeType": "image/jpeg",
+                    "sizeBytes": len(s_bytes),
+                    "url": f"{public_base}/assets/violin-1.jpg" if public_base else "/assets/violin-1.jpg"
+                })
+            except Exception:
+                pass
+
+    primary_media = media_meta_list[0] if media_meta_list else {}
+    now_iso = datetime.now().isoformat()
+    now_hm = time.strftime("%H:%M")
+
+    esito_list = []
+    errors = []
+    last_http_status = 0
+    last_resp_preview = ""
+
+    for target_url, target_plats in url_targets.items():
+        t_wants_ig = any("instagram" in p.lower() for p in target_plats)
+        t_wants_fb = any("facebook" in p.lower() for p in target_plats)
+
+        common_fields = {
+            "event": "test_webhook" if is_test else "publish_social_post",
+            "is_test": "true" if is_test else "false",
+            "atelier": "Liuteria De Lorenzi - Cremona",
+            "post_id": post.get("id") or "soc-test",
+            "title": titolo,
+            "caption": note or titolo,
+            "hashtags": hashtag,
+            "caption_full": caption_full,
+            "formato_post": formato_post,
+            "platforms": json.dumps(target_plats, ensure_ascii=False),
+            "platforms_csv": ", ".join(target_plats),
+            "publish_instagram": "true" if t_wants_ig else "false",
+            "publish_facebook": "true" if t_wants_fb else "false",
+            "instagram_account": cfg.get("instagramAccountLabel") or "@liuteriadelorenzi",
+            "facebook_page": cfg.get("facebookPageLabel") or "Liuteria De Lorenzi",
+            "media_count": str(len(media_meta_list)),
+            "media_type": "VIDEO" if primary_media.get("kind") == "video" else "IMAGE",
+            "media_filename": primary_media.get("name", ""),
+            "media_mime": primary_media.get("mimeType", ""),
+            "media_url": primary_media.get("url", ""),
+            "scheduled_at": data_prog,
+            "published_at": now_iso
+        }
+
+        try:
+            if payload_fmt == "multipart" and len(resolved_files) > 0:
+                body_bytes, content_type = build_multipart_request(common_fields, resolved_files)
+            else:
+                json_payload = dict(common_fields)
+                json_payload["publish_instagram"] = t_wants_ig
+                json_payload["publish_facebook"] = t_wants_fb
+                json_payload["platforms"] = target_plats
+                json_payload["media_files"] = media_meta_list
+                body_bytes = json.dumps(json_payload, ensure_ascii=False).encode("utf-8")
+                content_type = "application/json; charset=utf-8"
+
+            req = urllib.request.Request(target_url, data=body_bytes, method="POST")
+            req.add_header("Content-Type", content_type)
+            req.add_header("User-Agent", "AtelierLiuteria-SocialPublisher/2.0")
+            if secret:
+                req.add_header("X-Webhook-Secret", secret)
+                req.add_header("Authorization", f"Bearer {secret}")
+
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                last_http_status = resp.getcode()
+                resp_body = resp.read().decode("utf-8", errors="ignore").strip()
+                last_resp_preview = resp_body[:160]
+
+                for p_name in target_plats:
+                    esito_list.append({
+                        "piattaforma": p_name,
+                        "stato": f"Pubblicato via {provider_name} (HTTP {last_http_status})",
+                        "timestamp": now_hm
+                    })
+        except urllib.error.HTTPError as he:
+            err_body = ""
+            try:
+                err_body = he.read().decode("utf-8", errors="ignore").strip()[:160]
+            except Exception:
+                pass
+            errors.append(f"HTTP {he.code} su {', '.join(target_plats)}: {err_body or he.reason}")
+        except Exception as ex:
+            errors.append(f"Errore connessione Webhook ({', '.join(target_plats)}): {str(ex)}")
+
+    success = (len(errors) == 0 and len(esito_list) > 0)
+
+    log_entry = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "postId": post.get("id", "test"),
+        "titolo": titolo,
+        "platforms": platforms,
+        "isTest": is_test,
+        "success": success,
+        "status": f"HTTP {last_http_status}" if success else "; ".join(errors)
+    }
+    with social_lock:
+        social_state.setdefault("history", []).insert(0, log_entry)
+        social_state["history"] = social_state["history"][:30]
+
+    if success:
+        return {
+            "success": True,
+            "httpStatus": last_http_status,
+            "responsePreview": last_resp_preview or "Accepted",
+            "esito": esito_list,
+            "publishedAt": now_iso
+        }
+    else:
+        return {
+            "success": False,
+            "code": "WEBHOOK_ERROR",
+            "error": " | ".join(errors)
+        }
+
+class SocialSchedulerThread(threading.Thread):
+    """
+    Controlla in background 24/7 i post con stato 'Programmato' e autoPublish attivo.
+    Quando scatta la data/ora stabilita, invia automaticamente il post a Instagram e Facebook via Webhook.
+    """
+    def __init__(self, interval=15):
+        super().__init__(daemon=True)
+        self.interval = interval
+        self.running = True
+
+    def run(self):
+        print("[SocialScheduler] Motore pubblicazione automatica Social (IG/FB) attivo 24/7...")
+        while self.running:
+            try:
+                self.check_and_publish_due_posts()
+            except Exception as e:
+                print(f"[SocialScheduler] Errore nel ciclo di controllo: {e}")
+            time.sleep(self.interval)
+
+    def check_and_publish_due_posts(self):
+        now_dt = datetime.now()
+        state_changed = False
+
+        posts_snapshot = list(social_state.get("posts", []))
+        for post in posts_snapshot:
+            if not isinstance(post, dict):
+                continue
+            if post.get("stato") != "Programmato":
+                continue
+            if post.get("autoPublish") is False:
+                continue
+
+            raw_date = (post.get("dataProgrammata") or "").strip()
+            if not raw_date:
+                continue
+
+            norm_date = raw_date.replace(" ", "T")
+            target_dt = None
+            for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    target_dt = datetime.strptime(norm_date[:19], fmt)
+                    break
+                except ValueError:
+                    continue
+
+            if not target_dt or target_dt > now_dt:
+                continue
+
+            # Data/ora programmata raggiunta!
+            print(f"[SocialScheduler] Scattata pubblicazione automatica per '{post.get('titolo')}' ({raw_date})...")
+            res = dispatch_social_webhook(post, is_test=False)
+            if res.get("success"):
+                post["stato"] = "Pubblicato"
+                post["dataPubblicazioneEffettiva"] = res.get("publishedAt", now_dt.isoformat())
+                post["esitoPubblicazione"] = res.get("esito", [])
+                post["errorePubblicazione"] = ""
+                post["updatedAt"] = now_dt.isoformat()
+                print(f"[SocialScheduler] PUBBLICATO CON SUCCESSO: '{post.get('titolo')}'")
+            else:
+                err_msg = res.get("error", "Errore sconosciuto durante l'invio al Webhook")
+                post["stato"] = "Errore Accessi" if res.get("code") == "MISSING_WEBHOOK" else "Errore Invio"
+                post["errorePubblicazione"] = err_msg
+                post["updatedAt"] = now_dt.isoformat()
+                print(f"[SocialScheduler] BLOCCO PUBBLICAZIONE '{post.get('titolo')}': {err_msg}")
+
+            state_changed = True
+
+        if state_changed:
+            save_social_state()
+
+
+# ==============================================================================
+# AUTO-UPDATER DA GITHUB (BRANCH 'main') & OTA HTTP INSTANT UPDATE (ZERO SSH)
+# ==============================================================================
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "Delaoren/Gestionale-Liuteria")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+AUTO_UPDATE_INTERVAL = int(os.environ.get("AUTO_UPDATE_INTERVAL", 120))
+LAST_COMMIT_FILE = os.path.join(DIRECTORY, ".last_github_commit")
+
+PROTECTED_REL_PATHS = {
+    "social_state.json",
+    ".last_github_commit",
+    ".env"
+}
+PROTECTED_DIRS = {
+    "social_uploads",
+    ".venv",
+    "venv",
+    "env",
+    ".git",
+    "__pycache__"
+}
+
+httpd_server_instance = None
+update_lock = threading.Lock()
+
+def _read_current_local_commit():
+    # 1. Prova da git rev-parse HEAD
+    git_dir = os.path.join(DIRECTORY, ".git")
+    if os.path.isdir(git_dir):
+        try:
+            res = subprocess.run(
+                ["git", "-C", DIRECTORY, "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=5
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                sha = res.stdout.strip()
+                try:
+                    with open(LAST_COMMIT_FILE, "w", encoding="utf-8") as f:
+                        f.write(sha)
+                except Exception:
+                    pass
+                return sha
+        except Exception:
+            pass
+
+    # 2. Fallback da file .last_github_commit
+    if os.path.isfile(LAST_COMMIT_FILE):
+        try:
+            with open(LAST_COMMIT_FILE, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+update_state = {
+    "repo": GITHUB_REPO,
+    "branch": GITHUB_BRANCH,
+    "autoUpdateEnabled": True,
+    "intervalSeconds": AUTO_UPDATE_INTERVAL,
+    "currentCommit": _read_current_local_commit(),
+    "lastCheckTime": "",
+    "lastUpdateTime": "",
+    "status": "ready",
+    "lastMessage": f"Auto-update attivo su branch '{GITHUB_BRANCH}' (controllo ogni {AUTO_UPDATE_INTERVAL}s) + OTA HTTP attivo",
+    "history": []
+}
+
+def _file_sha256(filepath):
+    if not os.path.isfile(filepath):
+        return ""
+    h = hashlib.sha256()
+    try:
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+def schedule_server_restart(reason="Aggiornamento server.py"):
+    """Riavvia automaticamente il processo Python dopo aver completato la risposta HTTP"""
+    def _restart_worker():
+        print(f"[AutoUpdater] Riavvio automatico del server tra 1.2s ({reason})...", flush=True)
+        time.sleep(1.2)
+        global httpd_server_instance
+        if httpd_server_instance:
+            try:
+                httpd_server_instance.server_close()
+            except Exception:
+                pass
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as e:
+            print(f"[AutoUpdater] Fallback exit per riavvio systemd: {e}", flush=True)
+            os._exit(0)
+
+    t = threading.Thread(target=_restart_worker, daemon=True)
+    t.start()
+
+def check_and_apply_github_update(force=False):
+    """
+    Controlla il branch 'main' su GitHub (Delaoren/Gestionale-Liuteria).
+    Funziona sia tramite 'git fetch/reset' (se .git è presente), sia tramite
+    GitHub REST API + Tarball download (se installato senza .git).
+    """
+    with update_lock:
+        now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+        update_state["lastCheckTime"] = now_str
+        server_py_path = os.path.join(DIRECTORY, "server.py")
+        old_server_hash = _file_sha256(server_py_path)
+
+        # 1. Tenta prima via Git CLI se .git esiste
+        git_dir = os.path.join(DIRECTORY, ".git")
+        if os.path.isdir(git_dir):
+            try:
+                fetch_res = subprocess.run(
+                    ["git", "-C", DIRECTORY, "fetch", "origin", GITHUB_BRANCH, "--quiet"],
+                    capture_output=True, text=True, timeout=20
+                )
+                if fetch_res.returncode == 0:
+                    local_res = subprocess.run(
+                        ["git", "-C", DIRECTORY, "rev-parse", "HEAD"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    remote_res = subprocess.run(
+                        ["git", "-C", DIRECTORY, "rev-parse", f"origin/{GITHUB_BRANCH}"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    local_sha = local_res.stdout.strip()
+                    remote_sha = remote_res.stdout.strip()
+
+                    if remote_sha and (local_sha != remote_sha or force):
+                        diff_res = subprocess.run(
+                            ["git", "-C", DIRECTORY, "diff", "--name-only", "HEAD", f"origin/{GITHUB_BRANCH}"],
+                            capture_output=True, text=True, timeout=10
+                        )
+                        changed_files = [line.strip() for line in diff_res.stdout.splitlines() if line.strip()]
+
+                        reset_res = subprocess.run(
+                            ["git", "-C", DIRECTORY, "reset", "--hard", f"origin/{GITHUB_BRANCH}"],
+                            capture_output=True, text=True, timeout=15
+                        )
+                        if reset_res.returncode == 0:
+                            update_state["currentCommit"] = remote_sha
+                            update_state["lastUpdateTime"] = now_str
+                            update_state["status"] = "updated"
+                            msg = f"Aggiornato da GitHub ({GITHUB_BRANCH} @ {remote_sha[:7]}) - {len(changed_files)} file aggiornati"
+                            update_state["lastMessage"] = msg
+                            try:
+                                with open(LAST_COMMIT_FILE, "w", encoding="utf-8") as f:
+                                    f.write(remote_sha)
+                            except Exception:
+                                pass
+
+                            new_server_hash = _file_sha256(server_py_path)
+                            restarting = (old_server_hash != new_server_hash)
+                            update_state.setdefault("history", []).insert(0, {
+                                "timestamp": now_str,
+                                "source": f"GitHub ({GITHUB_BRANCH})",
+                                "commit": remote_sha[:7],
+                                "filesCount": len(changed_files),
+                                "restarted": restarting
+                            })
+                            update_state["history"] = update_state["history"][:25]
+                            print(f"[AutoUpdater] {msg}", flush=True)
+                            if restarting:
+                                schedule_server_restart(f"GitHub commit {remote_sha[:7]}")
+                            return {
+                                "success": True,
+                                "updated": True,
+                                "commit": remote_sha,
+                                "changedFiles": changed_files,
+                                "restarting": restarting,
+                                "message": msg
+                            }
+                    else:
+                        update_state["currentCommit"] = local_sha or remote_sha
+                        update_state["status"] = "up_to_date"
+                        update_state["lastMessage"] = f"Server allineato a GitHub ({GITHUB_BRANCH} @ {(local_sha or '')[:7]})"
+                        return {
+                            "success": True,
+                            "updated": False,
+                            "commit": local_sha,
+                            "message": update_state["lastMessage"]
+                        }
+            except Exception as git_err:
+                print(f"[AutoUpdater] Git CLI fallback su HTTPS API ({git_err})", flush=True)
+
+        # 2. Modalità GitHub API + Tarball HTTPS (funziona anche senza .git installato!)
+        try:
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
+            req = urllib.request.Request(api_url)
+            req.add_header("User-Agent", "AtelierLiuteria-AutoUpdater/2.0")
+            req.add_header("Accept", "application/vnd.github.v3+json")
+
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                commit_info = json.loads(resp.read().decode("utf-8"))
+                remote_sha = (commit_info.get("sha") or "").strip()
+                commit_msg = ((commit_info.get("commit") or {}).get("message") or "").splitlines()[0]
+
+            local_sha = update_state.get("currentCommit") or _read_current_local_commit()
+            if not remote_sha:
+                return {"success": False, "error": "Impossibile leggere lo SHA dal branch main di GitHub"}
+
+            if remote_sha == local_sha and not force:
+                update_state["status"] = "up_to_date"
+                update_state["lastMessage"] = f"Server allineato a GitHub ({GITHUB_BRANCH} @ {remote_sha[:7]})"
+                return {
+                    "success": True,
+                    "updated": False,
+                    "commit": remote_sha,
+                    "message": update_state["lastMessage"]
+                }
+
+            # Scarica ed estrai il tarball del branch 'main'
+            tar_url = f"https://codeload.github.com/{GITHUB_REPO}/tar.gz/refs/heads/{GITHUB_BRANCH}"
+            t_req = urllib.request.Request(tar_url)
+            t_req.add_header("User-Agent", "AtelierLiuteria-AutoUpdater/2.0")
+
+            with urllib.request.urlopen(t_req, timeout=30) as t_resp:
+                tar_bytes = t_resp.read()
+
+            updated_files = []
+            with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    # Rimuovi la cartella radice del tarball (es. Gestionale-Liuteria-main/...)
+                    parts = member.name.split("/", 1)
+                    if len(parts) < 2 or not parts[1]:
+                        continue
+                    rel_path = parts[1].strip("/")
+                    top_dir = rel_path.split("/")[0]
+
+                    if rel_path in PROTECTED_REL_PATHS or top_dir in PROTECTED_DIRS or ".." in rel_path:
+                        continue
+
+                    dest_path = os.path.join(DIRECTORY, rel_path.replace("/", os.sep))
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    extracted_f = tar.extractfile(member)
+                    if extracted_f is None:
+                        continue
+                    new_bytes = extracted_f.read()
+                    new_hash = hashlib.sha256(new_bytes).hexdigest()
+                    old_hash = _file_sha256(dest_path)
+
+                    if new_hash != old_hash:
+                        with open(dest_path, "wb") as out_f:
+                            out_f.write(new_bytes)
+                        updated_files.append(rel_path)
+
+            try:
+                with open(LAST_COMMIT_FILE, "w", encoding="utf-8") as f:
+                    f.write(remote_sha)
+            except Exception:
+                pass
+
+            update_state["currentCommit"] = remote_sha
+            update_state["lastUpdateTime"] = now_str
+            update_state["status"] = "updated"
+            msg = f"Aggiornato da GitHub ({GITHUB_BRANCH} @ {remote_sha[:7]}: '{commit_msg[:45]}') - {len(updated_files)} file modificati"
+            update_state["lastMessage"] = msg
+
+            new_server_hash = _file_sha256(server_py_path)
+            restarting = (old_server_hash != new_server_hash)
+            update_state.setdefault("history", []).insert(0, {
+                "timestamp": now_str,
+                "source": f"GitHub Tarball ({GITHUB_BRANCH})",
+                "commit": remote_sha[:7],
+                "filesCount": len(updated_files),
+                "restarted": restarting
+            })
+            update_state["history"] = update_state["history"][:25]
+            print(f"[AutoUpdater] {msg}", flush=True)
+
+            if restarting:
+                schedule_server_restart(f"GitHub tarball {remote_sha[:7]}")
+
+            return {
+                "success": True,
+                "updated": len(updated_files) > 0,
+                "commit": remote_sha,
+                "changedFiles": updated_files,
+                "restarting": restarting,
+                "message": msg
+            }
+        except Exception as e:
+            err_msg = f"Errore controllo GitHub ({GITHUB_BRANCH}): {str(e)}"
+            update_state["status"] = "error"
+            update_state["lastMessage"] = err_msg
+            return {"success": False, "error": err_msg}
+
+def apply_ota_http_update(files_payload, commit_sha="", source_label="OTA HTTP (PC Windows)"):
+    """
+    Applica un aggiornamento diretto via HTTP (senza SSH e senza password).
+    Scrive solo i file effettivamente modificati e riavvia server.py se necessario.
+    """
+    with update_lock:
+        if not isinstance(files_payload, list):
+            return {"success": False, "error": "Formato files non valido"}
+
+        now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+        server_py_path = os.path.join(DIRECTORY, "server.py")
+        old_server_hash = _file_sha256(server_py_path)
+        updated_files = []
+
+        for item in files_payload:
+            if not isinstance(item, dict):
+                continue
+            rel_path = (item.get("path") or "").replace("\\", "/").lstrip("./").lstrip("/")
+            if not rel_path or ".." in rel_path:
+                continue
+            top_dir = rel_path.split("/")[0]
+            if rel_path in PROTECTED_REL_PATHS or top_dir in PROTECTED_DIRS:
+                continue
+
+            b64_data = item.get("contentBase64")
+            raw_text = item.get("content")
+            if b64_data is not None:
+                try:
+                    file_bytes = base64.b64decode(b64_data)
+                except Exception:
+                    continue
+            elif raw_text is not None:
+                file_bytes = raw_text.encode("utf-8")
+            else:
+                continue
+
+            dest_path = os.path.join(DIRECTORY, rel_path.replace("/", os.sep))
+            new_hash = hashlib.sha256(file_bytes).hexdigest()
+            old_hash = _file_sha256(dest_path)
+
+            if new_hash != old_hash:
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with open(dest_path, "wb") as f:
+                    f.write(file_bytes)
+                updated_files.append(rel_path)
+
+        if commit_sha:
+            update_state["currentCommit"] = commit_sha
+            try:
+                with open(LAST_COMMIT_FILE, "w", encoding="utf-8") as f:
+                    f.write(commit_sha)
+            except Exception:
+                pass
+
+        new_server_hash = _file_sha256(server_py_path)
+        restarting = (old_server_hash != new_server_hash)
+
+        update_state["lastCheckTime"] = now_str
+        if updated_files:
+            update_state["lastUpdateTime"] = now_str
+            update_state["status"] = "updated"
+            update_state["lastMessage"] = f"Aggiornamento OTA applicato ({len(updated_files)} file modificati da {source_label})"
+            update_state.setdefault("history", []).insert(0, {
+                "timestamp": now_str,
+                "source": source_label,
+                "commit": (commit_sha or update_state.get("currentCommit") or "locale")[:7],
+                "filesCount": len(updated_files),
+                "restarted": restarting
+            })
+            update_state["history"] = update_state["history"][:25]
+            print(f"[OTA Update] Aggiornati {len(updated_files)} file: {', '.join(updated_files)}", flush=True)
+
+        if restarting:
+            schedule_server_restart("OTA HTTP update di server.py")
+
+        return {
+            "success": True,
+            "updated": len(updated_files) > 0,
+            "updatedFiles": updated_files,
+            "restarting": restarting,
+            "message": f"{len(updated_files)} file aggiornati sul server" if updated_files else "Tutti i file sul server sono già identici (nessuna modifica necessaria)"
+        }
+
+class GitHubAutoUpdaterThread(threading.Thread):
+    """Controlla automaticamente il branch 'main' su GitHub ogni AUTO_UPDATE_INTERVAL secondi"""
+    def __init__(self, interval=AUTO_UPDATE_INTERVAL):
+        super().__init__(daemon=True)
+        self.interval = max(30, interval)
+        self.running = True
+
+    def run(self):
+        print(f"[AutoUpdater] Monitoraggio automatico GitHub ({GITHUB_REPO} @ branch '{GITHUB_BRANCH}') ogni {self.interval}s...", flush=True)
+        # Primo controllo dopo 10 secondi dall'avvio
+        time.sleep(10)
+        while self.running:
+            try:
+                if update_state.get("autoUpdateEnabled", True):
+                    check_and_apply_github_update(force=False)
+            except Exception as e:
+                print(f"[AutoUpdater] Eccezione controllo GitHub: {e}", flush=True)
+            time.sleep(self.interval)
+
 class LutherieHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
@@ -328,7 +1146,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
@@ -354,6 +1172,25 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "topics": telemetry_data["recent_topics"],
                 "custom_topic": telemetry_data["custom_topic"]
             }).encode('utf-8'))
+        elif self.path.startswith('/api/social/status'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "config": social_state.get("config", {}),
+                "posts": social_state.get("posts", []),
+                "history": social_state.get("history", [])[:20],
+                "serverTime": time.strftime("%Y-%m-%dT%H:%M:%S")
+            }, ensure_ascii=False).encode('utf-8'))
+        elif self.path.startswith('/api/system/update-status'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "update": update_state
+            }, ensure_ascii=False).encode('utf-8'))
         else:
             super().do_GET()
 
@@ -364,8 +1201,266 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_mqtt_test_publish()
         elif self.path.startswith('/api/mqtt/config'):
             self.handle_mqtt_config()
+        elif self.path.startswith('/api/social/config'):
+            self.handle_social_config()
+        elif self.path.startswith('/api/social/sync-posts'):
+            self.handle_social_sync_posts()
+        elif self.path.startswith('/api/social/upload-media'):
+            self.handle_social_upload_media()
+        elif self.path.startswith('/api/social/publish'):
+            self.handle_social_publish()
+        elif self.path.startswith('/api/system/check-update'):
+            self.handle_system_check_update()
+        elif self.path.startswith('/api/system/ota-update'):
+            self.handle_system_ota_update()
         else:
             self.send_error(404, "Endpoint non trovato")
+
+    def handle_system_check_update(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            force = bool(req_data.get("force", False))
+            res = check_and_apply_github_update(force=force)
+            res["update"] = update_state
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_system_ota_update(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            files_list = req_data.get("files", [])
+            commit_sha = req_data.get("commit", "")
+            source_label = req_data.get("source", "OTA HTTP (PC Windows)")
+            res = apply_ota_http_update(files_list, commit_sha=commit_sha, source_label=source_label)
+            res["update"] = update_state
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_social_config(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            if isinstance(req_data, dict):
+                social_state["config"].update(req_data)
+                has_any_url = bool(
+                    (social_state["config"].get("webhookUrl") or "").strip() or
+                    (social_state["config"].get("instagramWebhookUrl") or "").strip() or
+                    (social_state["config"].get("facebookWebhookUrl") or "").strip()
+                )
+                social_state["config"]["enabled"] = has_any_url
+                save_social_state()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "config": social_state["config"]
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_social_sync_posts(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            client_posts = req_data.get("posts", []) if isinstance(req_data, dict) else []
+            client_config = req_data.get("config") if isinstance(req_data, dict) else None
+
+            if isinstance(client_config, dict) and (client_config.get("webhookUrl") or client_config.get("instagramWebhookUrl") or client_config.get("facebookWebhookUrl")):
+                social_state["config"].update(client_config)
+
+            # Merge server posts and client posts so server-side auto-publications are preserved
+            server_map = {p.get("id"): p for p in social_state.get("posts", []) if isinstance(p, dict) and p.get("id")}
+            merged = []
+            for cp in client_posts:
+                if not isinstance(cp, dict) or not cp.get("id"):
+                    continue
+                pid = cp["id"]
+                sp = server_map.get(pid)
+                if sp:
+                    # If server published or flagged error while client still had "Programmato", keep server result unless client explicitly rescheduled
+                    sp_time = sp.get("updatedAt") or ""
+                    cp_time = cp.get("updatedAt") or ""
+                    if sp.get("stato") in ("Pubblicato", "Errore Accessi", "Errore Invio") and cp.get("stato") == "Programmato" and sp_time >= cp_time:
+                        merged.append(sp)
+                    else:
+                        merged.append(cp)
+                else:
+                    merged.append(cp)
+
+            social_state["posts"] = merged
+            save_social_state()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "posts": social_state["posts"],
+                "config": social_state["config"]
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_social_upload_media(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        media_id = (self.headers.get('X-Media-Id') or f"smed-{int(time.time()*1000)}").strip()
+        raw_name = urllib.parse.unquote(self.headers.get('X-Media-Name') or "media_atelier.jpg")
+        mime_type = (self.headers.get('X-Media-Mime') or mimetypes.guess_type(raw_name)[0] or "image/jpeg").strip()
+
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)
+        stored_filename = f"{media_id}_{safe_name}"
+        disk_path = os.path.join(SOCIAL_UPLOADS_DIR, stored_filename)
+        rel_path = f"social_uploads/{stored_filename}"
+
+        try:
+            file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
+            with open(disk_path, "wb") as f:
+                f.write(file_bytes)
+
+            social_state.setdefault("mediaFiles", {})[media_id] = {
+                "id": media_id,
+                "name": raw_name,
+                "mimeType": mime_type,
+                "sizeBytes": len(file_bytes),
+                "relPath": rel_path,
+                "uploadedAt": datetime.now().isoformat()
+            }
+            save_social_state()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "mediaId": media_id,
+                "url": "/" + rel_path,
+                "sizeBytes": len(file_bytes)
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_social_publish(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            is_test = bool(req_data.get("test", False))
+            config_override = req_data.get("config") if isinstance(req_data.get("config"), dict) else None
+
+            if config_override:
+                social_state["config"].update(config_override)
+                has_any_url = bool(
+                    (social_state["config"].get("webhookUrl") or "").strip() or
+                    (social_state["config"].get("instagramWebhookUrl") or "").strip() or
+                    (social_state["config"].get("facebookWebhookUrl") or "").strip()
+                )
+                social_state["config"]["enabled"] = has_any_url
+
+            post_obj = req_data.get("post")
+            post_id = req_data.get("postId")
+
+            if not isinstance(post_obj, dict) and post_id:
+                for p in social_state.get("posts", []):
+                    if isinstance(p, dict) and p.get("id") == post_id:
+                        post_obj = p
+                        break
+
+            if not isinstance(post_obj, dict):
+                post_obj = {
+                    "id": "soc-test-webhook",
+                    "titolo": "Test Connessione Automatica Instagram & Facebook — Liuteria De Lorenzi",
+                    "note": "Verifica collegamento Webhook dal Gestionale Bottega Liuteria De Lorenzi (Cremona). Pronto per la pubblicazione automatica di Foto High-Res e Video 4K.",
+                    "hashtag": "#liuteriadelorenzi #cremona #violinmaker #lutherie #stradivari",
+                    "piattaforme": ["Instagram", "Facebook"],
+                    "formatoPost": "Post Foto / Carosello HD",
+                    "dataProgrammata": time.strftime("%Y-%m-%dT%H:%M"),
+                    "mediaAttachments": []
+                }
+
+            result = dispatch_social_webhook(post_obj, config_override=config_override, is_test=is_test)
+
+            if is_test:
+                social_state["config"]["lastTestStatus"] = "connected" if result.get("success") else "error"
+                social_state["config"]["lastTestTime"] = time.strftime("%d/%m/%Y %H:%M:%S")
+                social_state["config"]["lastTestMessage"] = (
+                    f"Connessione riuscita (HTTP {result.get('httpStatus', 200)})"
+                    if result.get("success")
+                    else result.get("error", "Errore test")
+                )
+            elif post_obj.get("id"):
+                # Update post in server state
+                target_id = post_obj.get("id")
+                found_in_state = False
+                for idx, sp in enumerate(social_state.get("posts", [])):
+                    if isinstance(sp, dict) and sp.get("id") == target_id:
+                        if result.get("success"):
+                            sp["stato"] = "Pubblicato"
+                            sp["dataPubblicazioneEffettiva"] = result.get("publishedAt")
+                            sp["esitoPubblicazione"] = result.get("esito", [])
+                            sp["errorePubblicazione"] = ""
+                        else:
+                            sp["stato"] = "Errore Accessi" if result.get("code") == "MISSING_WEBHOOK" else "Errore Invio"
+                            sp["errorePubblicazione"] = result.get("error", "")
+                        sp["updatedAt"] = datetime.now().isoformat()
+                        post_obj = sp
+                        found_in_state = True
+                        break
+                if not found_in_state:
+                    if result.get("success"):
+                        post_obj["stato"] = "Pubblicato"
+                        post_obj["dataPubblicazioneEffettiva"] = result.get("publishedAt")
+                        post_obj["esitoPubblicazione"] = result.get("esito", [])
+                        post_obj["errorePubblicazione"] = ""
+                    else:
+                        post_obj["stato"] = "Errore Accessi" if result.get("code") == "MISSING_WEBHOOK" else "Errore Invio"
+                        post_obj["errorePubblicazione"] = result.get("error", "")
+                    post_obj["updatedAt"] = datetime.now().isoformat()
+                    social_state.setdefault("posts", []).insert(0, post_obj)
+
+            save_social_state()
+
+            result["post"] = post_obj
+            result["config"] = social_state["config"]
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
     def handle_mqtt_test_publish(self):
         global mqtt_bridge_instance
@@ -464,32 +1559,48 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
 
 def run_server():
-    global mqtt_bridge_instance
+    global mqtt_bridge_instance, httpd_server_instance
     mqtt_bridge_instance = MqttBridge()
     mqtt_bridge_instance.start()
 
     esphome_poller = EsphomePoller()
     esphome_poller.start()
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), LutherieHandler) as httpd:
+    social_scheduler = SocialSchedulerThread(interval=15)
+    social_scheduler.start()
+
+    github_updater = GitHubAutoUpdaterThread(interval=AUTO_UPDATE_INTERVAL)
+    github_updater.start()
+
+    no_browser = ("--no-browser" in sys.argv) or (os.environ.get("NO_BROWSER", "").lower() in ("1", "true", "yes"))
+
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    socketserver.ThreadingTCPServer.daemon_threads = True
+    with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), LutherieHandler) as httpd:
+        httpd_server_instance = httpd
         url = f"http://localhost:{PORT}/index.html"
-        print("==================================================================")
-        print("  ATELIER LIUTERIA MASTER - SUITE GESTIONALE")
-        print("==================================================================")
-        print(f"  Server Web locale:    {url}")
-        print(f"  Sensore M5Stack:      http://{DEFAULT_ESPHOME_HOST}/ (ESPHome Live)")
-        print(f"  Bridge MQTT attivo:   Broker {DEFAULT_MQTT_BROKER}:{DEFAULT_MQTT_PORT}")
-        print("  Proxy Home Assistant: /api/ha-proxy (Zero problemi CORS)")
-        print("==================================================================")
-        print("  Apertura del browser in corso...")
-        print("  Premi CTRL+C per arrestare il server.")
-        print("==================================================================")
-        webbrowser.open(url)
+        print("==================================================================", flush=True)
+        print("  ATELIER LIUTERIA MASTER - SUITE GESTIONALE", flush=True)
+        print("==================================================================", flush=True)
+        print(f"  Server Web in ascolto: 0.0.0.0:{PORT} ({url})", flush=True)
+        print(f"  Sensore M5Stack:       http://{DEFAULT_ESPHOME_HOST}/ (ESPHome Live)", flush=True)
+        print(f"  Bridge MQTT attivo:    Broker {DEFAULT_MQTT_BROKER}:{DEFAULT_MQTT_PORT}", flush=True)
+        print("  Proxy Home Assistant:  /api/ha-proxy (Zero problemi CORS)", flush=True)
+        print("  Social Scheduler 24/7: /api/social/* (Webhook IG & FB Attivo)", flush=True)
+        print(f"  Auto-Update GitHub:    {GITHUB_REPO} (branch '{GITHUB_BRANCH}') + OTA HTTP", flush=True)
+        print("==================================================================", flush=True)
+        if not no_browser:
+            print("  Apertura del browser in corso...", flush=True)
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        print("  Servizio avviato. Premi CTRL+C per arrestare il server.", flush=True)
+        print("==================================================================", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("\nArresto del server.")
+            print("\nArresto del server.", flush=True)
 
 if __name__ == '__main__':
     run_server()
