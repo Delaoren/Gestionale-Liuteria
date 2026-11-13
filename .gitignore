@@ -17,5 +17,6 @@ Desktop.ini
 # Logs and local database files if any
 *.log
 social_uploads/
+biblioteca_uploads/
 social_state.json
 .last_github_commit

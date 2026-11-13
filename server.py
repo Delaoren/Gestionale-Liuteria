@@ -336,8 +336,22 @@ mqtt_bridge_instance = None
 # SOCIAL WEBHOOK BRIDGE (MAKE.COM / ZAPIER / N8N) & 24/7 SERVER SCHEDULER
 # ==============================================================================
 SOCIAL_UPLOADS_DIR = os.path.join(DIRECTORY, "social_uploads")
+BIBLIOTECA_UPLOADS_DIR = os.path.join(DIRECTORY, "biblioteca_uploads")
 SOCIAL_STATE_FILE = os.path.join(DIRECTORY, "social_state.json")
 os.makedirs(SOCIAL_UPLOADS_DIR, exist_ok=True)
+os.makedirs(BIBLIOTECA_UPLOADS_DIR, exist_ok=True)
+
+# Registra MIME types per i formati Ebook più comuni
+mimetypes.add_type("application/pdf", ".pdf")
+mimetypes.add_type("application/epub+zip", ".epub")
+mimetypes.add_type("application/x-mobipocket-ebook", ".mobi")
+mimetypes.add_type("application/vnd.amazon.ebook", ".azw")
+mimetypes.add_type("application/vnd.amazon.ebook", ".azw3")
+mimetypes.add_type("image/vnd.djvu", ".djvu")
+mimetypes.add_type("image/vnd.djvu", ".djv")
+mimetypes.add_type("application/x-fictionbook+xml", ".fb2")
+mimetypes.add_type("application/vnd.comicbook+zip", ".cbz")
+mimetypes.add_type("application/vnd.comicbook-rar", ".cbr")
 
 social_lock = threading.Lock()
 
@@ -760,6 +774,7 @@ PROTECTED_REL_PATHS = {
 }
 PROTECTED_DIRS = {
     "social_uploads",
+    "biblioteca_uploads",
     ".venv",
     "venv",
     "env",
@@ -1146,7 +1161,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime, X-Book-Id, X-Book-Name, X-Book-Mime')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
@@ -1209,12 +1224,45 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_social_upload_media()
         elif self.path.startswith('/api/social/publish'):
             self.handle_social_publish()
+        elif self.path.startswith('/api/biblioteca/upload-file'):
+            self.handle_biblioteca_upload_file()
         elif self.path.startswith('/api/system/check-update'):
             self.handle_system_check_update()
         elif self.path.startswith('/api/system/ota-update'):
             self.handle_system_ota_update()
         else:
             self.send_error(404, "Endpoint non trovato")
+
+    def handle_biblioteca_upload_file(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        book_id = (self.headers.get('X-Book-Id') or f"ebk-{int(time.time()*1000)}").strip()
+        raw_name = urllib.parse.unquote(self.headers.get('X-Book-Name') or "volume_liuteria.pdf")
+        mime_type = (self.headers.get('X-Book-Mime') or mimetypes.guess_type(raw_name)[0] or "application/pdf").strip()
+
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)
+        stored_filename = f"{book_id}_{safe_name}"
+        disk_path = os.path.join(BIBLIOTECA_UPLOADS_DIR, stored_filename)
+        rel_path = f"biblioteca_uploads/{stored_filename}"
+
+        try:
+            file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
+            with open(disk_path, "wb") as f:
+                f.write(file_bytes)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "fileId": book_id,
+                "url": "/" + rel_path,
+                "sizeBytes": len(file_bytes)
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
     def handle_system_check_update(self):
         content_length = int(self.headers.get('Content-Length', 0))

@@ -4,49 +4,298 @@
 
 window.AppModules = {
 
-    // 1. Biblioteca
+    // 1. Biblioteca (Archivio Digitale Ebook & PDF Tecnici di Liuteria)
     renderBiblioteca: function(container) {
-        const items = window.atelierDB.data.biblioteca || [];
+        const allItems = window.atelierDB.data.biblioteca || [];
+        const activeFormatFilter = window.bibliotecaFormatFilter || 'all';
+        const activeCatFilter = window.bibliotecaCategoryFilter || 'all';
+
+        const formatBytes = window.formatSocialBytes || function(bytes) {
+            if (!bytes || bytes <= 0) return "0 KB";
+            const mb = bytes / (1024 * 1024);
+            if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
+            if (mb >= 1) return mb.toFixed(1) + " MB";
+            return Math.max(1, Math.round(bytes / 1024)) + " KB";
+        };
+
+        const detectBookFormatGroup = (item) => {
+            const fmt = ((item.formato || '') + ' ' + (item.fileExt || '') + ' ' + (item.fileName || '')).toLowerCase();
+            if (fmt.includes('epub')) return 'epub';
+            if (fmt.includes('mobi') || fmt.includes('azw') || fmt.includes('kindle') || fmt.includes('kfx')) return 'kindle';
+            if (fmt.includes('djvu') || fmt.includes('djv') || fmt.includes('fb2') || fmt.includes('cbz') || fmt.includes('cbr') || fmt.includes('txt') || fmt.includes('docx') || fmt.includes('odt') || fmt.includes('rtf') || fmt.includes('md')) return 'other_ebook';
+            if (fmt.includes('pdf') || fmt.includes('blueprint') || fmt.includes('tomograf') || fmt.includes('manuale') || fmt.includes('articolo')) return 'pdf';
+            return 'pdf';
+        };
+
+        const getFormatBadgeMeta = (item) => {
+            const grp = detectBookFormatGroup(item);
+            const ext = (item.fileExt || '').toUpperCase().replace('.', '');
+            if (grp === 'epub') {
+                return { label: item.formato || 'EPUB Ebook', short: ext || 'EPUB', color: '#10b981', bg: 'rgba(16, 185, 129, 0.16)', border: 'rgba(16, 185, 129, 0.45)', icon: 'book-open-check' };
+            }
+            if (grp === 'kindle') {
+                return { label: item.formato || 'MOBI / AZW3', short: ext || 'MOBI/AZW3', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.16)', border: 'rgba(245, 158, 11, 0.45)', icon: 'tablet' };
+            }
+            if (grp === 'other_ebook') {
+                return { label: item.formato || (ext ? `${ext} Ebook` : 'Ebook / Testo'), short: ext || 'EBOOK', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.16)', border: 'rgba(56, 189, 248, 0.45)', icon: 'book' };
+            }
+            return { label: item.formato || 'PDF Documento', short: ext || 'PDF', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.16)', border: 'rgba(168, 85, 247, 0.45)', icon: 'file-text' };
+        };
+
+        let pdfCount = 0;
+        let epubCount = 0;
+        let kindleCount = 0;
+        let otherEbookCount = 0;
+        let withFileCount = 0;
+        let totalBytes = 0;
+
+        allItems.forEach(it => {
+            const g = detectBookFormatGroup(it);
+            if (g === 'pdf') pdfCount++;
+            else if (g === 'epub') epubCount++;
+            else if (g === 'kindle') kindleCount++;
+            else otherEbookCount++;
+
+            if (it.fileId || it.fileUrl || it.fileName) {
+                withFileCount++;
+            }
+            if (typeof it.fileSizeBytes === 'number' && !isNaN(it.fileSizeBytes)) {
+                totalBytes += it.fileSizeBytes;
+            }
+        });
+
+        const filteredItems = allItems.filter(item => {
+            const grp = detectBookFormatGroup(item);
+            const hasFile = Boolean(item.fileId || item.fileUrl || item.fileName);
+            if (activeFormatFilter === 'pdf' && grp !== 'pdf') return false;
+            if (activeFormatFilter === 'epub' && grp !== 'epub') return false;
+            if (activeFormatFilter === 'kindle' && grp !== 'kindle') return false;
+            if (activeFormatFilter === 'other_ebook' && grp !== 'other_ebook') return false;
+            if (activeFormatFilter === 'with_file' && !hasFile) return false;
+
+            if (activeCatFilter !== 'all' && item.categoria !== activeCatFilter) return false;
+            return true;
+        });
+
+        const categories = Array.from(new Set([
+            "Disegni e Modelli",
+            "Ricette e Trattamenti",
+            "Analisi Scientifica",
+            "Tecnica Costruttiva",
+            "Storia & Liuteria",
+            "Acustica Applicata",
+            ...allItems.map(i => i.categoria).filter(Boolean)
+        ]));
+
+        const ebookAcceptAttr = ".pdf,.epub,.mobi,.azw,.azw3,.kfx,.djvu,.djv,.fb2,.cbz,.cbr,.txt,.md,.rtf,.doc,.docx,.odt,application/pdf,application/epub+zip,application/x-mobipocket-ebook,image/vnd.djvu,text/plain,text/markdown";
+
         container.innerHTML = `
-            <div class="glass-panel">
-                <div class="panel-header">
-                    <div class="panel-title">
-                        <i data-lucide="book-open" class="lucide-book-open" style="color: var(--accent-blue);"></i>
-                        Biblioteca & Documentazione Tecnica (${items.length})
+            <!-- Top KPIs Biblioteca Digitale -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.4rem;">
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-blue);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(59, 130, 246, 0.15); color:var(--accent-blue); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="library"></i>
                     </div>
-                    <button class="btn btn-primary" onclick="window.openAddModal('biblioteca')">
-                        <i data-lucide="plus" class="lucide-plus"></i> Aggiungi Documento
-                    </button>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Volumi & Trattati</div>
+                        <div style="font-size:1.45rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${allItems.length} <small style="font-size:0.78rem; color:var(--accent-cyan); font-family:var(--font-body); font-weight:600;">in archivio</small></div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">${withFileCount} con file Ebook/PDF allegato</div>
+                    </div>
                 </div>
-                <div class="cards-subgrid">
-                    ${items.map(item => `
-                        <div class="info-card">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.8rem;">
-                                <span class="badge badge-info">${item.categoria}</span>
-                                <span style="font-size:0.8rem; color:var(--text-muted);">${item.anno} • ${item.pagine} pag.</span>
-                            </div>
-                            <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.1rem; margin-bottom:0.5rem;">${item.titolo}</h4>
-                            <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.8rem;"><strong>Autore:</strong> ${item.autore}</p>
-                            <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1rem; font-style:italic;">"${item.note}"</p>
-                            <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem;">
-                                ${item.tags ? item.tags.map(t => `<span style="background:rgba(255,255,255,0.06); font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:4px; color:var(--accent-gold);">${t}</span>`).join('') : ''}
-                            </div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
-                                <span class="badge badge-purple">${item.formato}</span>
-                                <div style="display:flex; gap:0.4rem;">
-                                    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Apertura anteprima documentale per: ${item.titolo}')">
-                                        <i data-lucide="file-text" class="lucide-file-text"></i> Leggi PDF
-                                    </button>
-                                    <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('biblioteca', '${item.id}', '${item.titolo}')" title="Elimina documento">
-                                        <i data-lucide="trash-2" class="lucide-trash-2"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-emerald);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(16, 185, 129, 0.15); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="book-open-check"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Formati Ebook & PDF</div>
+                        <div style="font-size:1.15rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${pdfCount} PDF • ${epubCount} EPUB • ${kindleCount + otherEbookCount} Ebook</div>
+                        <div style="font-size:0.72rem; color:var(--accent-emerald);">Supporto PDF, EPUB, MOBI, AZW3, DJVU, FB2</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-gold);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(245, 158, 11, 0.15); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="hard-drive"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Archivio Digitale</div>
+                        <div style="font-size:1.35rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${formatBytes(totalBytes)}</div>
+                        <div style="font-size:0.72rem; color:var(--accent-gold);">Lettore PDF, EPUB & Testo Integrato</div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Direct Ebook & PDF Upload Banner -->
+            <div id="bibliotecaPageDropzone" class="glass-panel" style="margin-bottom:1.5rem; background:linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.08)); border:1.5px dashed rgba(59, 130, 246, 0.5); padding:1.35rem 1.6rem; transition:all 0.25s ease;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.2rem;">
+                    <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:260px;">
+                        <div style="width:54px; height:54px; border-radius:14px; background:rgba(59, 130, 246, 0.2); border:1px solid var(--accent-cyan); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="book-up" style="width:28px; height:28px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.15rem; margin-bottom:0.2rem;">
+                                Carica Ebook, Trattati di Liuteria e Documenti PDF
+                            </h3>
+                            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                                Trascina qui i tuoi libri o selezionali dal dispositivo. Formati supportati: <strong>PDF, EPUB, MOBI, AZW / AZW3 (Kindle), DJVU, FB2, CBZ / CBR, TXT, MD, RTF, DOCX, ODT</strong> (anche di grandi dimensioni).
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center;">
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.65rem 1.1rem; font-size:0.85rem;">
+                            <i data-lucide="file-text"></i> 📄 Carica PDF / Blueprint
+                            <input type="file" accept=".pdf,application/pdf" multiple onchange="window.handleDirectBibliotecaPageUpload(event)" style="display:none;">
+                        </label>
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.65rem 1.1rem; font-size:0.85rem; background:linear-gradient(135deg, #059669, #047857); color:#fff; border-color:#34d399;">
+                            <i data-lucide="book-open"></i> 📚 Carica Ebook (EPUB, MOBI, AZW3, DJVU, FB2, PDF...)
+                            <input type="file" accept="${ebookAcceptAttr}" multiple onchange="window.handleDirectBibliotecaPageUpload(event)" style="display:none;">
+                        </label>
+                        <button type="button" class="btn btn-secondary" style="padding:0.65rem 1.05rem; font-size:0.85rem; border-color:var(--accent-cyan); color:#fff;" onclick="window.openAddModal('biblioteca')">
+                            <i data-lucide="plus"></i> Nuova Scheda
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Biblioteca Panel -->
+            <div class="glass-panel">
+                <div class="panel-header" style="flex-wrap:wrap; gap:1rem;">
+                    <div>
+                        <div class="panel-title">
+                            <i data-lucide="book-open" class="lucide-book-open" style="color: var(--accent-blue);"></i>
+                            Biblioteca & Documentazione Tecnica (${filteredItems.length})
+                        </div>
+                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                            Consulta e scarica manuali di liuteria, sesti acustici, ricettari di vernici ed ebook in formato PDF, EPUB, MOBI, AZW3, DJVU e testo.
+                        </p>
+                    </div>
+                    <button class="btn btn-primary" onclick="window.openAddModal('biblioteca')">
+                        <i data-lucide="upload-cloud" class="lucide-upload-cloud"></i> + Carica Ebook / PDF
+                    </button>
+                </div>
+
+                <!-- Filter Bar (Formato Ebook + Categoria) -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1.4rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                        ${[
+                            { id: 'all', label: `Tutti (${allItems.length})`, icon: 'layers' },
+                            { id: 'pdf', label: `PDF (${pdfCount})`, icon: 'file-text' },
+                            { id: 'epub', label: `EPUB (${epubCount})`, icon: 'book-open-check' },
+                            { id: 'kindle', label: `MOBI / AZW3 (${kindleCount})`, icon: 'tablet' },
+                            { id: 'other_ebook', label: `DJVU / FB2 / Testo (${otherEbookCount})`, icon: 'book' },
+                            { id: 'with_file', label: `Con File Allegato (${withFileCount})`, icon: 'check-circle-2' }
+                        ].map(tab => `
+                            <button type="button" class="btn ${activeFormatFilter === tab.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.38rem 0.8rem; font-size:0.78rem; border-radius:20px;" onclick="window.setBibliotecaFormatFilter('${tab.id}')">
+                                <i data-lucide="${tab.icon}"></i> ${tab.label}
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span style="font-size:0.76rem; color:var(--text-muted);">Categoria:</span>
+                        <select class="form-control" style="width:auto; padding:0.35rem 0.75rem; font-size:0.8rem;" onchange="window.setBibliotecaCategoryFilter(this.value)">
+                            <option value="all" ${activeCatFilter === 'all' ? 'selected' : ''}>Tutte le Categorie</option>
+                            ${categories.map(c => `<option value="${c}" ${activeCatFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                ${filteredItems.length === 0 ? `
+                    <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+                        <i data-lucide="book-open" style="width:48px; height:48px; color:var(--accent-cyan); margin-bottom:0.8rem;"></i>
+                        <h4 style="color:#fff; margin-bottom:0.4rem;">Nessun volume o ebook trovato con i filtri selezionati</h4>
+                        <p style="font-size:0.85rem; margin-bottom:1.2rem;">Carica un file PDF, EPUB, MOBI, AZW3, DJVU, FB2 o documento di testo nella Biblioteca.</p>
+                        <button class="btn btn-primary" onclick="window.setBibliotecaFormatFilter('all'); window.setBibliotecaCategoryFilter('all'); window.openAddModal('biblioteca');">
+                            <i data-lucide="upload-cloud"></i> Carica Nuovo Ebook / PDF
+                        </button>
+                    </div>
+                ` : `
+                    <div class="cards-subgrid">
+                        ${filteredItems.map(item => {
+                            const fMeta = getFormatBadgeMeta(item);
+                            const hasFile = Boolean(item.fileId || item.fileUrl || item.fileName);
+                            const safeTitle = (item.titolo || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                            return `
+                                <div class="info-card" style="display:flex; flex-direction:column; justify-content:space-between; border:1px solid ${hasFile ? fMeta.border : 'rgba(255,255,255,0.08)'};">
+                                    <div>
+                                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:0.8rem;">
+                                            <span class="badge badge-info">${item.categoria || 'Trattato Tecnico'}</span>
+                                            <span style="font-size:0.78rem; color:var(--text-muted);">${item.anno || '-'} • ${item.pagine || '-'} pag.</span>
+                                        </div>
+
+                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.08rem; margin-bottom:0.45rem; line-height:1.35; cursor:pointer;" onclick="window.openBibliotecaReaderModal('${item.id}')">
+                                            ${item.titolo}
+                                        </h4>
+                                        <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:0.65rem;">
+                                            <strong>Autore:</strong> ${item.autore || 'Autore non specificato'}
+                                        </p>
+
+                                        <!-- Attached Ebook / PDF File Box -->
+                                        ${hasFile ? `
+                                            <div onclick="window.openBibliotecaReaderModal('${item.id}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.6rem; background:rgba(255,255,255,0.04); border:1px solid ${fMeta.border}; border-radius:8px; padding:0.5rem 0.7rem; margin-bottom:0.75rem;">
+                                                <div style="display:flex; align-items:center; gap:0.55rem; min-width:0;">
+                                                    <div style="width:32px; height:32px; border-radius:7px; background:${fMeta.bg}; color:${fMeta.color}; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800; font-size:0.68rem;">
+                                                        ${fMeta.short}
+                                                    </div>
+                                                    <div style="min-width:0;">
+                                                        <div style="color:#fff; font-size:0.78rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                                            ${item.fileName || (item.titolo + '.' + fMeta.short.toLowerCase())}
+                                                        </div>
+                                                        <div style="font-size:0.69rem; color:var(--text-muted);">
+                                                            ${item.fileSizeFormatted || formatBytes(item.fileSizeBytes)} • Clicca per aprire
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <span style="font-size:0.68rem; color:var(--accent-emerald); font-weight:700; flex-shrink:0;">✓ File Pronto</span>
+                                            </div>
+                                        ` : `
+                                            <div onclick="window.openEditBibliotecaModal('${item.id}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.5rem; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.14); border-radius:8px; padding:0.45rem 0.7rem; margin-bottom:0.75rem; font-size:0.74rem; color:var(--text-muted);">
+                                                <span><i data-lucide="paperclip" style="width:13px; height:13px; vertical-align:middle;"></i> Scheda archivio (nessun file binario allegato)</span>
+                                                <span style="color:var(--accent-cyan); font-weight:600;">+ Allega Ebook/PDF</span>
+                                            </div>
+                                        `}
+
+                                        ${item.note ? `<p style="font-size:0.81rem; color:var(--text-muted); margin-bottom:0.85rem; font-style:italic;">"${item.note}"</p>` : ''}
+
+                                        <div style="display:flex; flex-wrap:wrap; gap:0.38rem; margin-bottom:0.9rem;">
+                                            ${Array.isArray(item.tags) ? item.tags.map(t => `<span style="background:rgba(255,255,255,0.06); font-size:0.7rem; padding:0.18rem 0.5rem; border-radius:4px; color:var(--accent-gold);">${t}</span>`).join('') : ''}
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.45rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.65rem;">
+                                        <span style="display:inline-flex; align-items:center; gap:0.3rem; font-size:0.72rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:6px; background:${fMeta.bg}; color:${fMeta.color}; border:1px solid ${fMeta.border};">
+                                            <i data-lucide="${fMeta.icon}" style="width:12px; height:12px;"></i> ${fMeta.label}
+                                        </span>
+                                        <div style="display:flex; gap:0.35rem;">
+                                            <button class="btn btn-primary" style="padding:0.3rem 0.65rem; font-size:0.74rem;" onclick="window.openBibliotecaReaderModal('${item.id}')" title="Apri lettore Ebook / PDF o scheda completa">
+                                                <i data-lucide="book-open" class="lucide-book-open"></i> ${hasFile ? 'Leggi / Apri' : 'Consulta'}
+                                            </button>
+                                            ${hasFile ? `
+                                                <button class="btn btn-secondary" style="padding:0.3rem 0.55rem; font-size:0.74rem;" onclick="window.downloadBibliotecaFile('${item.id}')" title="Scarica file originale (${item.fileName || fMeta.short})">
+                                                    <i data-lucide="download"></i>
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.55rem; font-size:0.74rem;" onclick="window.openEditBibliotecaModal('${item.id}')" title="Modifica scheda o carica file Ebook/PDF">
+                                                <i data-lucide="edit-3"></i>
+                                            </button>
+                                            <button class="btn btn-secondary" style="padding:0.3rem 0.5rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteBibliotecaItem('${item.id}', '${safeTitle}')" title="Elimina volume">
+                                                <i data-lucide="trash-2" class="lucide-trash-2"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `}
+            </div>
         `;
+
+        if (typeof window.setupBibliotecaPageDropzone === 'function') {
+            setTimeout(() => window.setupBibliotecaPageDropzone(), 30);
+        }
     },
 
     // 2. Calendario appuntamenti
