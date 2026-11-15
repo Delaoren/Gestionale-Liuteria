@@ -26,6 +26,14 @@ import subprocess
 import tarfile
 import io
 import shutil
+import imaplib
+import smtplib
+import ssl
+import email
+import email.header
+import email.utils
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
 try:
@@ -943,9 +951,634 @@ LAST_COMMIT_FILE = os.path.join(DIRECTORY, ".last_github_commit")
 PROTECTED_REL_PATHS = {
     "social_state.json",
     "sendinblue_state.json",
+    "mail_state.json",
     ".last_github_commit",
     ".env"
 }
+
+# ==============================================================================
+# MAIL CLIENT ENGINE (IMAP4 SSL & SMTP SSL per liuteriadelorenzi@gmail.com e info@liuteriadelorenzi.it)
+# ==============================================================================
+MAIL_STATE_FILE = os.path.join(DIRECTORY, "mail_state.json")
+mail_lock = threading.Lock()
+
+DEFAULT_MAIL_MESSAGES = [
+    {
+        "id": "mail-init-1",
+        "uid": "init-1",
+        "accountId": "domain",
+        "accountEmail": "info@liuteriadelorenzi.it",
+        "folder": "INBOX",
+        "fromName": "Maestro Marco Rossi (Teatro alla Scala)",
+        "fromEmail": "m.rossi.violin@orchestra.it",
+        "toEmail": "info@liuteriadelorenzi.it",
+        "subject": "Richiesta prova acustica Violino Modello Guarneri 'Il Cannone' 1743",
+        "dateIso": time.strftime("%Y-%m-%dT09:42:00"),
+        "dateFormatted": time.strftime("%d/%m/%Y 09:42"),
+        "snippet": "Buongiorno Maestro De Lorenzi, le scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo violino...",
+        "bodyText": "Buongiorno Maestro De Lorenzi,\n\nLe scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo Violino ispirato al Guarneri del Gesù 'Il Cannone' 1743.\n\nSarei disponibile giovedì mattina alle ore 10:30. Porterò con me il mio archetto Sartory per testare la proiezione sulle quarte corde e la risposta nel registro acuto.\n\nResto in attesa di un Suo gentile riscontro.\n\nCordiali saluti,\nMaestro Marco Rossi\nPrimo Violino",
+        "bodyHtml": "",
+        "read": False,
+        "starred": True,
+        "attachments": [
+            {
+                "filename": "Scheda_Preferenze_Acustiche_Rossi.pdf",
+                "contentType": "application/pdf",
+                "sizeFormatted": "245 KB"
+            }
+        ]
+    },
+    {
+        "id": "mail-init-2",
+        "uid": "init-2",
+        "accountId": "gmail",
+        "accountEmail": "liuteriadelorenzi@gmail.com",
+        "folder": "INBOX",
+        "fromName": "Segheria Legnami di Risonanza Val di Fiemme",
+        "fromEmail": "ordini@abetepanaveggio.it",
+        "toEmail": "liuteriadelorenzi@gmail.com",
+        "subject": "Disponibilità tavole Abete Rosso stagionatura 2014 (Scelta Master Quarter-Sawn)",
+        "dateIso": time.strftime("%Y-%m-%dT08:15:00"),
+        "dateFormatted": time.strftime("%d/%m/%Y 08:15"),
+        "snippet": "Gentile Liuteria De Lorenzi, abbiamo selezionato 6 cunei di Abete Rosso di Paneveggio a spacco naturale con velocità del suono > 5750 m/s...",
+        "bodyText": "Gentile Maestro De Lorenzi,\n\nCome da accordi telefonici, abbiamo messo da parte per il Suo atelier 6 tavole per violino e 2 per violoncello in Abete Rosso di Paneveggio (taglio a quarto radiale perfetto, abbattimento luna calante novembre 2014).\n\nCaratteristiche fisiche rilevate in laboratorio:\n- Densità media: 395 kg/m³\n- Velocità longitudinale ultrasuoni: 5.780 m/s\n- Anelli di accrescimento regolari (1.1 mm al centro, 1.6 mm ai bordi)\n\nIn allegato trova il bollettino tecnico del lotto.\n\nUn cordiale saluto,\nDott. For. Luca Varesco — Val di Fiemme Tonewoods",
+        "bodyHtml": "",
+        "read": False,
+        "starred": True,
+        "attachments": [
+            {
+                "filename": "Lotto_Abete_Paneveggio_2014_Certificato.pdf",
+                "contentType": "application/pdf",
+                "sizeFormatted": "412 KB"
+            }
+        ]
+    },
+    {
+        "id": "mail-init-3",
+        "uid": "init-3",
+        "accountId": "domain",
+        "accountEmail": "info@liuteriadelorenzi.it",
+        "folder": "INBOX",
+        "fromName": "Prof.ssa Clara Weiss — Universität Mozarteum Salzburg",
+        "fromEmail": "c.weiss@mozarteum.at",
+        "toEmail": "info@liuteriadelorenzi.it",
+        "subject": "Commissione Viola 41.2 cm Modello Stradivari — Preventivo e tempi di consegna",
+        "dateIso": "2026-11-14T17:20:00",
+        "dateFormatted": "14/11/2026 17:20",
+        "snippet": "Gentile Maestro De Lorenzi, ho avuto modo di ascoltare una Sua Viola durante il festival di Salisburgo e desidero richiedere informazioni per una commissione...",
+        "bodyText": "Gentile Maestro De Lorenzi,\n\nHo avuto il piacere di ascoltare e provare una Sua Viola 41.2 cm appartenente a un collega durante il recente concerto da camera a Salisburgo. Sono rimasta profondamente colpita dalla prontezza del Do grave e dal timbro caldo e avvolgente sul La.\n\nVorrei chiederLe la disponibilità per la commissione di una Viola su misura con fondo unico in acero marezzato balcanico e conoscere i tempi attuali di lavorazione e le modalità di acconto.\n\nCon viva stima,\nProf.ssa Clara Weiss\nUniversität Mozarteum Salzburg",
+        "bodyHtml": "",
+        "read": False,
+        "starred": False,
+        "attachments": []
+    },
+    {
+        "id": "mail-init-4",
+        "uid": "init-4",
+        "accountId": "gmail",
+        "accountEmail": "liuteriadelorenzi@gmail.com",
+        "folder": "INBOX",
+        "fromName": "Kremer Pigmente GmbH & Co. KG",
+        "fromEmail": "info@kremer-pigmente.de",
+        "toEmail": "liuteriadelorenzi@gmail.com",
+        "subject": "Conferma spedizione #KP-88412: Lacca di Robbia, Sangue di Drago e Colofonia",
+        "dateIso": "2026-11-13T14:05:00",
+        "dateFormatted": "13/11/2026 14:05",
+        "snippet": "Il Suo ordine #KP-88412 contenente resine naturali e pigmenti per vernice ad olio cremonese è stato affidato al corriere...",
+        "bodyText": "Gentile Cliente Liuteria De Lorenzi,\n\nConfermiamo la spedizione dell'ordine #KP-88412 indirizzato al vostro laboratorio di Cremona:\n- 1x Alizarina / Lacca di Robbia pura in radice (250g)\n- 1x Resina Sangue di Drago Sumatra extra (100g)\n- 1x Mastice di Chios in lacrime (250g)\n- 1x Olio di Lino spremuto a freddo purificato (1000ml)\n\nConsegna prevista entro 48 ore lavorative.\n\nCordiali saluti,\nTeam Kremer Pigmente",
+        "bodyHtml": "",
+        "read": True,
+        "starred": False,
+        "attachments": []
+    },
+    {
+        "id": "mail-init-5",
+        "uid": "init-5",
+        "accountId": "domain",
+        "accountEmail": "info@liuteriadelorenzi.it",
+        "folder": "INBOX",
+        "fromName": "Fondazione Museo del Violino Cremona",
+        "fromEmail": "segreteria@museodelviolino.org",
+        "toEmail": "info@liuteriadelorenzi.it",
+        "subject": "Invito Rassegna Acustica & Mostra Liuteria Contemporanea Cremonese",
+        "dateIso": "2026-11-12T11:30:00",
+        "dateFormatted": "12/11/2026 11:30",
+        "snippet": "Gentile Maestro, siamo lieti di invitarLa alla sessione di audizione comparativa nell'Auditorium Giovanni Arvedi...",
+        "bodyText": "Gentile Maestro De Lorenzi,\n\nSiamo lieti di invitarLa alla prossima sessione di audizione acustica comparativa dedicata agli strumenti ad arco contemporanei presso l'Auditorium Giovanni Arvedi.\n\nPer confermare la partecipazione con un violino o violoncello del Suo atelier, La preghiamo di rispondere a questa comunicazione indicando il modello presentato.\n\nCordiali saluti,\nSegreteria Scientifica — Cremona",
+        "bodyHtml": "",
+        "read": True,
+        "starred": True,
+        "attachments": []
+    }
+]
+
+mail_state = {
+    "accounts": {
+        "gmail": {
+            "id": "gmail",
+            "email": "liuteriadelorenzi@gmail.com",
+            "label": "Gmail Bottega",
+            "provider": "gmail",
+            "enabled": bool(os.environ.get("MAIL_GMAIL_PASSWORD", "")),
+            "imapHost": "imap.gmail.com",
+            "imapPort": 993,
+            "imapSsl": True,
+            "smtpHost": "smtp.gmail.com",
+            "smtpPort": 465,
+            "smtpSsl": True,
+            "username": "liuteriadelorenzi@gmail.com",
+            "password": os.environ.get("MAIL_GMAIL_PASSWORD", ""),
+            "detectForwardedDomain": True,
+            "status": "unconfigured",
+            "lastSync": "",
+            "lastError": ""
+        },
+        "domain": {
+            "id": "domain",
+            "email": "info@liuteriadelorenzi.it",
+            "label": "Dominio Ufficiale (.it)",
+            "provider": "custom_imap",
+            "enabled": bool(os.environ.get("MAIL_DOMAIN_PASSWORD", "")),
+            "imapHost": os.environ.get("MAIL_DOMAIN_IMAP_HOST", "mail.liuteriadelorenzi.it"),
+            "imapPort": int(os.environ.get("MAIL_DOMAIN_IMAP_PORT", "993")),
+            "imapSsl": True,
+            "smtpHost": os.environ.get("MAIL_DOMAIN_SMTP_HOST", "mail.liuteriadelorenzi.it"),
+            "smtpPort": int(os.environ.get("MAIL_DOMAIN_SMTP_PORT", "465")),
+            "smtpSsl": True,
+            "username": "info@liuteriadelorenzi.it",
+            "password": os.environ.get("MAIL_DOMAIN_PASSWORD", ""),
+            "forwardedToGmail": False,
+            "status": "unconfigured",
+            "lastSync": "",
+            "lastError": ""
+        }
+    },
+    "messages": list(DEFAULT_MAIL_MESSAGES),
+    "lastGlobalSync": ""
+}
+
+def load_mail_state():
+    global mail_state
+    with mail_lock:
+        if os.path.exists(MAIL_STATE_FILE):
+            try:
+                with open(MAIL_STATE_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    if isinstance(loaded.get("accounts"), dict):
+                        for acc_key in ("gmail", "domain"):
+                            if isinstance(loaded["accounts"].get(acc_key), dict):
+                                mail_state["accounts"][acc_key].update(loaded["accounts"][acc_key])
+                    if isinstance(loaded.get("messages"), list) and len(loaded["messages"]) > 0:
+                        mail_state["messages"] = loaded["messages"][:250]
+                    if loaded.get("lastGlobalSync"):
+                        mail_state["lastGlobalSync"] = loaded["lastGlobalSync"]
+            except Exception as e:
+                print(f"[MailEngine] Errore caricamento mail_state.json: {e}")
+
+def save_mail_state():
+    with mail_lock:
+        try:
+            with open(MAIL_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(mail_state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[MailEngine] Errore salvataggio mail_state.json: {e}")
+
+load_mail_state()
+
+def _decode_mime_words(raw_str):
+    if not raw_str:
+        return ""
+    if isinstance(raw_str, bytes):
+        raw_str = raw_str.decode("utf-8", errors="replace")
+    try:
+        parts = email.header.decode_header(str(raw_str))
+        decoded = []
+        for content, enc in parts:
+            if isinstance(content, bytes):
+                charset = enc or "utf-8"
+                if charset.lower() in ("unknown-8bit", "x-unknown"):
+                    charset = "latin-1"
+                try:
+                    decoded.append(content.decode(charset, errors="replace"))
+                except LookupError:
+                    decoded.append(content.decode("utf-8", errors="replace"))
+            else:
+                decoded.append(str(content))
+        return "".join(decoded).strip()
+    except Exception:
+        return str(raw_str).strip()
+
+def _format_size(num_bytes):
+    try:
+        n = int(num_bytes)
+        if n >= 1024 * 1024:
+            return f"{n / (1024 * 1024):.1f} MB"
+        if n >= 1024:
+            return f"{max(1, round(n / 1024))} KB"
+        return f"{n} B"
+    except Exception:
+        return "0 KB"
+
+def _strip_html_to_text(html_str):
+    if not html_str:
+        return ""
+    txt = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html_str)
+    txt = re.sub(r"(?i)<br\s*/?>", "\n", txt)
+    txt = re.sub(r"(?i)</p\s*>", "\n\n", txt)
+    txt = re.sub(r"<[^>]+>", " ", txt)
+    txt = txt.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
+    txt = re.sub(r"[ \t]+", " ", txt)
+    txt = re.sub(r"\n{3,}", "\n\n", txt)
+    return txt.strip()
+
+def _connect_imap_account(acc_cfg):
+    host = (acc_cfg.get("imapHost") or "").strip()
+    port = int(acc_cfg.get("imapPort") or 993)
+    use_ssl = bool(acc_cfg.get("imapSsl", True))
+    username = (acc_cfg.get("username") or acc_cfg.get("email") or "").strip()
+    password = (acc_cfg.get("password") or "").replace(" ", "") if acc_cfg.get("provider") == "gmail" else (acc_cfg.get("password") or "").strip()
+
+    if not host or not username or not password:
+        raise ValueError("Host IMAP, nome utente o password mancanti.")
+
+    # Se è l'account info@liuteriadelorenzi.it e l'host è dietro proxy Cloudflare, prova in cascata gli host IMAP più comuni
+    candidate_hosts = [host]
+    if acc_cfg.get("id") == "domain":
+        for fallback_h in ("imaps.aruba.it", "mail.liuteriadelorenzi.it", "imap.liuteriadelorenzi.it", "imap.register.it", "ssl0.ovh.net"):
+            if fallback_h not in candidate_hosts:
+                candidate_hosts.append(fallback_h)
+
+    ctx = ssl.create_default_context()
+    last_err = None
+    for h in candidate_hosts:
+        try:
+            if use_ssl or port == 993:
+                conn = imaplib.IMAP4_SSL(h, port, ssl_context=ctx, timeout=12)
+            else:
+                conn = imaplib.IMAP4(h, port, timeout=12)
+                try:
+                    conn.starttls(ssl_context=ctx)
+                except Exception:
+                    pass
+            conn.login(username, password)
+            if h != host:
+                acc_cfg["imapHost"] = h
+            return conn
+        except imaplib.IMAP4.error as auth_err:
+            # Se il server ha risposto ma le credenziali sono errate, fermati subito e segnala l'errore di autenticazione
+            err_txt = str(auth_err)
+            if "AUTHENTICATIONFAILED" in err_txt.upper() or "APPLICATION-SPECIFIC" in err_txt.upper() or "INVALID CREDENTIALS" in err_txt.upper():
+                if acc_cfg.get("provider") == "gmail":
+                    raise RuntimeError("Autenticazione Gmail rifiutata: per leggere Gmail via IMAP è necessaria una 'Password per le App' di Google (16 caratteri) generata su myaccount.google.com/apppasswords.")
+                raise RuntimeError(f"Credenziali rifiutate dal server {h}: verifica la password di {username} ({err_txt}).")
+            last_err = auth_err
+        except Exception as e:
+            last_err = e
+
+    raise RuntimeError(f"Impossibile connettersi al server IMAP ({host}:{port}): {last_err}")
+
+def sync_imap_account(acc_id, limit=30):
+    acc_cfg = mail_state["accounts"].get(acc_id)
+    if not acc_cfg:
+        return {"success": False, "error": f"Account '{acc_id}' non trovato."}
+
+    if acc_id == "domain" and acc_cfg.get("forwardedToGmail"):
+        # Se info@liuteriadelorenzi.it è inoltrato su liuteriadelorenzi@gmail.com, sincronizza Gmail
+        return sync_imap_account("gmail", limit=limit)
+
+    password = (acc_cfg.get("password") or "").strip()
+    if not password:
+        return {
+            "success": False,
+            "code": "MISSING_CREDENTIALS",
+            "error": f"Password IMAP non ancora inserita per {acc_cfg.get('email')}. Clicca su 'Configura Account' per inserire la password."
+        }
+
+    try:
+        conn = _connect_imap_account(acc_cfg)
+        status, _ = conn.select("INBOX", readonly=True)
+        if status != "OK":
+            conn.logout()
+            raise RuntimeError("Impossibile selezionare la cartella INBOX.")
+
+        typ, data = conn.uid("search", None, "ALL")
+        if typ != "OK" or not data or not data[0]:
+            uids = []
+        else:
+            uids = data[0].split()
+
+        recent_uids = uids[-limit:] if len(uids) > limit else uids
+        recent_uids = list(reversed(recent_uids))
+
+        fetched_messages = []
+        for uid_bytes in recent_uids:
+            uid_str = uid_bytes.decode("ascii", errors="ignore")
+            typ, msg_data = conn.uid("fetch", uid_bytes, "(BODY.PEEK[] FLAGS)")
+            if typ != "OK" or not msg_data:
+                continue
+
+            raw_email = None
+            flags_str = ""
+            for item in msg_data:
+                if isinstance(item, tuple) and len(item) >= 2:
+                    header_info = item[0].decode("ascii", errors="ignore") if isinstance(item[0], bytes) else str(item[0])
+                    flags_str = header_info
+                    raw_email = item[1]
+                    break
+
+            if not raw_email:
+                continue
+
+            msg = email.message_from_bytes(raw_email)
+            subject = _decode_mime_words(msg.get("Subject")) or "(Nessun oggetto)"
+            from_raw = _decode_mime_words(msg.get("From"))
+            to_raw = _decode_mime_words(msg.get("To"))
+            cc_raw = _decode_mime_words(msg.get("Cc"))
+            delivered_to = _decode_mime_words(msg.get("Delivered-To")) + " " + _decode_mime_words(msg.get("X-Original-To"))
+
+            from_name, from_addr = email.utils.parseaddr(from_raw)
+            from_name = _decode_mime_words(from_name) or from_addr or "Mittente"
+            from_addr = from_addr or from_raw
+
+            date_hdr = msg.get("Date")
+            date_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+            date_fmt = time.strftime("%d/%m/%Y %H:%M")
+            if date_hdr:
+                try:
+                    dt = email.utils.parsedate_to_datetime(date_hdr)
+                    if dt:
+                        date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
+                        date_fmt = dt.strftime("%d/%m/%Y %H:%M")
+                except Exception:
+                    pass
+
+            body_text = ""
+            body_html = ""
+            attachments = []
+
+            if msg.is_multipart():
+                for part in msg.walk():
+                    ctype = part.get_content_type()
+                    cdisp = str(part.get("Content-Disposition") or "")
+                    filename = part.get_filename()
+                    if filename:
+                        filename = _decode_mime_words(filename)
+
+                    if filename or "attachment" in cdisp.lower():
+                        payload_bytes = part.get_payload(decode=True) or b""
+                        att_obj = {
+                            "filename": filename or "allegato.bin",
+                            "contentType": ctype or "application/octet-stream",
+                            "sizeBytes": len(payload_bytes),
+                            "sizeFormatted": _format_size(len(payload_bytes))
+                        }
+                        if 0 < len(payload_bytes) <= 2 * 1024 * 1024:
+                            att_obj["dataBase64"] = base64.b64encode(payload_bytes).decode("ascii")
+                        attachments.append(att_obj)
+                    elif ctype == "text/plain" and not body_text:
+                        payload_bytes = part.get_payload(decode=True) or b""
+                        charset = part.get_content_charset() or "utf-8"
+                        try:
+                            body_text = payload_bytes.decode(charset, errors="replace")
+                        except LookupError:
+                            body_text = payload_bytes.decode("utf-8", errors="replace")
+                    elif ctype == "text/html" and not body_html:
+                        payload_bytes = part.get_payload(decode=True) or b""
+                        charset = part.get_content_charset() or "utf-8"
+                        try:
+                            body_html = payload_bytes.decode(charset, errors="replace")
+                        except LookupError:
+                            body_html = payload_bytes.decode("utf-8", errors="replace")
+            else:
+                ctype = msg.get_content_type()
+                payload_bytes = msg.get_payload(decode=True) or b""
+                charset = msg.get_content_charset() or "utf-8"
+                try:
+                    decoded_payload = payload_bytes.decode(charset, errors="replace")
+                except LookupError:
+                    decoded_payload = payload_bytes.decode("utf-8", errors="replace")
+                if ctype == "text/html":
+                    body_html = decoded_payload
+                else:
+                    body_text = decoded_payload
+
+            if not body_text and body_html:
+                body_text = _strip_html_to_text(body_html)
+
+            snippet = re.sub(r"\s+", " ", (body_text or "")).strip()[:165]
+            is_read = ("\\Seen" in flags_str)
+            is_starred = ("\\Flagged" in flags_str)
+
+            # Rileva automaticamente se un'email scaricata da Gmail era indirizzata a info@liuteriadelorenzi.it
+            target_acc_id = acc_id
+            target_acc_email = acc_cfg.get("email")
+            combined_rcpt = f"{to_raw} {cc_raw} {delivered_to}".lower()
+            if acc_id == "gmail" and acc_cfg.get("detectForwardedDomain", True) and "info@liuteriadelorenzi.it" in combined_rcpt:
+                target_acc_id = "domain"
+                target_acc_email = "info@liuteriadelorenzi.it"
+
+            msg_id = f"imap-{acc_id}-{uid_str}"
+            fetched_messages.append({
+                "id": msg_id,
+                "uid": uid_str,
+                "accountId": target_acc_id,
+                "accountEmail": target_acc_email,
+                "folder": "INBOX",
+                "fromName": from_name,
+                "fromEmail": from_addr,
+                "toEmail": to_raw or target_acc_email,
+                "subject": subject,
+                "dateIso": date_iso,
+                "dateFormatted": date_fmt,
+                "snippet": snippet,
+                "bodyText": body_text,
+                "bodyHtml": body_html,
+                "read": is_read,
+                "starred": is_starred,
+                "attachments": attachments
+            })
+
+        try:
+            conn.logout()
+        except Exception:
+            pass
+
+        now_fmt = time.strftime("%d/%m/%Y %H:%M:%S")
+        with mail_lock:
+            acc_cfg["status"] = "connected"
+            acc_cfg["enabled"] = True
+            acc_cfg["lastSync"] = now_fmt
+            acc_cfg["lastError"] = ""
+            if acc_id == "gmail" and mail_state["accounts"]["domain"].get("forwardedToGmail"):
+                mail_state["accounts"]["domain"]["status"] = "connected"
+                mail_state["accounts"]["domain"]["lastSync"] = f"{now_fmt} (via inoltro Gmail)"
+                mail_state["accounts"]["domain"]["lastError"] = ""
+
+            existing_by_id = {m.get("id"): m for m in mail_state.get("messages", []) if isinstance(m, dict)}
+            for fm in fetched_messages:
+                old_m = existing_by_id.get(fm["id"])
+                if old_m:
+                    fm["read"] = old_m.get("read", fm["read"])
+                    fm["starred"] = old_m.get("starred", fm["starred"])
+                    fm["folder"] = old_m.get("folder", fm["folder"])
+                existing_by_id[fm["id"]] = fm
+
+            # Se abbiamo scaricato email reali via IMAP per questo account, rimuovi i messaggi demo iniziali di quell'account
+            if len(fetched_messages) > 0:
+                synced_acc_ids = {acc_id}
+                if acc_id == "gmail" and acc_cfg.get("detectForwardedDomain", True):
+                    synced_acc_ids.add("domain")
+                existing_by_id = {
+                    k: v for k, v in existing_by_id.items()
+                    if not (str(k).startswith("mail-init-") and v.get("accountId") in synced_acc_ids)
+                }
+
+            merged_list = list(existing_by_id.values())
+            merged_list.sort(key=lambda x: x.get("dateIso") or "", reverse=True)
+            mail_state["messages"] = merged_list[:250]
+            mail_state["lastGlobalSync"] = now_fmt
+
+        save_mail_state()
+        return {
+            "success": True,
+            "accountId": acc_id,
+            "fetchedCount": len(fetched_messages),
+            "lastSync": now_fmt
+        }
+    except Exception as e:
+        err_msg = str(e)
+        with mail_lock:
+            acc_cfg["status"] = "error"
+            acc_cfg["lastError"] = err_msg
+        save_mail_state()
+        return {
+            "success": False,
+            "accountId": acc_id,
+            "error": err_msg
+        }
+
+def send_mail_from_account(req_payload):
+    acc_id = (req_payload.get("accountId") or "gmail").strip()
+    if acc_id not in mail_state["accounts"]:
+        acc_id = "gmail"
+    acc_cfg = mail_state["accounts"][acc_id]
+    from_email = acc_cfg.get("email")
+    from_name = f"Liuteria De Lorenzi ({from_email})"
+
+    to_email = (req_payload.get("toEmail") or "").strip()
+    subject = (req_payload.get("subject") or "").strip() or "(Nessun oggetto)"
+    body_text = (req_payload.get("bodyText") or "").strip()
+
+    if not to_email or "@" not in to_email:
+        return {"success": False, "error": "Inserisci un indirizzo email destinatario valido."}
+
+    # Se l'account domain usa l'inoltro su Gmail e non ha password propria, invia tramite SMTP di Gmail con Reply-To info@liuteriadelorenzi.it
+    smtp_cfg = acc_cfg
+    if acc_id == "domain" and not (acc_cfg.get("password") or "").strip() and (mail_state["accounts"]["gmail"].get("password") or "").strip():
+        smtp_cfg = mail_state["accounts"]["gmail"]
+
+    smtp_host = (smtp_cfg.get("smtpHost") or "").strip()
+    smtp_port = int(smtp_cfg.get("smtpPort") or 465)
+    smtp_user = (smtp_cfg.get("username") or smtp_cfg.get("email") or "").strip()
+    smtp_pass = (smtp_cfg.get("password") or "").replace(" ", "") if smtp_cfg.get("provider") == "gmail" else (smtp_cfg.get("password") or "").strip()
+
+    sent_method = None
+    last_err = None
+
+    # 1. Prova invio diretto tramite SMTP dell'account configurato
+    if smtp_host and smtp_user and smtp_pass:
+        try:
+            mime_msg = MIMEMultipart("alternative")
+            mime_msg["From"] = f"{from_name} <{from_email}>"
+            mime_msg["To"] = to_email
+            mime_msg["Reply-To"] = from_email
+            mime_msg["Subject"] = subject
+            mime_msg["Date"] = email.utils.formatdate(localtime=True)
+            mime_msg.attach(MIMEText(body_text, "plain", "utf-8"))
+            html_ver = f"<div style='font-family:Georgia,serif;color:#1f2937;line-height:1.6;'>{body_text.replace(chr(10), '<br>')}</div>"
+            mime_msg.attach(MIMEText(html_ver, "html", "utf-8"))
+
+            ctx = ssl.create_default_context()
+            if smtp_port == 465 or smtp_cfg.get("smtpSsl", True):
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ctx, timeout=15) as server:
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(smtp_user, [to_email], mime_msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                    server.starttls(context=ctx)
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(smtp_user, [to_email], mime_msg.as_string())
+            sent_method = f"SMTP ({smtp_host})"
+        except Exception as e:
+            last_err = str(e)
+
+    # 2. Fallback automatico tramite Sendinblue/Brevo se configurato nel Gestionale
+    if not sent_method and (sendinblue_state.get("config", {}).get("apiKey") or "").strip():
+        sib_res = dispatch_sendinblue_reminder({
+            "toEmail": to_email,
+            "toName": to_email.split("@")[0],
+            "subject": subject,
+            "textContent": body_text
+        }, config_override={
+            "senderName": f"Liuteria De Lorenzi ({from_email})",
+            "replyToEmail": from_email
+        })
+        if sib_res.get("success"):
+            sent_method = "Sendinblue/Brevo Transactional"
+        else:
+            last_err = sib_res.get("error")
+
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+    now_fmt = time.strftime("%d/%m/%Y %H:%M")
+    sent_msg = {
+        "id": f"sent-{int(time.time() * 1000)}",
+        "uid": f"sent-{int(time.time())}",
+        "accountId": acc_id,
+        "accountEmail": from_email,
+        "folder": "SENT",
+        "fromName": "Liuteria De Lorenzi",
+        "fromEmail": from_email,
+        "toEmail": to_email,
+        "subject": subject,
+        "dateIso": now_iso,
+        "dateFormatted": now_fmt,
+        "snippet": body_text[:160].replace("\n", " "),
+        "bodyText": body_text,
+        "bodyHtml": "",
+        "read": True,
+        "starred": False,
+        "attachments": [],
+        "deliveryMethod": sent_method or "Salellato in Posta Inviata (Locale)"
+    }
+
+    with mail_lock:
+        mail_state.setdefault("messages", []).insert(0, sent_msg)
+    save_mail_state()
+
+    if sent_method:
+        return {
+            "success": True,
+            "method": sent_method,
+            "message": sent_msg
+        }
+    else:
+        return {
+            "success": True,
+            "localOnly": True,
+            "warning": last_err or "Credenziali SMTP non ancora configurate: l'email è stata registrata in 'Posta Inviata'. Configura la password dell'account per l'invio SMTP reale.",
+            "message": sent_msg
+        }
+
+def get_sanitized_mail_accounts():
+    out = {}
+    for k, acc in mail_state.get("accounts", {}).items():
+        c = dict(acc)
+        has_pw = bool((c.get("password") or "").strip())
+        c["hasPassword"] = has_pw
+        c["password"] = ""  # Non esporre in chiaro la password via GET
+        out[k] = c
+    return out
 PROTECTED_DIRS = {
     "social_uploads",
     "biblioteca_uploads",
@@ -1389,6 +2022,16 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "config": sendinblue_state.get("config", {}),
                 "history": sendinblue_state.get("history", [])[:20]
             }, ensure_ascii=False).encode('utf-8'))
+        elif self.path.startswith('/api/mail/status'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "accounts": get_sanitized_mail_accounts(),
+                "messages": mail_state.get("messages", []),
+                "lastGlobalSync": mail_state.get("lastGlobalSync", "")
+            }, ensure_ascii=False).encode('utf-8'))
         else:
             super().do_GET()
 
@@ -1413,12 +2056,160 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_sendinblue_config()
         elif self.path.startswith('/api/sendinblue/send-reminder'):
             self.handle_sendinblue_send_reminder()
+        elif self.path.startswith('/api/mail/config'):
+            self.handle_mail_config()
+        elif self.path.startswith('/api/mail/sync'):
+            self.handle_mail_sync()
+        elif self.path.startswith('/api/mail/send'):
+            self.handle_mail_send()
+        elif self.path.startswith('/api/mail/action'):
+            self.handle_mail_action()
         elif self.path.startswith('/api/system/check-update'):
             self.handle_system_check_update()
         elif self.path.startswith('/api/system/ota-update'):
             self.handle_system_ota_update()
         else:
             self.send_error(404, "Endpoint non trovato")
+
+    def handle_mail_config(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            test_acc = req_data.get("testAccount")
+            accounts_in = req_data.get("accounts") if isinstance(req_data.get("accounts"), dict) else {}
+
+            with mail_lock:
+                for acc_id in ("gmail", "domain"):
+                    if isinstance(accounts_in.get(acc_id), dict):
+                        incoming = dict(accounts_in[acc_id])
+                        # Non sovrascrivere la password salvata se il campo arriva vuoto (e non è un reset esplicito)
+                        if not incoming.get("password") and not incoming.get("clearPassword"):
+                            incoming.pop("password", None)
+                        incoming.pop("clearPassword", None)
+                        incoming.pop("hasPassword", None)
+                        mail_state["accounts"][acc_id].update(incoming)
+                        mail_state["accounts"][acc_id]["enabled"] = bool(
+                            (mail_state["accounts"][acc_id].get("password") or "").strip() or
+                            mail_state["accounts"][acc_id].get("forwardedToGmail")
+                        )
+            save_mail_state()
+
+            sync_res = None
+            if test_acc in ("gmail", "domain"):
+                sync_res = sync_imap_account(test_acc, limit=25)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True if not sync_res else sync_res.get("success", False),
+                "syncResult": sync_res,
+                "accounts": get_sanitized_mail_accounts(),
+                "messages": mail_state.get("messages", []),
+                "lastGlobalSync": mail_state.get("lastGlobalSync", "")
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_mail_sync(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            target_acc = req_data.get("accountId", "all")
+            limit = int(req_data.get("limit", 30))
+
+            results = {}
+            if target_acc in ("gmail", "domain"):
+                results[target_acc] = sync_imap_account(target_acc, limit=limit)
+            else:
+                for acc_id in ("gmail", "domain"):
+                    acc_cfg = mail_state["accounts"].get(acc_id, {})
+                    if (acc_cfg.get("password") or "").strip() or (acc_id == "domain" and acc_cfg.get("forwardedToGmail")):
+                        results[acc_id] = sync_imap_account(acc_id, limit=limit)
+                    else:
+                        results[acc_id] = {
+                            "success": False,
+                            "code": "MISSING_CREDENTIALS",
+                            "error": f"Password IMAP non configurata per {acc_cfg.get('email')}"
+                        }
+
+            any_ok = any(r.get("success") for r in results.values())
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": any_ok,
+                "results": results,
+                "accounts": get_sanitized_mail_accounts(),
+                "messages": mail_state.get("messages", []),
+                "lastGlobalSync": mail_state.get("lastGlobalSync", "")
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_mail_send(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            res = send_mail_from_account(req_data)
+            res["messages"] = mail_state.get("messages", [])
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_mail_action(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            msg_id = req_data.get("messageId")
+            action = req_data.get("action")
+            with mail_lock:
+                msgs = mail_state.get("messages", [])
+                if action == "delete_permanent":
+                    mail_state["messages"] = [m for m in msgs if m.get("id") != msg_id]
+                else:
+                    for m in msgs:
+                        if m.get("id") == msg_id:
+                            if action == "mark_read":
+                                m["read"] = True
+                            elif action == "mark_unread":
+                                m["read"] = False
+                            elif action == "toggle_star":
+                                m["starred"] = not bool(m.get("starred"))
+                            elif action == "trash":
+                                m["folder"] = "TRASH"
+                            elif action == "restore":
+                                m["folder"] = "INBOX"
+                            break
+            save_mail_state()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "messages": mail_state.get("messages", [])
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
     def handle_sendinblue_config(self):
         content_length = int(self.headers.get('Content-Length', 0))

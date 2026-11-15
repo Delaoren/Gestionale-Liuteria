@@ -2006,5 +2006,14 @@ window.AppModules = {
         } else {
             container.innerHTML = `<div class="glass-panel"><p>Inizializzazione modulo Liuteria Making...</p></div>`;
         }
+    },
+
+    // 16. Mail (Client Posta Unificato per liuteriadelorenzi@gmail.com e info@liuteriadelorenzi.it)
+    renderMail: function(container) {
+        if (typeof window.renderMailWorkspace === 'function') {
+            window.renderMailWorkspace(container);
+        } else {
+            container.innerHTML = `<div class="glass-panel"><p>Inizializzazione client Mail...</p></div>`;
+        }
     }
 };

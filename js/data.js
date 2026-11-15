@@ -68,6 +68,46 @@ const defaultData = {
             lastTestStatus: "unconfigured",
             lastTestTime: "",
             lastTestMessage: ""
+        },
+        mailAccounts: {
+            gmail: {
+                id: "gmail",
+                email: "liuteriadelorenzi@gmail.com",
+                label: "Gmail Bottega",
+                provider: "gmail",
+                enabled: false,
+                imapHost: "imap.gmail.com",
+                imapPort: 993,
+                imapSsl: true,
+                smtpHost: "smtp.gmail.com",
+                smtpPort: 465,
+                smtpSsl: true,
+                username: "liuteriadelorenzi@gmail.com",
+                detectForwardedDomain: true,
+                hasPassword: false,
+                status: "unconfigured",
+                lastSync: "",
+                lastError: ""
+            },
+            domain: {
+                id: "domain",
+                email: "info@liuteriadelorenzi.it",
+                label: "Dominio Ufficiale (.it)",
+                provider: "custom_imap",
+                enabled: false,
+                imapHost: "mail.liuteriadelorenzi.it",
+                imapPort: 993,
+                imapSsl: true,
+                smtpHost: "mail.liuteriadelorenzi.it",
+                smtpPort: 465,
+                smtpSsl: true,
+                username: "info@liuteriadelorenzi.it",
+                forwardedToGmail: false,
+                hasPassword: false,
+                status: "unconfigured",
+                lastSync: "",
+                lastError: ""
+            }
         }
     },
     // 1. Biblioteca (Library)
@@ -840,19 +880,129 @@ const defaultData = {
                     purfling_depth: 2.0, neck_length: 130.0, pegbox_width: 42.0, neck_cheek_thickness: 20.5, corner_length: 14.0
                 },
                 restorations: [],
-                savedSpectrums: [
+                    savedSpectrums: [
+                        {
+                            id: "spec-2",
+                            label: "Analisi Spettrale Cassa Chiusa (B1- / B1+)",
+                            created_at: "2026-09-29 16:40",
+                            fundamental: 440.0,
+                            peaks: [154.0, 362.0, 440.0, 552.0, 880.0]
+                        }
+                    ]
+                }
+            ]
+        },
+        // 15. Mail (liuteriadelorenzi@gmail.com & info@liuteriadelorenzi.it)
+        mail: [
+            {
+                id: "mail-init-1",
+                uid: "init-1",
+                accountId: "domain",
+                accountEmail: "info@liuteriadelorenzi.it",
+                folder: "INBOX",
+                fromName: "Maestro Marco Rossi (Teatro alla Scala)",
+                fromEmail: "m.rossi.violin@orchestra.it",
+                toEmail: "info@liuteriadelorenzi.it",
+                subject: "Richiesta prova acustica Violino Modello Guarneri 'Il Cannone' 1743",
+                dateIso: `${_getTodayIso()}T09:42:00`,
+                dateFormatted: "Oggi, 09:42",
+                snippet: "Buongiorno Maestro De Lorenzi, le scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo violino...",
+                bodyText: "Buongiorno Maestro De Lorenzi,\n\nLe scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo Violino ispirato al Guarneri del Gesù 'Il Cannone' 1743.\n\nSarei disponibile giovedì mattina alle ore 10:30. Porterò con me il mio archetto Sartory per testare la proiezione sulle quarte corde e la risposta nel registro acuto.\n\nResto in attesa di un Suo gentile riscontro.\n\nCordiali saluti,\nMaestro Marco Rossi\nPrimo Violino",
+                bodyHtml: "",
+                read: false,
+                starred: true,
+                attachments: [
                     {
-                        id: "spec-2",
-                        label: "Analisi Spettrale Cassa Chiusa (B1- / B1+)",
-                        created_at: "2026-09-29 16:40",
-                        fundamental: 440.0,
-                        peaks: [154.0, 362.0, 440.0, 552.0, 880.0]
+                        filename: "Scheda_Preferenze_Acustiche_Rossi.pdf",
+                        contentType: "application/pdf",
+                        sizeFormatted: "245 KB"
                     }
                 ]
+            },
+            {
+                id: "mail-init-2",
+                uid: "init-2",
+                accountId: "gmail",
+                accountEmail: "liuteriadelorenzi@gmail.com",
+                folder: "INBOX",
+                fromName: "Segheria Legnami di Risonanza Val di Fiemme",
+                fromEmail: "ordini@abetepanaveggio.it",
+                toEmail: "liuteriadelorenzi@gmail.com",
+                subject: "Disponibilità tavole Abete Rosso stagionatura 2014 (Scelta Master Quarter-Sawn)",
+                dateIso: `${_getTodayIso()}T08:15:00`,
+                dateFormatted: "Oggi, 08:15",
+                snippet: "Gentile Liuteria De Lorenzi, abbiamo selezionato 6 cunei di Abete Rosso di Paneveggio a spacco naturale con velocità del suono > 5750 m/s...",
+                bodyText: "Gentile Maestro De Lorenzi,\n\nCome da accordi telefonici, abbiamo messo da parte per il Suo atelier 6 tavole per violino e 2 per violoncello in Abete Rosso di Paneveggio (taglio a quarto radiale perfetto, abbattimento luna calante novembre 2014).\n\nCaratteristiche fisiche rilevate in laboratorio:\n- Densità media: 395 kg/m³\n- Velocità longitudinale ultrasuoni: 5.780 m/s\n- Anelli di accrescimento regolari (1.1 mm al centro, 1.6 mm ai bordi)\n\nIn allegato trova il bollettino tecnico del lotto.\n\nUn cordiale saluto,\nDott. For. Luca Varesco — Val di Fiemme Tonewoods",
+                bodyHtml: "",
+                read: false,
+                starred: true,
+                attachments: [
+                    {
+                        filename: "Lotto_Abete_Paneveggio_2014_Certificato.pdf",
+                        contentType: "application/pdf",
+                        sizeFormatted: "412 KB"
+                    }
+                ]
+            },
+            {
+                id: "mail-init-3",
+                uid: "init-3",
+                accountId: "domain",
+                accountEmail: "info@liuteriadelorenzi.it",
+                folder: "INBOX",
+                fromName: "Prof.ssa Clara Weiss — Universität Mozarteum Salzburg",
+                fromEmail: "c.weiss@mozarteum.at",
+                toEmail: "info@liuteriadelorenzi.it",
+                subject: "Commissione Viola 41.2 cm Modello Stradivari — Preventivo e tempi di consegna",
+                dateIso: "2026-11-14T17:20:00",
+                dateFormatted: "14/11/2026 17:20",
+                snippet: "Gentile Maestro De Lorenzi, ho avuto modo di ascoltare una Sua Viola durante il festival di Salisburgo e desidero richiedere informazioni per una commissione...",
+                bodyText: "Gentile Maestro De Lorenzi,\n\nHo avuto il piacere di ascoltare e provare una Sua Viola 41.2 cm appartenente a un collega durante il recente concerto da camera a Salisburgo. Sono rimasta profondamente colpita dalla prontezza del Do grave e dal timbro caldo e avvolgente sul La.\n\nVorrei chiederLe la disponibilità per la commissione di una Viola su misura con fondo unico in acero marezzato balcanico e conoscere i tempi attuali di lavorazione e le modalità di acconto.\n\nCon viva stima,\nProf.ssa Clara Weiss\nUniversität Mozarteum Salzburg",
+                bodyHtml: "",
+                read: false,
+                starred: false,
+                attachments: []
+            },
+            {
+                id: "mail-init-4",
+                uid: "init-4",
+                accountId: "gmail",
+                accountEmail: "liuteriadelorenzi@gmail.com",
+                folder: "INBOX",
+                fromName: "Kremer Pigmente GmbH & Co. KG",
+                fromEmail: "info@kremer-pigmente.de",
+                toEmail: "liuteriadelorenzi@gmail.com",
+                subject: "Conferma spedizione #KP-88412: Lacca di Robbia, Sangue di Drago e Colofonia",
+                dateIso: "2026-11-13T14:05:00",
+                dateFormatted: "13/11/2026 14:05",
+                snippet: "Il Suo ordine #KP-88412 contenente resine naturali e pigmenti per vernice ad olio cremonese è stato affidato al corriere...",
+                bodyText: "Gentile Cliente Liuteria De Lorenzi,\n\nConfermiamo la spedizione dell'ordine #KP-88412 indirizzato al vostro laboratorio di Cremona:\n- 1x Alizarina / Lacca di Robbia pura in radice (250g)\n- 1x Resina Sangue di Drago Sumatra extra (100g)\n- 1x Mastice di Chios in lacrime (250g)\n- 1x Olio di Lino spremuto a freddo purificato (1000ml)\n\nConsegna prevista entro 48 ore lavorative.\n\nCordiali saluti,\nTeam Kremer Pigmente",
+                bodyHtml: "",
+                read: true,
+                starred: false,
+                attachments: []
+            },
+            {
+                id: "mail-init-5",
+                uid: "init-5",
+                accountId: "domain",
+                accountEmail: "info@liuteriadelorenzi.it",
+                folder: "INBOX",
+                fromName: "Fondazione Museo del Violino Cremona",
+                fromEmail: "segreteria@museodelviolino.org",
+                toEmail: "info@liuteriadelorenzi.it",
+                subject: "Invito Rassegna Acustica & Mostra Liuteria Contemporanea Cremonese",
+                dateIso: "2026-11-12T11:30:00",
+                dateFormatted: "12/11/2026 11:30",
+                snippet: "Gentile Maestro, siamo lieti di invitarLa alla sessione di audizione comparativa nell'Auditorium Giovanni Arvedi...",
+                bodyText: "Gentile Maestro De Lorenzi,\n\nSiamo lieti di invitarLa alla prossima sessione di audizione acustica comparativa dedicata agli strumenti ad arco contemporanei presso l'Auditorium Giovanni Arvedi.\n\nPer confermare la partecipazione con un violino o violoncello del Suo atelier, La preghiamo di rispondere a questa comunicazione indicando il modello presentato.\n\nCordiali saluti,\nSegreteria Scientifica — Cremona",
+                bodyHtml: "",
+                read: true,
+                starred: true,
+                attachments: []
             }
         ]
-    }
-};
+    };
 
 class DataStore {
     constructor() {
@@ -874,9 +1024,15 @@ class DataStore {
                     if (!parsed.settings.sendinblue) {
                         parsed.settings.sendinblue = JSON.parse(JSON.stringify(defaultData.settings.sendinblue));
                     }
+                    if (!parsed.settings.mailAccounts) {
+                        parsed.settings.mailAccounts = JSON.parse(JSON.stringify(defaultData.settings.mailAccounts));
+                    }
                     if (parsed.settings.atelierName === "Atelier Liuteria Master" || !parsed.settings.atelierName) {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";
                     }
+                }
+                if (!Array.isArray(parsed.mail) || parsed.mail.length === 0) {
+                    parsed.mail = JSON.parse(JSON.stringify(defaultData.mail));
                 }
                 if (!parsed.liuteriaMaking || !parsed.liuteriaMaking.measurements) {
                     parsed.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));

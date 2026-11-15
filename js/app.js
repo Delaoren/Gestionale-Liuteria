@@ -115,6 +115,16 @@ const APPS = [
         renderer: window.AppModules.renderMagazzinoStrumenti
     },
     {
+        id: "mail",
+        name: "Mail",
+        tag: "Posta Gmail & Dominio .it",
+        icon: "mail",
+        color: "linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(59, 130, 246, 0.38))",
+        borderColor: "#38bdf8",
+        desc: "Client di posta unificato IMAP/SMTP per leggere, cercare e rispondere alle email di liuteriadelorenzi@gmail.com e info@liuteriadelorenzi.it.",
+        renderer: window.AppModules.renderMail
+    },
+    {
         id: "media",
         name: "Media",
         tag: "Foto & Audio",
@@ -8121,6 +8131,1055 @@ window.saveLmToGestionaleCostruzione = function() {
     window.showToast(`Progetto "${opNum}" salvato nel modulo Costruzione con frequenze M5 (${est.m5} Hz) e peso tavola (${est.topWeightG} g)!`);
 };
 
+// ============================================================================
+// MODULO 16: MAIL CLIENT UNIFICATO (liuteriadelorenzi@gmail.com & info@liuteriadelorenzi.it)
+// ============================================================================
+
+window.mailClientState = {
+    activeAccount: "all",       // "all" | "gmail" | "domain"
+    activeFolder: "INBOX",      // "INBOX" | "STARRED" | "SENT" | "TRASH"
+    unreadOnly: false,
+    searchQuery: "",
+    selectedMessageId: null,
+    syncing: false,
+    lastGlobalSync: "",
+    initializedFromServer: false
+};
+
+window.getMailAccountsConfig = function() {
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    if (!window.atelierDB.data.settings.mailAccounts) {
+        window.atelierDB.data.settings.mailAccounts = {
+            gmail: {
+                id: "gmail",
+                email: "liuteriadelorenzi@gmail.com",
+                label: "Gmail Bottega",
+                provider: "gmail",
+                enabled: false,
+                imapHost: "imap.gmail.com",
+                imapPort: 993,
+                imapSsl: true,
+                smtpHost: "smtp.gmail.com",
+                smtpPort: 465,
+                smtpSsl: true,
+                username: "liuteriadelorenzi@gmail.com",
+                detectForwardedDomain: true,
+                hasPassword: false,
+                status: "unconfigured",
+                lastSync: "",
+                lastError: ""
+            },
+            domain: {
+                id: "domain",
+                email: "info@liuteriadelorenzi.it",
+                label: "Dominio Ufficiale (.it)",
+                provider: "custom_imap",
+                enabled: false,
+                imapHost: "mail.liuteriadelorenzi.it",
+                imapPort: 993,
+                imapSsl: true,
+                smtpHost: "mail.liuteriadelorenzi.it",
+                smtpPort: 465,
+                smtpSsl: true,
+                username: "info@liuteriadelorenzi.it",
+                forwardedToGmail: false,
+                hasPassword: false,
+                status: "unconfigured",
+                lastSync: "",
+                lastError: ""
+            }
+        };
+    }
+    return window.atelierDB.data.settings.mailAccounts;
+};
+
+window.getMailMessagesList = function() {
+    if (!Array.isArray(window.atelierDB.data.mail)) {
+        window.atelierDB.data.mail = [];
+    }
+    return window.atelierDB.data.mail;
+};
+
+window.initMailService = async function() {
+    try {
+        const res = await fetch("/api/mail/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.success) {
+            if (data.accounts) {
+                const localAccs = window.getMailAccountsConfig();
+                for (const k of ["gmail", "domain"]) {
+                    if (data.accounts[k]) {
+                        localAccs[k] = { ...localAccs[k], ...data.accounts[k] };
+                    }
+                }
+            }
+            if (Array.isArray(data.messages) && data.messages.length > 0) {
+                window.atelierDB.data.mail = data.messages;
+            }
+            if (data.lastGlobalSync) {
+                window.mailClientState.lastGlobalSync = data.lastGlobalSync;
+            }
+            window.mailClientState.initializedFromServer = true;
+            window.atelierDB.saveData();
+            if (window.appController && window.appController.activeModuleId === "mail") {
+                const container = document.getElementById("moduleContentContainer");
+                if (container) window.renderMailWorkspace(container);
+            }
+        }
+    } catch (e) {
+        // Offline / static fallback
+    }
+};
+
+window.escapeMailHtml = function(str) {
+    return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+};
+
+window.sanitizeMailBodyHtml = function(htmlStr) {
+    if (!htmlStr) return "";
+    return String(htmlStr)
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+        .replace(/\son\w+="[^"]*"/gi, "")
+        .replace(/\son\w+='[^']*'/gi, "");
+};
+
+window.getFilteredMailMessages = function() {
+    const all = window.getMailMessagesList();
+    const st = window.mailClientState;
+    const q = (st.searchQuery || "").trim().toLowerCase();
+
+    return all.filter(m => {
+        if (!m) return false;
+        const folder = m.folder || "INBOX";
+
+        // Folder filter
+        if (st.activeFolder === "TRASH") {
+            if (folder !== "TRASH") return false;
+        } else if (st.activeFolder === "SENT") {
+            if (folder !== "SENT") return false;
+        } else if (st.activeFolder === "STARRED") {
+            if (folder === "TRASH" || !m.starred) return false;
+        } else {
+            // INBOX
+            if (folder !== "INBOX") return false;
+        }
+
+        // Account filter
+        if (st.activeAccount === "gmail") {
+            const isGmail = m.accountId === "gmail" || (m.accountEmail || "").toLowerCase() === "liuteriadelorenzi@gmail.com";
+            if (!isGmail) return false;
+        } else if (st.activeAccount === "domain") {
+            const isDomain = m.accountId === "domain" || (m.accountEmail || "").toLowerCase() === "info@liuteriadelorenzi.it";
+            if (!isDomain) return false;
+        }
+
+        // Unread filter
+        if (st.unreadOnly && m.read) return false;
+
+        // Search filter
+        if (q) {
+            const hay = `${m.subject || ""} ${m.fromName || ""} ${m.fromEmail || ""} ${m.toEmail || ""} ${m.accountEmail || ""} ${m.bodyText || ""}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+};
+
+window.renderMailWorkspace = function(container) {
+    if (!container) container = document.getElementById("moduleContentContainer");
+    if (!container) return;
+
+    const accounts = window.getMailAccountsConfig();
+    const allMsgs = window.getMailMessagesList();
+    const st = window.mailClientState;
+
+    const inboxMsgs = allMsgs.filter(m => (m.folder || "INBOX") === "INBOX");
+    const unreadTotal = inboxMsgs.filter(m => !m.read).length;
+    const unreadGmail = inboxMsgs.filter(m => !m.read && (m.accountId === "gmail" || m.accountEmail === "liuteriadelorenzi@gmail.com")).length;
+    const unreadDomain = inboxMsgs.filter(m => !m.read && (m.accountId === "domain" || m.accountEmail === "info@liuteriadelorenzi.it")).length;
+    const starredCount = allMsgs.filter(m => m.starred && m.folder !== "TRASH").length;
+    const sentCount = allMsgs.filter(m => m.folder === "SENT").length;
+    const trashCount = allMsgs.filter(m => m.folder === "TRASH").length;
+
+    const filtered = window.getFilteredMailMessages();
+    if (!st.selectedMessageId || !filtered.some(m => m.id === st.selectedMessageId)) {
+        st.selectedMessageId = filtered.length > 0 ? filtered[0].id : null;
+    }
+    const selectedMsg = filtered.find(m => m.id === st.selectedMessageId) || null;
+
+    const gmailCfg = accounts.gmail || {};
+    const domainCfg = accounts.domain || {};
+    const gmailConnected = gmailCfg.status === "connected" || gmailCfg.hasPassword;
+    const domainConnected = domainCfg.status === "connected" || domainCfg.hasPassword || domainCfg.forwardedToGmail;
+
+    container.innerHTML = `
+        <!-- Top Account Cards & KPI Bar -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; margin-bottom:1.25rem;">
+            <!-- Casella Unificata -->
+            <div class="glass-panel" onclick="window.setMailAccountFilter('all')" style="padding:1.1rem 1.3rem; cursor:pointer; border:1.5px solid ${st.activeAccount === 'all' ? 'var(--accent-gold)' : 'rgba(255,255,255,0.08)'}; background:${st.activeAccount === 'all' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(15, 23, 42, 0.85))' : 'rgba(17, 24, 39, 0.65)'}; transition:all 0.2s;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <div style="display:flex; align-items:center; gap:0.65rem;">
+                        <div style="width:40px; height:40px; border-radius:10px; background:rgba(245, 158, 11, 0.2); color:var(--accent-gold); display:flex; align-items:center; justify-content:center;">
+                            <i data-lucide="inbox"></i>
+                        </div>
+                        <div>
+                            <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Posta Unificata</div>
+                            <div style="font-size:1.02rem; font-weight:700; color:#fff;">Tutte le Caselle (2)</div>
+                        </div>
+                    </div>
+                    <span class="badge ${unreadTotal > 0 ? 'badge-warning' : 'badge-success'}">${unreadTotal} non lette</span>
+                </div>
+                <div style="font-size:0.76rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+                    <span>Totale messaggi: <strong>${inboxMsgs.length}</strong> in arrivo</span>
+                    <span style="color:var(--accent-gold); font-weight:600;">${st.activeAccount === 'all' ? '✓ Vista attiva' : 'Filtra →'}</span>
+                </div>
+            </div>
+
+            <!-- Account 1: liuteriadelorenzi@gmail.com -->
+            <div class="glass-panel" onclick="window.setMailAccountFilter('gmail')" style="padding:1.1rem 1.3rem; cursor:pointer; border:1.5px solid ${st.activeAccount === 'gmail' ? '#ef4444' : 'rgba(255,255,255,0.08)'}; background:${st.activeAccount === 'gmail' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.16), rgba(15, 23, 42, 0.85))' : 'rgba(17, 24, 39, 0.65)'}; transition:all 0.2s;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <div style="display:flex; align-items:center; gap:0.65rem; min-width:0;">
+                        <div style="width:40px; height:40px; border-radius:10px; background:rgba(239, 68, 68, 0.2); color:#f87171; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800; font-size:0.95rem;">
+                            G
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:0.72rem; color:#fca5a5; text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Account Gmail</div>
+                            <div style="font-size:0.92rem; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">liuteriadelorenzi@gmail.com</div>
+                        </div>
+                    </div>
+                    <span class="badge ${unreadGmail > 0 ? 'badge-danger' : 'badge-info'}">${unreadGmail} nuove</span>
+                </div>
+                <div style="font-size:0.74rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+                    <span>
+                        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:${gmailConnected ? '#10b981' : '#f59e0b'}; margin-right:4px;"></span>
+                        ${gmailConnected ? `IMAP Attivo (${gmailCfg.lastSync || 'Pronto'})` : 'imap.gmail.com:993 • Da autenticare'}
+                    </span>
+                    <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.5rem; font-size:0.68rem;" onclick="event.stopPropagation(); window.openMailAccountConfigModal('gmail')">Configura</button>
+                </div>
+            </div>
+
+            <!-- Account 2: info@liuteriadelorenzi.it -->
+            <div class="glass-panel" onclick="window.setMailAccountFilter('domain')" style="padding:1.1rem 1.3rem; cursor:pointer; border:1.5px solid ${st.activeAccount === 'domain' ? '#38bdf8' : 'rgba(255,255,255,0.08)'}; background:${st.activeAccount === 'domain' ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(15, 23, 42, 0.85))' : 'rgba(17, 24, 39, 0.65)'}; transition:all 0.2s;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <div style="display:flex; align-items:center; gap:0.65rem; min-width:0;">
+                        <div style="width:40px; height:40px; border-radius:10px; background:rgba(56, 189, 248, 0.2); color:#38bdf8; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800; font-size:0.82rem;">
+                            .IT
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:0.72rem; color:#7dd3fc; text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Dominio Ufficiale</div>
+                            <div style="font-size:0.92rem; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">info@liuteriadelorenzi.it</div>
+                        </div>
+                    </div>
+                    <span class="badge ${unreadDomain > 0 ? 'badge-info' : 'badge-success'}">${unreadDomain} nuove</span>
+                </div>
+                <div style="font-size:0.74rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+                    <span>
+                        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:${domainConnected ? '#10b981' : '#f59e0b'}; margin-right:4px;"></span>
+                        ${domainConnected ? (domainCfg.forwardedToGmail ? 'Attivo (Inoltro su Gmail)' : `IMAP Attivo (${domainCfg.imapHost})`) : `${domainCfg.imapHost || 'mail.liuteriadelorenzi.it'}:993`}
+                    </span>
+                    <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.5rem; font-size:0.68rem;" onclick="event.stopPropagation(); window.openMailAccountConfigModal('domain')">Configura</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Mail Toolbar -->
+        <div class="glass-panel" style="padding:1rem 1.25rem; margin-bottom:1.1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem;">
+            <!-- Folder Tabs -->
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center;">
+                <button type="button" class="btn btn-primary" style="padding:0.5rem 1rem; font-size:0.84rem;" onclick="window.openComposeMailModal()">
+                    <i data-lucide="pen-square"></i> ✍️ Scrivi Mail
+                </button>
+                <div style="width:1px; height:24px; background:rgba(255,255,255,0.12); margin:0 0.25rem;"></div>
+                ${[
+                    { id: "INBOX", label: `Posta in Arrivo (${inboxMsgs.length})`, icon: "inbox" },
+                    { id: "STARRED", label: `Speciali (${starredCount})`, icon: "star" },
+                    { id: "SENT", label: `Inviate (${sentCount})`, icon: "send" },
+                    { id: "TRASH", label: `Cestino (${trashCount})`, icon: "trash-2" }
+                ].map(f => `
+                    <button type="button" class="btn ${st.activeFolder === f.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.42rem 0.85rem; font-size:0.79rem; border-radius:20px;" onclick="window.setMailFolder('${f.id}')">
+                        <i data-lucide="${f.icon}"></i> ${f.label}
+                    </button>
+                `).join("")}
+            </div>
+
+            <!-- Search + Unread + Sync + Settings -->
+            <div style="display:flex; gap:0.55rem; align-items:center; flex-wrap:wrap;">
+                <div style="position:relative; min-width:220px;">
+                    <input type="text" id="mailSearchInput" class="form-control" placeholder="Cerca mittente, oggetto, testo..." value="${window.escapeMailHtml(st.searchQuery)}" oninput="window.handleMailSearchInput(this.value)" style="padding:0.42rem 0.8rem; font-size:0.82rem; border-radius:20px;">
+                </div>
+                <button type="button" class="btn ${st.unreadOnly ? 'btn-primary' : 'btn-secondary'}" style="padding:0.42rem 0.8rem; font-size:0.78rem; border-radius:20px;" onclick="window.toggleMailUnreadOnly()">
+                    <i data-lucide="mail-warning"></i> Solo non lette
+                </button>
+                <button type="button" class="btn btn-secondary" style="padding:0.42rem 0.9rem; font-size:0.8rem; border-color:var(--accent-emerald); color:#fff;" onclick="window.syncMailAccountsNow('all')" ${st.syncing ? 'disabled' : ''}>
+                    <i data-lucide="refresh-cw"></i> ${st.syncing ? '⏳ Sincronizzazione IMAP...' : '🔄 Scarica Posta (IMAP)'}
+                </button>
+                <button type="button" class="btn btn-secondary" style="padding:0.42rem 0.85rem; font-size:0.8rem;" onclick="window.openMailAccountConfigModal()">
+                    <i data-lucide="settings"></i> ⚙️ Configura Caselle
+                </button>
+            </div>
+        </div>
+
+        <!-- Master-Detail Split View: Lista Messaggi (Sinistra) + Lettore Email (Destra) -->
+        <div style="display:grid; grid-template-columns:minmax(320px, 410px) 1fr; gap:1.15rem; align-items:start;">
+            <!-- Colonna Sinistra: Elenco Email -->
+            <div class="glass-panel" style="padding:0; overflow:hidden; max-height:700px; display:flex; flex-direction:column;">
+                <div style="padding:0.85rem 1.1rem; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.22);">
+                    <span style="font-size:0.8rem; font-weight:700; color:#e5e7eb;">
+                        ${st.activeAccount === 'all' ? '📬 Tutte le Caselle' : st.activeAccount === 'gmail' ? '🔴 liuteriadelorenzi@gmail.com' : '🔵 info@liuteriadelorenzi.it'}
+                        <span style="color:var(--text-muted); font-weight:400;">(${filtered.length})</span>
+                    </span>
+                    ${st.lastGlobalSync ? `<span style="font-size:0.7rem; color:var(--accent-emerald);">Sync: ${st.lastGlobalSync}</span>` : ''}
+                </div>
+
+                <div style="overflow-y:auto; max-height:635px; divide-y:1px solid rgba(255,255,255,0.06);">
+                    ${filtered.length === 0 ? `
+                        <div style="padding:3rem 1.5rem; text-align:center; color:var(--text-muted);">
+                            <i data-lucide="mail-open" style="width:40px; height:40px; margin-bottom:0.6rem; color:var(--accent-gold);"></i>
+                            <div style="font-size:0.9rem; color:#fff; font-weight:600; margin-bottom:0.25rem;">Nessuna email in questa vista</div>
+                            <div style="font-size:0.78rem;">Modifica i filtri o clicca su "Scarica Posta (IMAP)" per sincronizzare i messaggi.</div>
+                        </div>
+                    ` : filtered.map(m => {
+                        const isSel = m.id === st.selectedMessageId;
+                        const isGmail = m.accountId === "gmail" || m.accountEmail === "liuteriadelorenzi@gmail.com";
+                        const badgeBg = isGmail ? "rgba(239, 68, 68, 0.18)" : "rgba(56, 189, 248, 0.18)";
+                        const badgeCol = isGmail ? "#fca5a5" : "#7dd3fc";
+                        const badgeBorder = isGmail ? "rgba(239, 68, 68, 0.4)" : "rgba(56, 189, 248, 0.4)";
+                        const badgeLabel = isGmail ? "gmail.com" : "info@.it";
+                        const hasAtt = Array.isArray(m.attachments) && m.attachments.length > 0;
+
+                        return `
+                            <div onclick="window.selectMailMessage('${m.id}')" style="padding:0.9rem 1.1rem; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.06); border-left:3.5px solid ${isSel ? 'var(--accent-gold)' : (!m.read ? '#38bdf8' : 'transparent')}; background:${isSel ? 'rgba(245, 158, 11, 0.12)' : (!m.read ? 'rgba(56, 189, 248, 0.05)' : 'transparent')}; transition:background 0.15s;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+                                    <div style="display:flex; align-items:center; gap:0.4rem; min-width:0;">
+                                        ${!m.read ? `<span style="width:8px; height:8px; border-radius:50%; background:#38bdf8; flex-shrink:0;" title="Non letta"></span>` : ''}
+                                        <span style="font-size:0.66rem; font-weight:700; padding:1px 6px; border-radius:6px; background:${badgeBg}; color:${badgeCol}; border:1px solid ${badgeBorder}; flex-shrink:0;">
+                                            ${badgeLabel}
+                                        </span>
+                                        <span style="font-size:0.83rem; font-weight:${!m.read ? '700' : '600'}; color:${!m.read ? '#fff' : '#d1d5db'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                            ${window.escapeMailHtml(m.fromName || m.fromEmail)}
+                                        </span>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:0.35rem; flex-shrink:0;">
+                                        <button type="button" onclick="event.stopPropagation(); window.performMailAction('${m.id}', 'toggle_star')" style="background:none; border:none; cursor:pointer; color:${m.starred ? '#fbbf24' : 'rgba(255,255,255,0.28)'}; padding:0; font-size:0.95rem;" title="Contrassegna come speciale">
+                                            ★
+                                        </button>
+                                        <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">
+                                            ${window.escapeMailHtml(m.dateFormatted || "")}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style="font-size:0.84rem; font-weight:${!m.read ? '700' : '500'}; color:${!m.read ? '#f9fafb' : '#cbd5e1'}; margin-bottom:0.25rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    ${window.escapeMailHtml(m.subject)}
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                                    <div style="font-size:0.75rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">
+                                        ${window.escapeMailHtml(m.snippet || "")}
+                                    </div>
+                                    ${hasAtt ? `<span style="font-size:0.68rem; color:var(--accent-gold); flex-shrink:0;">📎 ${m.attachments.length}</span>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            </div>
+
+            <!-- Colonna Destra: Pannello Lettura Email -->
+            <div class="glass-panel" style="min-height:560px; display:flex; flex-direction:column; justify-content:space-between;">
+                ${!selectedMsg ? `
+                    <div style="padding:4rem 2rem; text-align:center; color:var(--text-muted); margin:auto;">
+                        <i data-lucide="mail" style="width:52px; height:52px; color:var(--accent-gold); margin-bottom:0.8rem;"></i>
+                        <h3 style="color:#fff; font-family:var(--font-heading); margin-bottom:0.4rem;">Seleziona un'email per leggerla</h3>
+                        <p style="font-size:0.86rem;">Puoi leggere e rispondere sia da <strong>liuteriadelorenzi@gmail.com</strong> sia da <strong>info@liuteriadelorenzi.it</strong>.</p>
+                    </div>
+                ` : (() => {
+                    const isGmail = selectedMsg.accountId === "gmail" || selectedMsg.accountEmail === "liuteriadelorenzi@gmail.com";
+                    const accEmail = isGmail ? "liuteriadelorenzi@gmail.com" : "info@liuteriadelorenzi.it";
+                    const accBadgeBg = isGmail ? "rgba(239, 68, 68, 0.16)" : "rgba(56, 189, 248, 0.16)";
+                    const accBadgeCol = isGmail ? "#fca5a5" : "#7dd3fc";
+                    const atts = Array.isArray(selectedMsg.attachments) ? selectedMsg.attachments : [];
+
+                    return `
+                        <div>
+                            <!-- Barra Azioni Messaggio -->
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem; padding-bottom:0.95rem; margin-bottom:1.1rem; border-bottom:1px solid rgba(255,255,255,0.08);">
+                                <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+                                    <button type="button" class="btn btn-primary" style="padding:0.38rem 0.85rem; font-size:0.78rem;" onclick="window.openReplyMailModal('${selectedMsg.id}', false)">
+                                        <i data-lucide="reply"></i> ↩️ Rispondi
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:0.38rem 0.8rem; font-size:0.78rem;" onclick="window.openReplyMailModal('${selectedMsg.id}', true)">
+                                        <i data-lucide="forward"></i> ➡️ Inoltra
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:0.38rem 0.8rem; font-size:0.78rem; border-color:rgba(139, 92, 246, 0.45); color:#ddd6fe;" onclick="window.createAppointmentFromMail('${selectedMsg.id}')" title="Crea subito un appuntamento in Calendario da questa email">
+                                        <i data-lucide="calendar-plus"></i> 📅 Crea Appuntamento
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:0.38rem 0.8rem; font-size:0.78rem; border-color:rgba(16, 185, 129, 0.45); color:#a7f3d0;" onclick="window.saveSenderToClienti('${selectedMsg.id}')" title="Aggiungi il mittente nell'anagrafica Clienti">
+                                        <i data-lucide="user-plus"></i> 👤 Salva nei Clienti
+                                    </button>
+                                </div>
+
+                                <div style="display:flex; gap:0.4rem;">
+                                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem;" onclick="window.performMailAction('${selectedMsg.id}', '${selectedMsg.read ? 'mark_unread' : 'mark_read'}')" title="${selectedMsg.read ? 'Segna come non letta' : 'Segna come letta'}">
+                                        <i data-lucide="${selectedMsg.read ? 'mail' : 'mail-open'}"></i> ${selectedMsg.read ? 'Segna non letta' : 'Segna letta'}
+                                    </button>
+                                    ${selectedMsg.folder === 'TRASH' ? `
+                                        <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem; color:var(--accent-emerald);" onclick="window.performMailAction('${selectedMsg.id}', 'restore')">
+                                            Ripristina
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem; color:#ef4444;" onclick="window.performMailAction('${selectedMsg.id}', 'delete_permanent')">
+                                            Elimina Definitivamente
+                                        </button>
+                                    ` : `
+                                        <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem; color:#f87171;" onclick="window.performMailAction('${selectedMsg.id}', 'trash')" title="Sposta nel cestino">
+                                            <i data-lucide="trash-2"></i>
+                                        </button>
+                                    `}
+                                </div>
+                            </div>
+
+                            <!-- Oggetto e Metadati Mittente/Destinatario -->
+                            <div style="margin-bottom:1.2rem;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem;">
+                                    <h3 style="font-family:var(--font-heading); font-size:1.25rem; color:#fff; margin:0; line-height:1.35;">
+                                        ${window.escapeMailHtml(selectedMsg.subject)}
+                                    </h3>
+                                    <span style="font-size:0.74rem; font-weight:700; padding:0.25rem 0.7rem; border-radius:14px; background:${accBadgeBg}; color:${accBadgeCol}; white-space:nowrap; flex-shrink:0;">
+                                        📬 Casella: ${accEmail}
+                                    </span>
+                                </div>
+
+                                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:0.85rem 1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                                        <div style="width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg, var(--accent-gold), #b45309); color:#000; font-weight:800; font-size:1rem; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                                            ${window.escapeMailHtml((selectedMsg.fromName || selectedMsg.fromEmail || "M").trim().charAt(0).toUpperCase())}
+                                        </div>
+                                        <div>
+                                            <div style="font-size:0.9rem; font-weight:700; color:#fff;">
+                                                ${window.escapeMailHtml(selectedMsg.fromName || selectedMsg.fromEmail)}
+                                                <span style="font-weight:400; color:var(--text-secondary); font-size:0.8rem;">&lt;${window.escapeMailHtml(selectedMsg.fromEmail)}&gt;</span>
+                                            </div>
+                                            <div style="font-size:0.76rem; color:var(--text-muted);">
+                                                A: <strong style="color:#d1d5db;">${window.escapeMailHtml(selectedMsg.toEmail || accEmail)}</strong>
+                                                ${selectedMsg.deliveryMethod ? ` • <span style="color:var(--accent-emerald);">${window.escapeMailHtml(selectedMsg.deliveryMethod)}</span>` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:0.78rem; color:var(--accent-gold); font-family:var(--font-mono);">
+                                        📅 ${window.escapeMailHtml(selectedMsg.dateFormatted || "")}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Allegati (se presenti) -->
+                            ${atts.length > 0 ? `
+                                <div style="margin-bottom:1.15rem; padding:0.75rem 0.95rem; background:rgba(245, 158, 11, 0.07); border:1px solid rgba(245, 158, 11, 0.25); border-radius:8px;">
+                                    <div style="font-size:0.74rem; font-weight:700; color:var(--accent-gold); text-transform:uppercase; margin-bottom:0.45rem;">
+                                        📎 Allegati (${atts.length})
+                                    </div>
+                                    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                                        ${atts.map((att, aIdx) => `
+                                            <div style="display:inline-flex; align-items:center; gap:0.5rem; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); padding:0.38rem 0.75rem; border-radius:6px; font-size:0.78rem;">
+                                                <i data-lucide="file-text" style="width:14px; height:14px; color:var(--accent-gold);"></i>
+                                                <span style="color:#fff; font-weight:600;">${window.escapeMailHtml(att.filename || "Allegato")}</span>
+                                                <span style="color:var(--text-muted); font-size:0.7rem;">(${window.escapeMailHtml(att.sizeFormatted || "")})</span>
+                                                <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.45rem; font-size:0.68rem;" onclick="window.downloadMailAttachment('${selectedMsg.id}', ${aIdx})">
+                                                    Scarica
+                                                </button>
+                                            </div>
+                                        `).join("")}
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            <!-- Corpo del Messaggio -->
+                            <div style="background:rgba(13, 17, 25, 0.72); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:1.35rem 1.5rem; min-height:260px; color:#f3f4f6; font-size:0.92rem; line-height:1.7; white-space:pre-wrap; word-break:break-word;">${selectedMsg.bodyHtml ? `<div style="white-space:normal;">${window.sanitizeMailBodyHtml(selectedMsg.bodyHtml)}</div>` : window.escapeMailHtml(selectedMsg.bodyText || "")}</div>
+                        </div>
+
+                        <!-- Risposta Rapida Inline -->
+                        <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+                            <span style="font-size:0.78rem; color:var(--text-secondary);">
+                                Rispondi direttamente come <strong style="color:#fff;">${accEmail}</strong> a <strong style="color:var(--accent-gold);">${window.escapeMailHtml(selectedMsg.fromEmail)}</strong>
+                            </span>
+                            <button type="button" class="btn btn-primary" style="padding:0.45rem 1rem; font-size:0.82rem;" onclick="window.openReplyMailModal('${selectedMsg.id}', false)">
+                                <i data-lucide="reply"></i> ↩️ Rispondi a ${window.escapeMailHtml((selectedMsg.fromName || selectedMsg.fromEmail).split(" ")[0])}
+                            </button>
+                        </div>
+                    `;
+                })()}
+            </div>
+        </div>
+    `;
+
+    if (window.appController) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.setMailAccountFilter = function(accId) {
+    window.mailClientState.activeAccount = accId;
+    window.mailClientState.selectedMessageId = null;
+    window.renderMailWorkspace();
+};
+
+window.setMailFolder = function(folderId) {
+    window.mailClientState.activeFolder = folderId;
+    window.mailClientState.selectedMessageId = null;
+    window.renderMailWorkspace();
+};
+
+window.toggleMailUnreadOnly = function() {
+    window.mailClientState.unreadOnly = !window.mailClientState.unreadOnly;
+    window.mailClientState.selectedMessageId = null;
+    window.renderMailWorkspace();
+};
+
+window.handleMailSearchInput = function(val) {
+    window.mailClientState.searchQuery = val || "";
+    window.mailClientState.selectedMessageId = null;
+    window.renderMailWorkspace();
+    const input = document.getElementById("mailSearchInput");
+    if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+    }
+};
+
+window.selectMailMessage = function(msgId) {
+    window.mailClientState.selectedMessageId = msgId;
+    const msgs = window.getMailMessagesList();
+    const found = msgs.find(m => m.id === msgId);
+    if (found && !found.read) {
+        found.read = true;
+        window.atelierDB.saveData();
+        fetch("/api/mail/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messageId: msgId, action: "mark_read" })
+        }).catch(() => {});
+    }
+    window.renderMailWorkspace();
+};
+
+window.performMailAction = async function(msgId, action) {
+    const msgs = window.getMailMessagesList();
+    if (action === "delete_permanent") {
+        window.atelierDB.data.mail = msgs.filter(m => m.id !== msgId);
+    } else {
+        const m = msgs.find(x => x.id === msgId);
+        if (m) {
+            if (action === "mark_read") m.read = true;
+            else if (action === "mark_unread") m.read = false;
+            else if (action === "toggle_star") m.starred = !m.starred;
+            else if (action === "trash") m.folder = "TRASH";
+            else if (action === "restore") m.folder = "INBOX";
+        }
+    }
+    window.atelierDB.saveData();
+    window.renderMailWorkspace();
+
+    try {
+        await fetch("/api/mail/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messageId: msgId, action })
+        });
+    } catch (e) {}
+};
+
+window.downloadMailAttachment = function(msgId, attIdx) {
+    const msgs = window.getMailMessagesList();
+    const m = msgs.find(x => x.id === msgId);
+    if (!m || !Array.isArray(m.attachments) || !m.attachments[attIdx]) return;
+    const att = m.attachments[attIdx];
+
+    if (att.dataBase64) {
+        const link = document.createElement("a");
+        link.href = `data:${att.contentType || "application/octet-stream"};base64,${att.dataBase64}`;
+        link.download = att.filename || "allegato";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.showToast(`Allegato "${att.filename}" scaricato!`);
+    } else {
+        const blob = new Blob([`Allegato: ${att.filename}\nDa: ${m.fromName} <${m.fromEmail}>\nOggetto: ${m.subject}\nData: ${m.dateFormatted}`], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = att.filename || "allegato.txt";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        window.showToast(`Scaricato riepilogo allegato "${att.filename}".`);
+    }
+};
+
+window.syncMailAccountsNow = async function(targetAccount = "all") {
+    window.mailClientState.syncing = true;
+    window.renderMailWorkspace();
+
+    try {
+        const res = await fetch("/api/mail/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountId: targetAccount, limit: 35 })
+        });
+        const data = await res.json();
+        window.mailClientState.syncing = false;
+
+        if (data.accounts) {
+            const localAccs = window.getMailAccountsConfig();
+            for (const k of ["gmail", "domain"]) {
+                if (data.accounts[k]) localAccs[k] = { ...localAccs[k], ...data.accounts[k] };
+            }
+        }
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+            window.atelierDB.data.mail = data.messages;
+        }
+        if (data.lastGlobalSync) {
+            window.mailClientState.lastGlobalSync = data.lastGlobalSync;
+        }
+        window.atelierDB.saveData();
+        window.renderMailWorkspace();
+
+        if (data.success) {
+            window.showToast("Posta sincronizzata con successo via IMAP!");
+        } else {
+            const results = data.results || {};
+            const missingCreds = Object.values(results).some(r => r && r.code === "MISSING_CREDENTIALS");
+            if (missingCreds) {
+                window.showToast("Inserisci la password IMAP delle caselle per scaricare le email dal server.");
+                window.openMailAccountConfigModal();
+            } else {
+                const errs = Object.values(results).map(r => r && r.error).filter(Boolean).join(" | ");
+                window.showToast(`Avviso IMAP: ${errs || data.error || "Controlla i parametri in Configura Caselle"}`);
+            }
+        }
+    } catch (err) {
+        window.mailClientState.syncing = false;
+        window.renderMailWorkspace();
+        window.showToast("Impossibile contattare il servizio IMAP locale.");
+    }
+};
+
+window.openMailAccountConfigModal = function(focusAccount = "gmail") {
+    const accounts = window.getMailAccountsConfig();
+    const g = accounts.gmail || {};
+    const d = accounts.domain || {};
+
+    let modal = document.getElementById("mailConfigModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "mailConfigModal";
+        modal.className = "modal-overlay";
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-box" style="max-width:780px; width:95%;">
+            <div class="modal-header">
+                <h3>⚙️ Configurazione Caselle Mail (IMAP / SMTP SSL)</h3>
+                <button class="modal-close" onclick="document.getElementById('mailConfigModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:78vh; overflow-y:auto;">
+                <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:1.1rem;">
+                    Configura gli accessi IMAP/SMTP per leggere e inviare le email in tempo reale da <strong>liuteriadelorenzi@gmail.com</strong> e <strong>info@liuteriadelorenzi.it</strong>.
+                </p>
+
+                <!-- Sezione 1: liuteriadelorenzi@gmail.com -->
+                <div style="background:rgba(239, 68, 68, 0.07); border:1px solid rgba(239, 68, 68, 0.3); border-radius:12px; padding:1.15rem 1.25rem; margin-bottom:1.25rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+                        <div style="display:flex; align-items:center; gap:0.6rem;">
+                            <span style="background:#ef4444; color:#fff; font-weight:800; font-size:0.78rem; padding:0.2rem 0.55rem; border-radius:6px;">GMAIL</span>
+                            <strong style="color:#fff; font-size:1rem;">liuteriadelorenzi@gmail.com</strong>
+                        </div>
+                        <span class="badge ${g.status === 'connected' || g.hasPassword ? 'badge-success' : 'badge-warning'}">
+                            ${g.status === 'connected' ? '✓ Connesso' : g.hasPassword ? 'Password salvata' : 'Richiede Password per le App'}
+                        </span>
+                    </div>
+
+                    <div style="font-size:0.77rem; color:#fca5a5; background:rgba(0,0,0,0.3); padding:0.6rem 0.85rem; border-radius:8px; margin-bottom:0.85rem; line-height:1.45;">
+                        💡 <strong>Nota Google Gmail:</strong> per collegare Gmail via IMAP usa una <strong>Password per le app</strong> di 16 caratteri (creabile dal tuo Account Google &rarr; <em>Sicurezza &rarr; Verifica in due passaggi &rarr; Password per le app</em>).
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:0.75rem;">
+                        <div class="form-group" style="margin:0;">
+                            <label>Indirizzo / Utente Gmail</label>
+                            <input type="text" id="mailCfgGmailUser" class="form-control" value="${window.escapeMailHtml(g.username || 'liuteriadelorenzi@gmail.com')}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Password per le App Google (16 car.)</label>
+                            <input type="password" id="mailCfgGmailPass" class="form-control" placeholder="${g.hasPassword ? '•••••••••••••••• (già salvata)' : 'es. abcd efgh ijkl mnop'}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Server IMAP (SSL :993)</label>
+                            <input type="text" id="mailCfgGmailImap" class="form-control" value="${window.escapeMailHtml(g.imapHost || 'imap.gmail.com')}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Server SMTP (SSL :465)</label>
+                            <input type="text" id="mailCfgGmailSmtp" class="form-control" value="${window.escapeMailHtml(g.smtpHost || 'smtp.gmail.com')}">
+                        </div>
+                    </div>
+
+                    <div style="margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                        <label style="font-size:0.79rem; color:#e5e7eb; display:flex; align-items:center; gap:0.45rem; cursor:pointer;">
+                            <input type="checkbox" id="mailCfgGmailDetectDomain" ${g.detectForwardedDomain !== false ? 'checked' : ''}>
+                            Riconosci automaticamente anche le mail inviate a <strong>info@liuteriadelorenzi.it</strong> inoltrate su questa Gmail
+                        </label>
+                        <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.8rem; font-size:0.76rem; border-color:#f87171; color:#fff;" onclick="window.saveAndTestMailConfig('gmail')">
+                            🔌 Salva & Testa Gmail
+                        </button>
+                    </div>
+                    ${g.lastError ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:#fda4af;">⚠️ ${window.escapeMailHtml(g.lastError)}</div>` : ''}
+                </div>
+
+                <!-- Sezione 2: info@liuteriadelorenzi.it -->
+                <div style="background:rgba(56, 189, 248, 0.07); border:1px solid rgba(56, 189, 248, 0.3); border-radius:12px; padding:1.15rem 1.25rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+                        <div style="display:flex; align-items:center; gap:0.6rem;">
+                            <span style="background:#0284c7; color:#fff; font-weight:800; font-size:0.78rem; padding:0.2rem 0.55rem; border-radius:6px;">DOMINIO .IT</span>
+                            <strong style="color:#fff; font-size:1rem;">info@liuteriadelorenzi.it</strong>
+                        </div>
+                        <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+                            <span style="font-size:0.72rem; color:var(--text-muted);">Preset Provider:</span>
+                            <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.48rem; font-size:0.68rem;" onclick="window.applyDomainMailPreset('cpanel')">mail.liuteriadelorenzi.it</button>
+                            <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.48rem; font-size:0.68rem;" onclick="window.applyDomainMailPreset('aruba')">Aruba</button>
+                            <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.48rem; font-size:0.68rem;" onclick="window.applyDomainMailPreset('register')">Register.it</button>
+                            <button type="button" class="btn btn-secondary" style="padding:0.15rem 0.48rem; font-size:0.68rem;" onclick="window.applyDomainMailPreset('ovh')">OVH</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:0.8rem; padding:0.55rem 0.8rem; background:rgba(0,0,0,0.28); border-radius:8px;">
+                        <label style="font-size:0.8rem; color:#7dd3fc; display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight:600;">
+                            <input type="checkbox" id="mailCfgDomainForwarded" ${d.forwardedToGmail ? 'checked' : ''} onchange="document.getElementById('mailDomainImapFields').style.opacity = this.checked ? '0.45' : '1'">
+                            Le email di <strong>info@liuteriadelorenzi.it</strong> vengono inoltrate automaticamente su <strong>liuteriadelorenzi@gmail.com</strong> (Email Routing / Alias)
+                        </label>
+                    </div>
+
+                    <div id="mailDomainImapFields" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; opacity:${d.forwardedToGmail ? '0.45' : '1'};">
+                        <div class="form-group" style="margin:0;">
+                            <label>Utente Casella .it</label>
+                            <input type="text" id="mailCfgDomainUser" class="form-control" value="${window.escapeMailHtml(d.username || 'info@liuteriadelorenzi.it')}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Password Casella .it</label>
+                            <input type="password" id="mailCfgDomainPass" class="form-control" placeholder="${d.hasPassword ? '•••••••••••• (già salvata)' : 'Password di info@liuteriadelorenzi.it'}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Host IMAP</label>
+                            <input type="text" id="mailCfgDomainImap" class="form-control" value="${window.escapeMailHtml(d.imapHost || 'mail.liuteriadelorenzi.it')}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Porta IMAP (SSL)</label>
+                            <input type="number" id="mailCfgDomainImapPort" class="form-control" value="${d.imapPort || 993}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Host SMTP</label>
+                            <input type="text" id="mailCfgDomainSmtp" class="form-control" value="${window.escapeMailHtml(d.smtpHost || 'mail.liuteriadelorenzi.it')}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Porta SMTP (SSL)</label>
+                            <input type="number" id="mailCfgDomainSmtpPort" class="form-control" value="${d.smtpPort || 465}">
+                        </div>
+                    </div>
+
+                    <div style="margin-top:0.75rem; display:flex; justify-content:flex-end;">
+                        <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.8rem; font-size:0.76rem; border-color:#38bdf8; color:#fff;" onclick="window.saveAndTestMailConfig('domain')">
+                            🔌 Salva & Testa info@liuteriadelorenzi.it
+                        </button>
+                    </div>
+                    ${d.lastError ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:#fda4af;">⚠️ ${window.escapeMailHtml(d.lastError)}</div>` : ''}
+                </div>
+
+                <div id="mailConfigFeedbackBox" style="margin-top:0.9rem; font-size:0.82rem;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailConfigModal').classList.remove('open')">Chiudi</button>
+                <button type="button" class="btn btn-primary" onclick="window.saveAndTestMailConfig(null)">💾 Salva Configurazione</button>
+            </div>
+        </div>
+    `;
+    modal.classList.add("open");
+};
+
+window.applyDomainMailPreset = function(preset) {
+    const imapInput = document.getElementById("mailCfgDomainImap");
+    const smtpInput = document.getElementById("mailCfgDomainSmtp");
+    const imapPort = document.getElementById("mailCfgDomainImapPort");
+    const smtpPort = document.getElementById("mailCfgDomainSmtpPort");
+    if (!imapInput || !smtpInput) return;
+
+    if (preset === "aruba") {
+        imapInput.value = "imaps.aruba.it";
+        smtpInput.value = "smtps.aruba.it";
+    } else if (preset === "register") {
+        imapInput.value = "imap.register.it";
+        smtpInput.value = "smtp.register.it";
+    } else if (preset === "ovh") {
+        imapInput.value = "ssl0.ovh.net";
+        smtpInput.value = "ssl0.ovh.net";
+    } else {
+        imapInput.value = "mail.liuteriadelorenzi.it";
+        smtpInput.value = "mail.liuteriadelorenzi.it";
+    }
+    if (imapPort) imapPort.value = 993;
+    if (smtpPort) smtpPort.value = 465;
+};
+
+window.saveAndTestMailConfig = async function(testAccId = null) {
+    const fb = document.getElementById("mailConfigFeedbackBox");
+    if (fb) {
+        fb.innerHTML = `<span style="color:var(--accent-gold);">⏳ Salvataggio e verifica connessione IMAP in corso...</span>`;
+    }
+
+    const gPass = (document.getElementById("mailCfgGmailPass")?.value || "").trim();
+    const dPass = (document.getElementById("mailCfgDomainPass")?.value || "").trim();
+
+    const payloadAccounts = {
+        gmail: {
+            username: (document.getElementById("mailCfgGmailUser")?.value || "liuteriadelorenzi@gmail.com").trim(),
+            imapHost: (document.getElementById("mailCfgGmailImap")?.value || "imap.gmail.com").trim(),
+            imapPort: 993,
+            smtpHost: (document.getElementById("mailCfgGmailSmtp")?.value || "smtp.gmail.com").trim(),
+            smtpPort: 465,
+            detectForwardedDomain: Boolean(document.getElementById("mailCfgGmailDetectDomain")?.checked)
+        },
+        domain: {
+            username: (document.getElementById("mailCfgDomainUser")?.value || "info@liuteriadelorenzi.it").trim(),
+            imapHost: (document.getElementById("mailCfgDomainImap")?.value || "mail.liuteriadelorenzi.it").trim(),
+            imapPort: parseInt(document.getElementById("mailCfgDomainImapPort")?.value || "993", 10),
+            smtpHost: (document.getElementById("mailCfgDomainSmtp")?.value || "mail.liuteriadelorenzi.it").trim(),
+            smtpPort: parseInt(document.getElementById("mailCfgDomainSmtpPort")?.value || "465", 10),
+            forwardedToGmail: Boolean(document.getElementById("mailCfgDomainForwarded")?.checked)
+        }
+    };
+    if (gPass) payloadAccounts.gmail.password = gPass;
+    if (dPass) payloadAccounts.domain.password = dPass;
+
+    try {
+        const res = await fetch("/api/mail/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                accounts: payloadAccounts,
+                testAccount: testAccId
+            })
+        });
+        const data = await res.json();
+        if (data.accounts) {
+            const localAccs = window.getMailAccountsConfig();
+            for (const k of ["gmail", "domain"]) {
+                if (data.accounts[k]) localAccs[k] = { ...localAccs[k], ...data.accounts[k] };
+            }
+        }
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+            window.atelierDB.data.mail = data.messages;
+        }
+        window.atelierDB.saveData();
+        window.renderMailWorkspace();
+
+        if (!testAccId) {
+            if (fb) fb.innerHTML = `<span style="color:var(--accent-emerald);">✓ Configurazione salvata con successo!</span>`;
+            window.showToast("Configurazione caselle Mail salvata!");
+            setTimeout(() => document.getElementById("mailConfigModal")?.classList.remove("open"), 700);
+        } else if (data.syncResult && data.syncResult.success) {
+            if (fb) fb.innerHTML = `<span style="color:var(--accent-emerald);">✓ Connessione IMAP riuscita! Scaricate ${data.syncResult.fetchedCount} email reali.</span>`;
+            window.showToast(`Connessione IMAP riuscita (${data.syncResult.fetchedCount} email sincronizzate)!`);
+        } else {
+            const errTxt = (data.syncResult && data.syncResult.error) || data.error || "Errore durante il test IMAP.";
+            if (fb) fb.innerHTML = `<span style="color:#f87171;">⚠️ ${window.escapeMailHtml(errTxt)}</span>`;
+        }
+    } catch (e) {
+        if (fb) fb.innerHTML = `<span style="color:#f87171;">⚠️ Errore di comunicazione con il server: ${window.escapeMailHtml(e.message)}</span>`;
+    }
+};
+
+window.openComposeMailModal = function(prefill = {}) {
+    const defaultFrom = prefill.accountId || (window.mailClientState.activeAccount === "domain" ? "domain" : "gmail");
+    const clients = Array.isArray(window.atelierDB.data.clienti) ? window.atelierDB.data.clienti : [];
+
+    let modal = document.getElementById("mailComposeModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "mailComposeModal";
+        modal.className = "modal-overlay";
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-box" style="max-width:680px; width:95%;">
+            <div class="modal-header">
+                <h3>✍️ ${prefill.title || "Nuovo Messaggio Email"}</h3>
+                <button class="modal-close" onclick="document.getElementById('mailComposeModal').classList.remove('open')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Invia da Casella Atelier</label>
+                    <select id="composeMailAccount" class="form-control">
+                        <option value="gmail" ${defaultFrom === 'gmail' ? 'selected' : ''}>🔴 liuteriadelorenzi@gmail.com (Gmail Bottega)</option>
+                        <option value="domain" ${defaultFrom === 'domain' ? 'selected' : ''}>🔵 info@liuteriadelorenzi.it (Dominio Ufficiale .it)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+                        <label style="margin:0;">Destinatario (A:)</label>
+                        ${clients.length > 0 ? `
+                            <select class="form-control" style="width:auto; padding:0.15rem 0.5rem; font-size:0.74rem;" onchange="if(this.value) document.getElementById('composeMailTo').value = this.value">
+                                <option value="">+ Scegli da Anagrafica Clienti...</option>
+                                ${clients.filter(c => c.email || c.contatto).map(c => {
+                                    const em = c.email || (c.contatto && c.contatto.includes('@') ? c.contatto : '');
+                                    return em ? `<option value="${window.escapeMailHtml(em)}">${window.escapeMailHtml(c.nome)} (${window.escapeMailHtml(em)})</option>` : '';
+                                }).join("")}
+                            </select>
+                        ` : ''}
+                    </div>
+                    <input type="email" id="composeMailTo" class="form-control" placeholder="es. cliente@orchestra.it" value="${window.escapeMailHtml(prefill.toEmail || '')}">
+                </div>
+
+                <div class="form-group">
+                    <label>Oggetto</label>
+                    <input type="text" id="composeMailSubject" class="form-control" placeholder="Oggetto dell'email..." value="${window.escapeMailHtml(prefill.subject || '')}">
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Messaggio</label>
+                    <textarea id="composeMailBody" class="form-control" rows="9" style="font-family:var(--font-body); line-height:1.55;">${window.escapeMailHtml(prefill.bodyText || "\n\n--\nMaestro Fabio De Lorenzi\nLiuteria De Lorenzi — Cremona\ninfo@liuteriadelorenzi.it | liuteriadelorenzi@gmail.com")}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailComposeModal').classList.remove('open')">Annulla</button>
+                <button type="button" id="composeMailSendBtn" class="btn btn-primary" onclick="window.sendComposedMail()">
+                    <i data-lucide="send"></i> 📤 Invia Email
+                </button>
+            </div>
+        </div>
+    `;
+    modal.classList.add("open");
+    if (window.appController) window.appController.setupLucideIcons();
+};
+
+window.openReplyMailModal = function(msgId, isForward = false) {
+    const msgs = window.getMailMessagesList();
+    const m = msgs.find(x => x.id === msgId);
+    if (!m) return;
+
+    const accId = (m.accountId === "domain" || m.accountEmail === "info@liuteriadelorenzi.it") ? "domain" : "gmail";
+    const prefix = isForward ? "Fwd: " : "Re: ";
+    const subj = (m.subject || "").toLowerCase().startsWith(prefix.toLowerCase()) ? m.subject : `${prefix}${m.subject || ""}`;
+    const quoted = `\n\n\n--- Messaggio originale del ${m.dateFormatted || ""} da ${m.fromName} <${m.fromEmail}> ---\n${m.bodyText || ""}\n\n--\nMaestro Fabio De Lorenzi\nLiuteria De Lorenzi — Cremona`;
+
+    window.openComposeMailModal({
+        title: isForward ? "Inoltra Email" : `Rispondi a ${m.fromName || m.fromEmail}`,
+        accountId: accId,
+        toEmail: isForward ? "" : m.fromEmail,
+        subject: subj,
+        bodyText: quoted
+    });
+};
+
+window.sendComposedMail = async function() {
+    const accountId = document.getElementById("composeMailAccount")?.value || "gmail";
+    const toEmail = (document.getElementById("composeMailTo")?.value || "").trim();
+    const subject = (document.getElementById("composeMailSubject")?.value || "").trim();
+    const bodyText = (document.getElementById("composeMailBody")?.value || "").trim();
+
+    if (!toEmail || !toEmail.includes("@")) {
+        window.showToast("Inserisci un indirizzo email destinatario valido.");
+        return;
+    }
+
+    const btn = document.getElementById("composeMailSendBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Invio in corso...";
+    }
+
+    try {
+        const res = await fetch("/api/mail/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountId, toEmail, subject, bodyText })
+        });
+        const data = await res.json();
+        if (Array.isArray(data.messages)) {
+            window.atelierDB.data.mail = data.messages;
+            window.atelierDB.saveData();
+        }
+        document.getElementById("mailComposeModal")?.classList.remove("open");
+        window.renderMailWorkspace();
+
+        if (data.success && !data.localOnly) {
+            window.showToast(`Email inviata con successo a ${toEmail} (${data.method})!`);
+        } else if (data.localOnly) {
+            window.showToast(`Email salvata in Posta Inviata (${data.warning})`);
+        } else {
+            window.showToast(`Errore invio: ${data.error || "Verifica configurazione SMTP"}`);
+        }
+    } catch (e) {
+        document.getElementById("mailComposeModal")?.classList.remove("open");
+        window.showToast("Email salvata localmente in Posta Inviata.");
+    }
+};
+
+window.createAppointmentFromMail = function(msgId) {
+    const msgs = window.getMailMessagesList();
+    const m = msgs.find(x => x.id === msgId);
+    if (!m) return;
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isoDate = tomorrow.toISOString().split("T")[0];
+
+    const newApp = {
+        id: "app-" + Date.now(),
+        cliente: m.fromName || m.fromEmail,
+        emailCliente: m.fromEmail || "",
+        data: isoDate,
+        ora: "10:30",
+        tipo: m.subject || "Incontro da Email",
+        strumento: "Da definire",
+        stato: "Confermato",
+        note: `Creato da email ricevuta su ${m.accountEmail}: "${(m.snippet || "").slice(0, 120)}"`
+    };
+    window.atelierDB.addItem("calendarioAppuntamenti", newApp);
+    window.showToast(`Appuntamento per "${newApp.cliente}" creato in Calendario Appuntamenti!`);
+};
+
+window.saveSenderToClienti = function(msgId) {
+    const msgs = window.getMailMessagesList();
+    const m = msgs.find(x => x.id === msgId);
+    if (!m) return;
+
+    const existing = (window.atelierDB.data.clienti || []).find(c =>
+        (c.email && c.email.toLowerCase() === (m.fromEmail || "").toLowerCase()) ||
+        (c.contatto && c.contatto.toLowerCase().includes((m.fromEmail || "").toLowerCase()))
+    );
+    if (existing) {
+        window.showToast(`${m.fromName || m.fromEmail} è già presente nell'anagrafica Clienti!`);
+        return;
+    }
+
+    const newClient = {
+        id: "cli-" + Date.now(),
+        nome: m.fromName || m.fromEmail,
+        ruolo: "Contatto Email Atelier",
+        citta: "",
+        strumentoPreferito: m.subject || "Strumenti ad arco",
+        contatto: m.fromEmail,
+        email: m.fromEmail,
+        storico: `Primo contatto via email su ${m.accountEmail} (${m.dateFormatted})`
+    };
+    window.atelierDB.addItem("clienti", newClient);
+    window.showToast(`"${newClient.nome}" salvato nell'anagrafica Clienti!`);
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     if (window.socialMediaDB) {
         window.socialMediaDB.init();
@@ -8132,5 +9191,8 @@ document.addEventListener("DOMContentLoaded", () => {
     window.startSocialScheduler();
     if (window.initSendinblueService) {
         window.initSendinblueService();
+    }
+    if (window.initMailService) {
+        window.initMailService();
     }
 });
