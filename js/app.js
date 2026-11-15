@@ -6150,7 +6150,7 @@ window.loadLmBinaryModel = async function(instType) {
 
     const promise = (async () => {
         try {
-            const res = await fetch(`./assets/models/${instType}.bin?v=1.3.3`);
+            const res = await fetch(`./assets/models/${instType}.bin?v=1.3.4`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const buf = await res.arrayBuffer();
             const dv = new DataView(buf);
@@ -6447,7 +6447,7 @@ window.initLmWebGLContext = function(canvas) {
                 if (u_useTexture == 1) {
                     vec3 texCol = texture2D(u_tex0, v_uv).rgb;
                     ao = mix(0.68, 1.0, texture2D(u_tex1, v_uv).r);
-                    albedo = clamp(texCol, 0.0, 1.0);
+                    albedo = clamp(pow(clamp(texCol, 0.0, 1.0), vec3(0.82)) * 1.18, 0.0, 1.0);
                     if (max(albedo.r, max(albedo.g, albedo.b)) < 0.22) {
                         glossWeight = 0.25; // Ebano (tastiera, cordiera, mentoniera, piroli) satinato
                     }
@@ -7004,10 +7004,12 @@ window.renderLmFftCanvas = function(freqArray, dbArray, peakList, fundamentalHz)
     const canvas = document.getElementById("lmFftCanvas");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width > 0 && (canvas.width !== Math.floor(rect.width) || canvas.height !== Math.floor(rect.height))) {
-        canvas.width = Math.floor(rect.width);
-        canvas.height = Math.floor(rect.height);
+    const parent = canvas.parentElement;
+    const rectW = (parent && parent.clientWidth > 100) ? parent.clientWidth : (canvas.clientWidth || 720);
+    const rectH = (parent && parent.clientHeight > 60) ? parent.clientHeight : (canvas.clientHeight || 220);
+    if (canvas.width !== Math.floor(rectW) || canvas.height !== Math.floor(rectH)) {
+        canvas.width = Math.floor(rectW);
+        canvas.height = Math.floor(rectH);
     }
     const W = canvas.width;
     const H = canvas.height;
