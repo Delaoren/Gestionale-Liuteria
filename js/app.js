@@ -6052,407 +6052,688 @@ window.freqToMusicalNote = function(freq) {
     return `${note}${octave}`;
 };
 
-// Curva di Bézier cubica (identica a Violin._bezier3 in violin.py)
-window.lmBezier3 = function(p0, p1, p2, p3, n = 16) {
-    const pts = [];
-    for (let i = 1; i <= n; i++) {
-        const t = i / n;
-        const mt = 1 - t;
-        const x = mt * mt * mt * p0[0] + 3 * mt * mt * t * p1[0] + 3 * mt * t * t * p2[0] + t * t * t * p3[0];
-        const y = mt * mt * mt * p0[1] + 3 * mt * mt * t * p1[1] + 3 * mt * t * t * p2[1] + t * t * t * p3[1];
-        pts.push([x, y]);
-    }
-    return pts;
+// =========================================================================
+// MOTORE 3D HARDWARE WEBGL FOTOREALISTICO (Scansioni 3D Reali + Texture 2K + Vernice Cremonese + Chladni GPU)
+// =========================================================================
+
+window.lmWebGL = {
+    gl: null,
+    canvas: null,
+    program: null,
+    extUint: null,
+    modelsCache: {},      // { violin: { numV, numT, minY, maxY, maxHalfW, pos, normMat, uv, idx, gpuBuffers }, ... }
+    loadingModels: {},    // { violin: Promise, ... }
+    texturesCache: {},    // { url: WebGLTexture }
+    loadingTextures: {},  // { url: true }
+    whiteTex: null,
+    usePhotoTexture: true // true = texture fotografica 2K ove presente, false = shader procedurale Acero Marezzato & Vernice Cremonese
 };
 
-// Genera il contorno C-bouts + punte con curve di Bézier (da violin.py)
-window.generateLmBodyOutline = function(m, nSeg = 14) {
-    const body_len = Number(m.body_length) || 356;
-    const ub_w = (Number(m.upper_bout_width) || 168) / 2;
-    const lb_w = (Number(m.lower_bout_width) || 208) / 2;
-    const waist = (Number(m.waist_width) || 110) / 2;
-    const corner_len = Number(m.corner_length) || 15;
-    const neck_root_w = (Number(m.neck_cheek_thickness) || 20) / 2 + 5;
-
-    const y_bottom = 0.0;
-    const y_lb_max = body_len * 0.22;
-    const y_lower_corner = body_len * 0.355;
-    const y_waist = body_len * 0.50;
-    const y_upper_corner = body_len * 0.645;
-    const y_ub_max = body_len * 0.78;
-    const y_top = body_len;
-
-    const corner_x = waist + corner_len;
-
-    const right = [[0.0, y_bottom]];
-    right.push(...window.lmBezier3([0, y_bottom], [lb_w * 0.55, y_bottom], [lb_w, y_lb_max * 0.45], [lb_w, y_lb_max], nSeg));
-    right.push(...window.lmBezier3([lb_w, y_lb_max], [lb_w, y_lb_max + (y_lower_corner - y_lb_max) * 0.55], [corner_x + 3, y_lower_corner - 6], [corner_x, y_lower_corner], nSeg));
-    right.push(...window.lmBezier3([corner_x, y_lower_corner], [corner_x - 6, y_lower_corner + 10], [waist - 2, y_waist - 12], [waist, y_waist], nSeg));
-    right.push(...window.lmBezier3([waist, y_waist], [waist - 2, y_waist + 12], [corner_x - 6, y_upper_corner - 10], [corner_x, y_upper_corner], nSeg));
-    right.push(...window.lmBezier3([corner_x, y_upper_corner], [corner_x + 3, y_upper_corner + 6], [ub_w, y_ub_max - (y_ub_max - y_upper_corner) * 0.55], [ub_w, y_ub_max], nSeg));
-    right.push(...window.lmBezier3([ub_w, y_ub_max], [ub_w, y_ub_max + (y_top - y_ub_max) * 0.5], [neck_root_w + 5, y_top - 10], [neck_root_w, y_top], nSeg));
-
-    const outline = [...right, [0.0, y_top]];
-    for (let i = right.length - 2; i >= 1; i--) {
-        outline.push([-right[i][0], right[i][1]]);
+// Carica una texture 2K in WebGL con mipmapping trilineare e filtro anisotropico
+window.getOrLoadLmWebGLTexture = function(gl, url) {
+    if (!window.lmWebGL.whiteTex) {
+        const wt = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, wt);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([225, 175, 115, 255]));
+        window.lmWebGL.whiteTex = wt;
     }
-    return outline;
+    if (!url) return window.lmWebGL.whiteTex;
+    if (window.lmWebGL.texturesCache[url]) {
+        return window.lmWebGL.texturesCache[url];
+    }
+    if (!window.lmWebGL.loadingTextures[url]) {
+        window.lmWebGL.loadingTextures[url] = true;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            if (!window.lmWebGL.gl) return;
+            const g = window.lmWebGL.gl;
+            const tex = g.createTexture();
+            g.bindTexture(g.TEXTURE_2D, tex);
+            g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, img);
+            // Power of 2 check
+            const isPOT = (v) => (v & (v - 1)) === 0;
+            if (isPOT(img.width) && isPOT(img.height)) {
+                g.generateMipmap(g.TEXTURE_2D);
+                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR);
+            } else {
+                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+            }
+            g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+            const extAniso = g.getExtension("EXT_texture_filter_anisotropic") || g.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
+            if (extAniso) {
+                const maxAniso = g.getParameter(extAniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+                g.texParameterf(g.TEXTURE_2D, extAniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, maxAniso));
+            }
+            window.lmWebGL.texturesCache[url] = tex;
+            window.renderLm3dCanvas();
+        };
+        img.src = url;
+    }
+    return window.lmWebGL.whiteTex;
 };
 
-// Genera la mesh 3D parametrica completa con bombatura (Tavola, Fondo, Fasce, Manico/Riccio, Effe)
-window.buildLmParametricMesh = function(m) {
-    if (window.lmState.importedCustomMesh) {
-        return window.lmState.importedCustomMesh;
+// Carica i modelli 3D ad alta risoluzione convertiti da violin.obj (228k tris), v_Reduced.obj (306k tris) e sketchfab.obj (74k tris)
+window.loadLmBinaryModel = async function(instType) {
+    if (window.lmWebGL.modelsCache[instType]) {
+        return window.lmWebGL.modelsCache[instType];
+    }
+    if (window.lmWebGL.loadingModels[instType]) {
+        return window.lmWebGL.loadingModels[instType];
     }
 
-    const outline = window.generateLmBodyOutline(m, 12);
-    const bodyLen = Number(m.body_length) || 356;
-    const ribH = Number(m.rib_height) || 30;
-    const archHeight = ribH * 0.48;
-    const cy = bodyLen * 0.5;
-    const nOut = outline.length;
+    const badge = document.getElementById("lm3dLoadingBadge");
+    if (badge) {
+        badge.style.display = "flex";
+        badge.innerHTML = `⏳ Caricamento modello 3D ad alta risoluzione (${instType.toUpperCase()})...`;
+    }
 
-    const vertices = []; // { x, y, z, comp, xn, yn }
-    const faces = [];    // { indices: [i0, i1, i2], comp }
-    const lines = [];    // { p1, p2, comp }
+    const promise = (async () => {
+        try {
+            const res = await fetch(`./assets/models/${instType}.bin`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const buf = await res.arrayBuffer();
+            const dv = new DataView(buf);
+            const numV = dv.getUint32(8, true);
+            const numT = dv.getUint32(12, true);
+            const minY = dv.getFloat32(16, true);
+            const maxY = dv.getFloat32(20, true);
+            const maxHalfW = dv.getFloat32(24, true);
 
-    const maxHalfW = Math.max((Number(m.lower_bout_width) || 208) / 2, 1);
-    const halfLen = Math.max(bodyLen / 2, 1);
+            let off = 32;
+            const pos = new Float32Array(buf, off, numV * 3); off += numV * 12;
+            const normMat = new Int8Array(buf, off, numV * 4); off += numV * 4;
+            const uv = new Float32Array(buf, off, numV * 2); off += numV * 8;
+            const idx = new Uint32Array(buf, off, numT * 3);
 
-    const addVertex = (x, y, z, comp) => {
-        const idx = vertices.length;
-        vertices.push({
-            x,
-            y: y - cy, // centra sull'origine Y
-            z: z - ribH * 0.5,
-            rawY: y,
-            comp,
-            xn: x / maxHalfW,
-            yn: (y - cy) / halfLen
-        });
-        return idx;
+            const modelObj = {
+                instType,
+                numV,
+                numT,
+                minY,
+                maxY,
+                maxHalfW,
+                pos,
+                normMat,
+                uv,
+                idx,
+                gpuBuffers: null
+            };
+            window.lmWebGL.modelsCache[instType] = modelObj;
+            if (badge) badge.style.display = "none";
+            const infoTag = document.getElementById("lm3dModelInfoTag");
+            if (infoTag) {
+                infoTag.innerHTML = `✓ Scansione 3D Reale: <strong>${numV.toLocaleString("it-IT")} vertici</strong> • <strong>${numT.toLocaleString("it-IT")} triangoli</strong>`;
+            }
+            window.renderLm3dCanvas();
+            return modelObj;
+        } catch (err) {
+            if (badge) {
+                badge.innerHTML = `⚠️ Errore caricamento modello 3D: ${err.message}`;
+            }
+            return null;
+        } finally {
+            delete window.lmWebGL.loadingModels[instType];
+        }
+    })();
+
+    window.lmWebGL.loadingModels[instType] = promise;
+    return promise;
+};
+
+window.initLmWebGLContext = function(canvas) {
+    if (window.lmWebGL.gl && window.lmWebGL.canvas === canvas) {
+        return window.lmWebGL.gl;
+    }
+
+    const gl = canvas.getContext("webgl2", { antialias: true, alpha: false, preserveDrawingBuffer: true }) ||
+               canvas.getContext("webgl", { antialias: true, alpha: false, preserveDrawingBuffer: true });
+    if (!gl) return null;
+
+    const isWebGL2 = (typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext);
+    const extUint = isWebGL2 ? true : gl.getExtension("OES_element_index_uint");
+
+    const vsSource = `
+        attribute vec3 a_pos;
+        attribute vec4 a_normMat;
+        attribute vec2 a_uv;
+
+        uniform vec3 u_paramScale;
+        uniform float u_rotX;
+        uniform float u_rotY;
+        uniform float u_zoom;
+        uniform float u_aspect;
+        uniform float u_minY;
+        uniform float u_maxY;
+        uniform float u_maxHalfW;
+        uniform int u_simMode;
+        uniform float u_phase;
+        uniform float u_topCenterMm;
+        uniform float u_topUpperMm;
+
+        varying vec3 v_worldPos;
+        varying vec3 v_rawPos;
+        varying vec3 v_normal;
+        varying vec2 v_uv;
+        varying float v_comp;
+        varying float v_texSlot;
+        varying float v_scalar;
+
+        void main() {
+            float matByte = a_normMat.w;
+            if (matByte < 0.0) matByte += 256.0;
+            float texSlot = floor((matByte + 0.1) / 16.0);
+            float comp = matByte - texSlot * 16.0;
+
+            vec3 n = normalize(a_normMat.xyz / 127.0);
+            vec3 p = a_pos * u_paramScale;
+
+            // Coordinate normalizzate sulla cassa armonica per pattern di Chladni (M1, M2, M5)
+            float spanY = max(u_maxY - u_minY, 1.0);
+            float bodyMaxY = u_minY + spanY * 0.60;
+            float bodyCy = (u_minY + bodyMaxY) * 0.5;
+            float bodyHalfL = max((bodyMaxY - u_minY) * 0.5, 1.0);
+            float xn = clamp(a_pos.x / max(u_maxHalfW, 1.0), -1.2, 1.2);
+            float yn = clamp((a_pos.y - bodyCy) / bodyHalfL, -1.3, 1.3);
+            float r = sqrt(xn * xn + yn * yn);
+
+            float scalar = 0.0;
+            if (u_simMode == 1) {
+                // Chladni Modo 1: torsione longitudinale (x * y con nodi centrali)
+                scalar = clamp(abs(sin(xn * 2.7) * sin(yn * 2.8)), 0.0, 1.0);
+            } else if (u_simMode == 2) {
+                // Chladni Modo 2 (da main_window.py): |x_norm * y_norm|
+                scalar = clamp(abs(xn * yn) * 2.15, 0.0, 1.0);
+            } else if (u_simMode == 3) {
+                // Chladni Modo 5 Ring Mode (da main_window.py): (cos(r * pi / 0.6) + 1.0) / 2.0
+                scalar = clamp((cos(r * 3.14159265 / 0.60) + 1.0) * 0.5, 0.0, 1.0);
+            } else if (u_simMode == 4) {
+                // Vibrazione Sincrona 440 Hz
+                float wave = sin(r * 5.5 - u_phase * 2.4) * cos(xn * 2.6);
+                scalar = clamp((wave + 1.0) * 0.5, 0.0, 1.0);
+            } else if (u_simMode == 5) {
+                // Heatmap Spessori Tavola/Fondo
+                float rr = clamp(r, 0.0, 1.0);
+                scalar = clamp((1.0 - rr) * (u_topCenterMm / 3.6) + rr * (u_topUpperMm / 3.6), 0.0, 1.0);
+            }
+
+            // Deformazione armonica 3D reale lungo la normale durante la vibrazione Chladni / 440Hz
+            if (u_simMode >= 1 && u_simMode <= 4 && comp < 2.5) {
+                float disp = (scalar - 0.45) * (spanY * 0.012) * sin(u_phase);
+                p += n * disp;
+            }
+
+            // Rotazione camera (orbita Y e X)
+            float cy = cos(u_rotY), sy = sin(u_rotY);
+            float cx = cos(u_rotX), sx = sin(u_rotX);
+
+            vec3 p1 = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
+            vec3 p2 = vec3(p1.x, p1.y * cx - p1.z * sx, p1.y * sx + p1.z * cx);
+
+            vec3 n1 = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
+            vec3 n2 = vec3(n1.x, n1.y * cx - n1.z * sx, n1.y * sx + n1.z * cx);
+
+            float normScale = (2.15 / max(spanY, 1.0)) * u_zoom;
+            vec3 viewPos = p2 * normScale;
+
+            // Proiezione prospettica con depth buffer
+            float camDist = 3.4;
+            float zEye = camDist - viewPos.z;
+            float fovScale = 2.45;
+            gl_Position = vec4(
+                (viewPos.x * fovScale) / max(u_aspect, 0.1),
+                viewPos.y * fovScale,
+                (viewPos.z * -0.45) / camDist,
+                max(zEye / camDist, 0.1)
+            );
+
+            v_worldPos = viewPos;
+            v_rawPos = a_pos;
+            v_normal = normalize(n2);
+            v_uv = a_uv;
+            v_comp = comp;
+            v_texSlot = texSlot;
+            v_scalar = scalar;
+        }
+    `;
+
+    const fsSource = `
+        precision highp float;
+
+        varying vec3 v_worldPos;
+        varying vec3 v_rawPos;
+        varying vec3 v_normal;
+        varying vec2 v_uv;
+        varying float v_comp;
+        varying float v_texSlot;
+        varying float v_scalar;
+
+        uniform int u_instId;        // 0=violin, 1=viola, 2=cello, 3=custom
+        uniform int u_simMode;       // 0=wood, 1=m1, 2=m2, 3=m5, 4=vib440, 5=thickness
+        uniform int u_compFilter;    // -1=all, 0..4
+        uniform int u_useTexture;    // 1=use photo texture, 0=procedural master varnish
+        uniform int u_wireframe;
+
+        uniform sampler2D u_tex0;    // Main body texture
+        uniform sampler2D u_tex1;    // AO (violin) or Neck (cello)
+        uniform sampler2D u_tex2;    // Bridge (cello)
+        uniform sampler2D u_tex3;    // Fingerboard (cello)
+        uniform sampler2D u_tex4;    // Tailpiece (cello)
+
+        // Colormap scientifica "coolwarm" + isolinee nodali di Chladni
+        vec3 coolwarm(float t) {
+            float v = clamp(t, 0.0, 1.0);
+            vec3 cBlue = vec3(0.23, 0.30, 0.75);
+            vec3 cWhite = vec3(0.94, 0.94, 0.96);
+            vec3 cRed = vec3(0.78, 0.12, 0.15);
+            vec3 col = (v < 0.5) ? mix(cBlue, cWhite, v * 2.0) : mix(cWhite, cRed, (v - 0.5) * 2.0);
+            // Evidenzia la linea nodale (dove v è vicino a 0.12) come la sabbia di Chladni dorata
+            float nodalLine = exp(-pow((v - 0.12) / 0.035, 2.0));
+            col = mix(col, vec3(0.98, 0.84, 0.35), nodalLine * 0.65);
+            return col;
+        }
+
+        // Marezzatura 3D Acero Balcanico & Venatura Abete Val di Fiemme con Vernice ad Olio Cremonese
+        vec3 proceduralCremoneseWood(vec3 rawP, vec3 N, vec3 V, float comp, float slot) {
+            // Slot 5: Ebano (Tastiera, Piroli, Cordiera, Mentoniera)
+            if (abs(slot - 5.0) < 0.4) {
+                float pore = sin(rawP.y * 0.8 + rawP.x * 3.5) * 0.015;
+                return vec3(0.08 + pore, 0.08 + pore, 0.095 + pore);
+            }
+            // Slot 6: Corde metalliche (A, D, G, C)
+            if (abs(slot - 6.0) < 0.4) {
+                return vec3(0.82, 0.83, 0.86);
+            }
+            // Slot 7: Tiracantini / Viti dorate
+            if (abs(slot - 7.0) < 0.4) {
+                return vec3(0.85, 0.68, 0.28);
+            }
+            // Slot 2: Ponticello in acero grezzo non verniciato
+            if (abs(slot - 2.0) < 0.4) {
+                float rays = 0.5 + 0.5 * sin(rawP.x * 1.8 + sin(rawP.y * 0.9));
+                return mix(vec3(0.80, 0.64, 0.44), vec3(0.89, 0.75, 0.56), rays);
+            }
+
+            // Tavola Armonica (comp == 0): Abete Rosso di Paneveggio a venatura longitudinale fine + vernice dorata-ambrata
+            if (comp < 0.5) {
+                float grain = 0.5 + 0.5 * sin(rawP.x * 3.4 + sin(rawP.y * 0.04) * 1.2);
+                float fine = 0.5 + 0.5 * sin(rawP.x * 11.0);
+                vec3 spruceEarly = vec3(0.82, 0.46, 0.17);
+                vec3 spruceLate  = vec3(0.62, 0.28, 0.09);
+                vec3 base = mix(spruceEarly, spruceLate, grain * 0.65 + fine * 0.25);
+                // Sfumatura antica cremonese (sunburst leggero verso il centro)
+                return base;
+            }
+
+            // Fondo, Fasce e Manico/Riccio (comp == 1, 2, 3): Acero Marezzato Balcanico con chatoyance (cangianza ottica 3D)
+            float wave = sin(rawP.y * 0.42 + sin(rawP.x * 0.12 + rawP.z * 0.15) * 2.2);
+            float viewShift = dot(N, V) * 1.4;
+            float chatoyance = 0.5 + 0.5 * sin(rawP.y * 0.42 + viewShift);
+            float flame = mix(0.5 + 0.5 * wave, chatoyance, 0.55);
+            vec3 mapleDark  = vec3(0.55, 0.22, 0.07);
+            vec3 mapleLight = vec3(0.86, 0.48, 0.18);
+            return mix(mapleDark, mapleLight, flame);
+        }
+
+        void main() {
+            if (u_compFilter >= 0 && abs(v_comp - float(u_compFilter)) > 0.45) {
+                discard;
+            }
+
+            vec3 N = normalize(v_normal);
+            if (!gl_FrontFacing) N = -N;
+            vec3 V = normalize(vec3(0.0, 0.0, 1.0) - v_worldPos * 0.25);
+
+            if (u_wireframe == 1) {
+                vec3 wfCol = (u_simMode > 0) ? coolwarm(v_scalar) : vec3(0.88, 0.72, 0.36);
+                gl_FragColor = vec4(wfCol, 1.0);
+                return;
+            }
+
+            // Illuminazione Studio a 3 punti per Liuteria
+            vec3 L1 = normalize(vec3(0.48, 0.62, 0.75));   // Key light calda
+            vec3 L2 = normalize(vec3(-0.65, 0.25, 0.55));  // Fill light morbida
+            vec3 L3 = normalize(vec3(0.0, -0.75, -0.65));  // Rim / controluce
+
+            float diff1 = max(dot(N, L1), 0.0);
+            float diff2 = max(dot(N, L2), 0.0);
+            float diff3 = max(dot(N, L3), 0.0);
+
+            // Speculare vernice ad olio (doppio lobo: base satinata + clearcoat lucido)
+            vec3 H1 = normalize(L1 + V);
+            vec3 H2 = normalize(L2 + V);
+            float specCoat = pow(max(dot(N, H1), 0.0), 72.0) * 0.62 + pow(max(dot(N, H2), 0.0), 36.0) * 0.22;
+            float specBase = pow(max(dot(N, H1), 0.0), 16.0) * 0.18;
+            float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.2) * 0.22;
+
+            // Modalità Simulazione Chladni / Vibrazione / Heatmap Spessori
+            if (u_simMode > 0) {
+                vec3 heatCol = coolwarm(v_scalar);
+                float lightTerm = 0.38 + diff1 * 0.52 + diff2 * 0.22;
+                vec3 finalHeat = heatCol * lightTerm + vec3(specCoat * 0.35);
+                gl_FragColor = vec4(finalHeat, 1.0);
+                return;
+            }
+
+            // Modalità Fotorealistica Legno & Texture
+            vec3 albedo = vec3(0.78, 0.52, 0.26);
+            float ao = 1.0;
+            float glossWeight = 1.0;
+
+            if (u_instId == 0) {
+                // VIOLINO: Scansione 3D museale MT_E_3270_Skrzypce con Texture Fotografica 2K + Mappa AO 2K
+                if (u_useTexture == 1) {
+                    vec3 texCol = texture2D(u_tex0, v_uv).rgb;
+                    ao = mix(0.65, 1.0, texture2D(u_tex1, v_uv).r);
+                    // Esalta il calore della vernice cremonese
+                    albedo = pow(texCol, vec3(0.92)) * vec3(1.08, 1.01, 0.94);
+                } else {
+                    albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
+                }
+            } else if (u_instId == 1) {
+                // VIOLA: Scansione 3D v_Reduced.obj con Shader Maestro Liutaio Cremonese (Acero Marezzato + Abete + Ebano) o Texture Scanner
+                if (u_useTexture == 1) {
+                    albedo = texture2D(u_tex0, v_uv).rgb * vec3(1.06, 0.98, 0.90);
+                } else {
+                    albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
+                    if (abs(v_texSlot - 5.0) < 0.4 || abs(v_texSlot - 2.0) < 0.4) {
+                        glossWeight = 0.28; // Ebano e ponticello sono satinati, non laccati a specchio
+                    }
+                }
+            } else if (u_instId == 2) {
+                // VIOLONCELLO: Modello multi-materiale sketchfab.obj con 5 texture dedicate + Ebano + Corde metalliche
+                if (u_useTexture == 1) {
+                    if (abs(v_texSlot - 0.0) < 0.4) {
+                        vec3 bodyTex = texture2D(u_tex0, v_uv).rgb;
+                        vec3 procFlame = proceduralCremoneseWood(v_rawPos * 0.55, N, V, v_comp, 0.0);
+                        albedo = mix(bodyTex * vec3(1.25, 1.05, 0.88), procFlame, 0.35);
+                    } else if (abs(v_texSlot - 1.0) < 0.4) {
+                        vec3 neckTex = texture2D(u_tex1, v_uv).rgb;
+                        vec3 procNeck = proceduralCremoneseWood(v_rawPos * 0.55, N, V, 3.0, 1.0);
+                        albedo = mix(neckTex * vec3(1.15, 1.0, 0.88), procNeck, 0.35);
+                    } else if (abs(v_texSlot - 2.0) < 0.4) {
+                        albedo = texture2D(u_tex2, v_uv).rgb;
+                        glossWeight = 0.2;
+                    } else if (abs(v_texSlot - 3.0) < 0.4) {
+                        albedo = texture2D(u_tex3, v_uv).rgb * 0.55;
+                        glossWeight = 0.3;
+                    } else if (abs(v_texSlot - 4.0) < 0.4) {
+                        albedo = texture2D(u_tex4, v_uv).rgb * 0.65;
+                        glossWeight = 0.35;
+                    } else {
+                        albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
+                        glossWeight = (abs(v_texSlot - 6.0) < 0.4 || abs(v_texSlot - 7.0) < 0.4) ? 1.35 : 0.3;
+                    }
+                } else {
+                    albedo = proceduralCremoneseWood(v_rawPos * 0.55, N, V, v_comp, v_texSlot);
+                }
+            } else {
+                albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
+            }
+
+            vec3 ambient = vec3(0.28, 0.25, 0.22) * ao;
+            vec3 diffuse = (diff1 * vec3(1.02, 0.97, 0.90) * 0.72 +
+                            diff2 * vec3(0.75, 0.82, 0.95) * 0.32 +
+                            diff3 * vec3(0.95, 0.75, 0.50) * 0.20) * ao;
+
+            vec3 specular = (specCoat * vec3(1.0, 0.96, 0.88) + specBase * albedo + fresnel * vec3(0.90, 0.68, 0.38)) * glossWeight;
+            vec3 color = albedo * (ambient + diffuse) + specular;
+
+            // Tone mapping morbido per evitare saturazione sulle alte luci della vernice
+            color = color / (color + vec3(0.18));
+            gl_FragColor = vec4(color, 1.0);
+        }
+    `;
+
+    const compileShader = (type, src) => {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            console.error("LM WebGL Shader Error:", gl.getShaderInfoLog(sh));
+            return null;
+        }
+        return sh;
     };
 
-    // 1. TAVOLA ARMONICA (comp = 0) e FONDO (comp = 1) con anelli concentrici per bombatura realistica
-    const rings = [0.28, 0.58, 0.84, 1.0];
-    const buildArchedPlate = (comp, isTop) => {
-        const zBase = isTop ? ribH : 0;
-        const sign = isTop ? 1 : -1;
-        const centerIdx = addVertex(0, cy, zBase + sign * archHeight, comp);
+    const vs = compileShader(gl.VERTEX_SHADER, vsSource);
+    const fs = compileShader(gl.FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) return null;
 
-        const ringIndices = [];
-        for (let rIdx = 0; rIdx < rings.length; rIdx++) {
-            const s = rings[rIdx];
-            // Profilo di bombatura cremonese (coseno rialzato)
-            const arch = sign * archHeight * Math.pow(Math.cos(s * Math.PI * 0.5), 1.5);
-            const currRing = [];
-            for (let i = 0; i < nOut; i++) {
-                const ox = outline[i][0] * s;
-                const oy = cy + (outline[i][1] - cy) * s;
-                currRing.push(addVertex(ox, oy, zBase + arch, comp));
-            }
-            ringIndices.push(currRing);
-        }
-
-        // Triangoli dal centro al primo anello
-        for (let i = 0; i < nOut; i++) {
-            const next = (i + 1) % nOut;
-            faces.push({ indices: [centerIdx, ringIndices[0][i], ringIndices[0][next]], comp });
-        }
-        // Quad triangolati tra gli anelli
-        for (let rIdx = 0; rIdx < rings.length - 1; rIdx++) {
-            const rA = ringIndices[rIdx];
-            const rB = ringIndices[rIdx + 1];
-            for (let i = 0; i < nOut; i++) {
-                const next = (i + 1) % nOut;
-                faces.push({ indices: [rA[i], rB[i], rB[next]], comp });
-                faces.push({ indices: [rA[i], rB[next], rA[next]], comp });
-            }
-        }
-        return ringIndices[rings.length - 1];
-    };
-
-    const topEdgeRing = buildArchedPlate(0, true);
-    const backEdgeRing = buildArchedPlate(1, false);
-
-    // 2. FASCE LATERALI (comp = 2)
-    for (let i = 0; i < nOut; i++) {
-        const next = (i + 1) % nOut;
-        const b0 = addVertex(outline[i][0], outline[i][1], 0, 2);
-        const t0 = addVertex(outline[i][0], outline[i][1], ribH, 2);
-        const b1 = addVertex(outline[next][0], outline[next][1], 0, 2);
-        const t1 = addVertex(outline[next][0], outline[next][1], ribH, 2);
-        faces.push({ indices: [b0, t0, t1], comp: 2 });
-        faces.push({ indices: [b0, t1, b1], comp: 2 });
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        console.error("LM WebGL Program Link Error:", gl.getProgramInfoLog(prog));
+        return null;
     }
 
-    // 3. MANICO + CAVIGLIERE + RICCIO + TASTIERA (comp = 3)
-    const neckLen = Number(m.neck_length) || 130;
-    const cheek = Number(m.neck_cheek_thickness) || 20;
-    const pegW = Number(m.pegbox_width) || 42;
-    const neckSections = [
-        { y: bodyLen, w: cheek * 0.65, zLow: ribH * 0.25, zHigh: ribH * 1.15 },
-        { y: bodyLen + neckLen * 0.5, w: cheek * 0.52, zLow: ribH * 0.4, zHigh: ribH * 1.2 },
-        { y: bodyLen + neckLen, w: pegW * 0.46, zLow: ribH * 0.45, zHigh: ribH * 1.3 },
-        { y: bodyLen + neckLen + bodyLen * 0.11, w: pegW * 0.40, zLow: ribH * 0.3, zHigh: ribH * 1.35 },
-        { y: bodyLen + neckLen + bodyLen * 0.17, w: pegW * 0.28, zLow: ribH * 0.5, zHigh: ribH * 1.5 }
-    ];
-    for (let s = 0; s < neckSections.length - 1; s++) {
-        const A = neckSections[s];
-        const B = neckSections[s + 1];
-        const p0 = addVertex(-A.w, A.y, A.zHigh, 3);
-        const p1 = addVertex(A.w, A.y, A.zHigh, 3);
-        const p2 = addVertex(B.w, B.y, B.zHigh, 3);
-        const p3 = addVertex(-B.w, B.y, B.zHigh, 3);
-        faces.push({ indices: [p0, p1, p2], comp: 3 });
-        faces.push({ indices: [p0, p2, p3], comp: 3 });
+    window.lmWebGL.gl = gl;
+    window.lmWebGL.canvas = canvas;
+    window.lmWebGL.program = prog;
+    window.lmWebGL.extUint = extUint;
+    window.lmWebGL.whiteTex = null;
+    window.lmWebGL.texturesCache = {};
+    window.lmWebGL.loadingTextures = {};
 
-        const q0 = addVertex(-A.w, A.y, A.zLow, 3);
-        const q1 = addVertex(A.w, A.y, A.zLow, 3);
-        const q2 = addVertex(B.w, B.y, B.zLow, 3);
-        const q3 = addVertex(-B.w, B.y, B.zLow, 3);
-        faces.push({ indices: [q0, q2, q1], comp: 3 });
-        faces.push({ indices: [q0, q3, q2], comp: 3 });
-    }
-
-    // Tastiera (fingerboard) che si estende sopra la tavola
-    const fbStart = bodyLen * 0.62;
-    const fbEnd = bodyLen + neckLen;
-    const fb0 = addVertex(-cheek * 0.72, fbStart, ribH + archHeight * 0.92, 3);
-    const fb1 = addVertex(cheek * 0.72, fbStart, ribH + archHeight * 0.92, 3);
-    const fb2 = addVertex(cheek * 0.48, fbEnd, ribH * 1.25, 3);
-    const fb3 = addVertex(-cheek * 0.48, fbEnd, ribH * 1.25, 3);
-    faces.push({ indices: [fb0, fb1, fb2], comp: 3 });
-    faces.push({ indices: [fb0, fb2, fb3], comp: 3 });
-
-    // 4. EFFE (F-HOLES) & PONTICELLO (comp = 4)
-    const fLen = Number(m.f_hole_length) || 76;
-    const fWid = Number(m.f_hole_width) || 6.5;
-    const fPos = Number(m.f_hole_position) || 195;
-    const waistHalf = (Number(m.waist_width) || 110) / 2;
-    const fxBase = waistHalf * 0.58;
-
-    [-1, 1].forEach(side => {
-        const fPts = [];
-        const steps = 20;
-        for (let i = 0; i <= steps; i++) {
-            const t = -1 + (2 * i) / steps;
-            const y = fPos + t * (fLen / 2);
-            const xCurve = side * (fxBase + fWid * 0.65 * Math.sin(t * Math.PI));
-            const zTop = ribH + archHeight * 0.68;
-            const vA = addVertex(xCurve - fWid * 0.28, y, zTop, 4);
-            const vB = addVertex(xCurve + fWid * 0.28, y, zTop, 4);
-            fPts.push([vA, vB]);
-        }
-        for (let i = 0; i < fPts.length - 1; i++) {
-            faces.push({ indices: [fPts[i][0], fPts[i][1], fPts[i + 1][1]], comp: 4 });
-            faces.push({ indices: [fPts[i][0], fPts[i + 1][1], fPts[i + 1][0]], comp: 4 });
-        }
+    // Invalida eventuali GPU buffer legati a un contesto precedente
+    Object.values(window.lmWebGL.modelsCache).forEach(mObj => {
+        if (mObj) mObj.gpuBuffers = null;
     });
+    if (window.lmState.importedCustomMesh) {
+        window.lmState.importedCustomMesh.gpuBuffers = null;
+    }
 
-    return {
-        vertices,
-        faces,
-        lines,
-        bounds: {
-            minX: -maxHalfW,
-            maxX: maxHalfW,
-            minY: -halfLen,
-            maxY: halfLen + neckLen + bodyLen * 0.17,
-            minZ: -ribH * 0.5 - archHeight,
-            maxZ: ribH * 0.5 + archHeight
-        }
-    };
+    return gl;
 };
 
-// Calcola l'intensità scalare (0..1) su ogni vertice per Chladni M1, M2, M5, Vibrazione 440Hz o Confronto Spessori
-window.computeLmVertexScalar = function(v, mode, phase, m) {
-    const x = v.xn;
-    const y = v.yn;
-    if (mode === "m1") {
-        // Modo 1: torsione longitudinale
-        return Math.min(1, Math.max(0, Math.abs(Math.sin(x * Math.PI * 0.85) * Math.sin(y * Math.PI * 0.9))));
-    } else if (mode === "m2") {
-        // Modo 2 (da main_window.py _simulate_chladni_mode(2)): |x_norm * y_norm|
-        return Math.min(1, Math.max(0, Math.abs(x * y) * 2.1));
-    } else if (mode === "m5") {
-        // Modo 5 Ring Mode (da main_window.py _simulate_chladni_mode(5)): (cos(r * pi / 0.6) + 1) / 2
-        const r = Math.sqrt(x * x + y * y);
-        return Math.min(1, Math.max(0, (Math.cos((r * Math.PI) / 0.62) + 1.0) / 2.0));
-    } else if (mode === "vib440") {
-        const r = Math.sqrt(x * x + y * y);
-        const wave = Math.sin(r * 5.2 - phase * 2.2) * Math.cos(x * 2.5);
-        return Math.min(1, Math.max(0, (wave + 1) * 0.5));
-    } else if (mode === "thickness") {
-        // Mappa spessori tra centro e polmoni rispetto al target storico Stradivari/Guarneri
-        const r = Math.sqrt(x * x + y * y);
-        const topC = Number(m.top_center) || 2.8;
-        const topU = Number(m.top_upper) || 2.5;
-        const grad = (1 - Math.min(1, r)) * (topC / 3.5) + Math.min(1, r) * (topU / 3.5);
-        return Math.min(1, Math.max(0, grad));
-    }
-    return 0;
-};
+window.ensureLmModelGpuBuffers = function(gl, modelObj) {
+    if (modelObj.gpuBuffers) return modelObj.gpuBuffers;
 
-// Colormap "coolwarm" (Blu = 0.0 Nodo -> Bianco = 0.5 -> Rosso = 1.0 Ventre Acustico)
-window.lmCoolwarmColor = function(t, shade = 1.0) {
-    const v = Math.min(1, Math.max(0, t));
-    let r, g, b;
-    if (v < 0.5) {
-        const u = v * 2;
-        r = Math.round((59 + u * (240 - 59)) * shade);
-        g = Math.round((130 + u * (240 - 130)) * shade);
-        b = Math.round((246 + u * (245 - 246)) * shade);
-    } else {
-        const u = (v - 0.5) * 2;
-        r = Math.round((240 + u * (225 - 240)) * shade);
-        g = Math.round((240 - u * 185) * shade);
-        b = Math.round((245 - u * 190) * shade);
-    }
-    return `rgb(${r},${g},${b})`;
+    const posBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, modelObj.pos, gl.STATIC_DRAW);
+
+    const normBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, modelObj.normMat, gl.STATIC_DRAW);
+
+    const uvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, modelObj.uv, gl.STATIC_DRAW);
+
+    const idxBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, modelObj.idx, gl.STATIC_DRAW);
+
+    modelObj.gpuBuffers = { posBuf, normBuf, uvBuf, idxBuf };
+    return modelObj.gpuBuffers;
 };
 
 window.renderLm3dCanvas = function() {
     const canvas = document.getElementById("lm3dCanvas");
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width > 0 && (canvas.width !== Math.floor(rect.width) || canvas.height !== Math.floor(rect.height))) {
-        canvas.width = Math.floor(rect.width);
-        canvas.height = Math.floor(rect.height);
-    }
-    const W = canvas.width;
-    const H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
 
-    // Sfondo gradiente studio CAD
-    const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.5, 20, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
-    bgGrad.addColorStop(0, "#1e222d");
-    bgGrad.addColorStop(1, "#0f1117");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    const targetW = Math.max(300, Math.floor(rect.width * dpr));
+    const targetH = Math.max(220, Math.floor(rect.height * dpr));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+    }
+
+    const gl = window.initLmWebGLContext(canvas);
+    if (!gl) return;
 
     const lmData = window.getLiuteriaMakingData();
     const instType = lmData.activeInstrumentType || "violin";
     const m = (lmData.measurements && lmData.measurements[instType]) || defaultData.liuteriaMaking.measurements.violin;
+    const defM = defaultData.liuteriaMaking.measurements[instType] || defaultData.liuteriaMaking.measurements.violin;
 
-    const mesh = window.buildLmParametricMesh(m);
-    const bodyLen = Number(m.body_length) || 356;
-    const baseScale = (Math.min(W, H) / (bodyLen * 1.48)) * window.lmState.zoom;
+    // Determina il modello 3D attivo (importato dall'utente oppure scansione 3D di violino/viola/violoncello)
+    let modelObj = window.lmState.importedCustomMesh;
+    if (!modelObj) {
+        modelObj = window.lmWebGL.modelsCache[instType];
+        if (!modelObj) {
+            window.loadLmBinaryModel(instType);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.08, 0.09, 0.12, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            return;
+        }
+    }
 
-    const cosX = Math.cos(window.lmState.rotX);
-    const sinX = Math.sin(window.lmState.rotX);
-    const cosY = Math.cos(window.lmState.rotY);
-    const sinY = Math.sin(window.lmState.rotY);
+    const bufs = window.ensureLmModelGpuBuffers(gl, modelObj);
+    const prog = window.lmWebGL.program;
+    gl.useProgram(prog);
 
-    const projectPt = (x, y, z) => {
-        // Rotazione attorno a Y e poi X
-        const x1 = x * cosY + z * sinY;
-        const z1 = -x * sinY + z * cosY;
-        const y2 = y * cosX - z1 * sinX;
-        const z2 = y * sinX + z1 * cosX;
-        const fov = 900;
-        const persp = fov / (fov + z2 * 0.35 + 420);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.clearColor(0.075, 0.085, 0.115, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Scala parametrica in tempo reale rispetto alle quote di default dello strumento
+    const scaleX = ((Number(m.lower_bout_width) || defM.lower_bout_width) / defM.lower_bout_width +
+                    (Number(m.upper_bout_width) || defM.upper_bout_width) / defM.upper_bout_width) * 0.5;
+    const scaleY = (Number(m.body_length) || defM.body_length) / defM.body_length;
+    const scaleZ = (Number(m.rib_height) || defM.rib_height) / defM.rib_height;
+
+    const simMap = { wood: 0, m1: 1, m2: 2, m5: 3, vib440: 4, thickness: 5 };
+    const simModeInt = simMap[window.lmState.simMode] || 0;
+    const instIdInt = window.lmState.importedCustomMesh ? 3 : (instType === "violin" ? 0 : (instType === "viola" ? 1 : 2));
+
+    // Per Violino e Violoncello usiamo di default le texture fotografiche 2K; per la Viola usiamo di default lo shader Cremonese (come in viola.py) ma l'utente può attivare la texture scanner
+    const useTexInt = window.lmWebGL.usePhotoTexture ? 1 : 0;
+
+    // Bind Uniforms
+    gl.uniform3f(gl.getUniformLocation(prog, "u_paramScale"), scaleX, scaleY, scaleZ);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_rotX"), window.lmState.rotX);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_rotY"), window.lmState.rotY);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_zoom"), window.lmState.zoom);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_aspect"), canvas.width / Math.max(canvas.height, 1));
+    gl.uniform1f(gl.getUniformLocation(prog, "u_minY"), modelObj.minY);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_maxY"), modelObj.maxY);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_maxHalfW"), modelObj.maxHalfW);
+    gl.uniform1i(gl.getUniformLocation(prog, "u_simMode"), simModeInt);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_phase"), window.lmState.animPhase);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_topCenterMm"), Number(m.top_center) || 2.8);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_topUpperMm"), Number(m.top_upper) || 2.5);
+    gl.uniform1i(gl.getUniformLocation(prog, "u_instId"), instIdInt);
+    gl.uniform1i(gl.getUniformLocation(prog, "u_compFilter"), window.lmState.activeComponentFilter);
+    gl.uniform1i(gl.getUniformLocation(prog, "u_useTexture"), useTexInt);
+    gl.uniform1i(gl.getUniformLocation(prog, "u_wireframe"), window.lmState.wireframe ? 1 : 0);
+
+    // Bind Textures (Unit 0..4)
+    const bindUnit = (unitIdx, uniformName, texUrl) => {
+        const tex = window.getOrLoadLmWebGLTexture(gl, texUrl);
+        gl.activeTexture(gl.TEXTURE0 + unitIdx);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(gl.getUniformLocation(prog, uniformName), unitIdx);
+    };
+
+    if (instType === "violin") {
+        bindUnit(0, "u_tex0", "./assets/models/violin_basecolor.jpg");
+        bindUnit(1, "u_tex1", "./assets/models/violin_ao.jpg");
+        bindUnit(2, "u_tex2", null);
+        bindUnit(3, "u_tex3", null);
+        bindUnit(4, "u_tex4", null);
+    } else if (instType === "viola") {
+        bindUnit(0, "u_tex0", "./assets/models/viola_mat0.jpg");
+        bindUnit(1, "u_tex1", "./assets/models/viola_mat1.jpg");
+        bindUnit(2, "u_tex2", null);
+        bindUnit(3, "u_tex3", null);
+        bindUnit(4, "u_tex4", null);
+    } else {
+        bindUnit(0, "u_tex0", "./assets/models/cello_body.jpg");
+        bindUnit(1, "u_tex1", "./assets/models/cello_neck.jpg");
+        bindUnit(2, "u_tex2", "./assets/models/cello_bridge.jpg");
+        bindUnit(3, "u_tex3", "./assets/models/cello_fingerboard.jpg");
+        bindUnit(4, "u_tex4", "./assets/models/cello_tailpiece.jpg");
+    }
+
+    // Bind Attributes
+    const locPos = gl.getAttribLocation(prog, "a_pos");
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs.posBuf);
+    gl.enableVertexAttribArray(locPos);
+    gl.vertexAttribPointer(locPos, 3, gl.FLOAT, false, 0, 0);
+
+    const locNorm = gl.getAttribLocation(prog, "a_normMat");
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs.normBuf);
+    gl.enableVertexAttribArray(locNorm);
+    gl.vertexAttribPointer(locNorm, 4, gl.BYTE, false, 0, 0);
+
+    const locUv = gl.getAttribLocation(prog, "a_uv");
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs.uvBuf);
+    gl.enableVertexAttribArray(locUv);
+    gl.vertexAttribPointer(locUv, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufs.idxBuf);
+    const drawMode = window.lmState.wireframe ? gl.LINES : gl.TRIANGLES;
+    gl.drawElements(drawMode, modelObj.numT * 3, gl.UNSIGNED_INT, 0);
+
+    // Disegna l'overlay 2D (Quote CAD 3D e Legenda Chladni) sopra il canvas WebGL
+    window.renderLm3dOverlayCanvas(modelObj, m, scaleX, scaleY, scaleZ);
+};
+
+window.renderLm3dOverlayCanvas = function(modelObj, m, scaleX, scaleY, scaleZ) {
+    const ov = document.getElementById("lm3dOverlayCanvas");
+    if (!ov) return;
+    const rect = ov.getBoundingClientRect();
+    if (rect.width > 0 && (ov.width !== Math.floor(rect.width) || ov.height !== Math.floor(rect.height))) {
+        ov.width = Math.floor(rect.width);
+        ov.height = Math.floor(rect.height);
+    }
+    const W = ov.width;
+    const H = ov.height;
+    const ctx = ov.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
+
+    const spanY = Math.max(modelObj.maxY - modelObj.minY, 1.0);
+    const normScale = (2.15 / spanY) * window.lmState.zoom;
+    const aspect = W / Math.max(H, 1);
+    const cy = Math.cos(window.lmState.rotY), sy = Math.sin(window.lmState.rotY);
+    const cx = Math.cos(window.lmState.rotX), sx = Math.sin(window.lmState.rotX);
+
+    const projectOverlayPt = (rx, ry, rz) => {
+        const px = rx * scaleX, py = ry * scaleY, pz = rz * scaleZ;
+        const x1 = px * cy + pz * sy;
+        const y1 = py;
+        const z1 = -px * sy + pz * cy;
+        const x2 = x1;
+        const y2 = y1 * cx - z1 * sx;
+        const z2 = y1 * sx + z1 * cx;
+
+        const vx = x2 * normScale;
+        const vy = y2 * normScale;
+        const vz = z2 * normScale;
+        const camDist = 3.4;
+        const wClip = Math.max((camDist - vz) / camDist, 0.1);
+        const ndcX = ((vx * 2.45) / aspect) / wClip;
+        const ndcY = (vy * 2.45) / wClip;
         return {
-            sx: W * 0.5 + x1 * baseScale * persp * 1.65,
-            sy: H * 0.54 - y2 * baseScale * persp * 1.65,
-            depth: z2,
-            x1, y2, z2
+            sx: (ndcX * 0.5 + 0.5) * W,
+            sy: (0.5 - ndcY * 0.5) * H
         };
     };
 
-    const simMode = window.lmState.simMode;
-    const phase = window.lmState.animPhase;
-    const compFilter = window.lmState.activeComponentFilter;
-
-    // Colori componenti (da viewer_3d.py: ["#d4a76a", "#8b6914", "#a0522d", "#5c3a1e", "#1a1a1a"])
-    const compPalette = [
-        [212, 167, 106], // 0: Tavola (Abete caldo)
-        [158, 114, 48],  // 1: Fondo (Acero ambrato)
-        [160, 82, 45],   // 2: Fasce
-        [105, 68, 38],   // 3: Manico & Tastiera
-        [28, 24, 22]     // 4: Effe
-    ];
-
-    const projVerts = mesh.vertices.map(v => {
-        let dz = 0;
-        const scalar = simMode !== "wood" ? window.computeLmVertexScalar(v, simMode, phase, m) : 0;
-        if (simMode === "vib440" || simMode === "m2" || simMode === "m5" || simMode === "m1") {
-            dz = (scalar - 0.5) * (Number(m.rib_height) || 30) * 0.22 * Math.sin(phase);
-        }
-        const p = projectPt(v.x, v.y, v.z + dz);
-        return { ...p, scalar, comp: v.comp };
-    });
-
-    // Ordina facce per profondità (Painter's algorithm)
-    const drawableFaces = [];
-    for (const f of mesh.faces) {
-        if (compFilter >= 0 && f.comp !== compFilter) continue;
-        const v0 = projVerts[f.indices[0]];
-        const v1 = projVerts[f.indices[1]];
-        const v2 = projVerts[f.indices[2]];
-        if (!v0 || !v1 || !v2) continue;
-
-        const avgDepth = (v0.depth + v1.depth + v2.depth) / 3;
-        // Normale per illuminazione direzionale
-        const ux = v1.x1 - v0.x1, uy = v1.y2 - v0.y2, uz = v1.z2 - v0.z2;
-        const vx = v2.x1 - v0.x1, vy = v2.y2 - v0.y2, vz = v2.z2 - v0.z2;
-        let nx = uy * vz - uz * vy;
-        let ny = uz * vx - ux * vz;
-        let nz = ux * vy - uy * vx;
-        const nLen = Math.hypot(nx, ny, nz) || 1;
-        nx /= nLen; ny /= nLen; nz /= nLen;
-
-        const lightDot = Math.abs(nx * 0.35 + ny * 0.45 + nz * 0.82);
-        const shade = 0.52 + 0.52 * lightDot;
-        const avgScalar = (v0.scalar + v1.scalar + v2.scalar) / 3;
-
-        drawableFaces.push({ f, v0, v1, v2, avgDepth, shade, avgScalar });
-    }
-
-    drawableFaces.sort((a, b) => a.avgDepth - b.avgDepth);
-
-    for (const item of drawableFaces) {
-        const { f, v0, v1, v2, shade, avgScalar } = item;
-        ctx.beginPath();
-        ctx.moveTo(v0.sx, v0.sy);
-        ctx.lineTo(v1.sx, v1.sy);
-        ctx.lineTo(v2.sx, v2.sy);
-        ctx.closePath();
-
-        if (window.lmState.wireframe) {
-            ctx.strokeStyle = simMode === "wood" ? "rgba(212,175,55,0.55)" : window.lmCoolwarmColor(avgScalar, 1.0);
-            ctx.lineWidth = 0.85;
-            ctx.stroke();
-        } else {
-            if (simMode !== "wood" && f.comp !== 4) {
-                ctx.fillStyle = window.lmCoolwarmColor(avgScalar, shade);
-            } else {
-                const rgb = compPalette[f.comp] || compPalette[0];
-                const r = Math.min(255, Math.round(rgb[0] * shade));
-                const g = Math.min(255, Math.round(rgb[1] * shade));
-                const b = Math.min(255, Math.round(rgb[2] * shade));
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
-            }
-            ctx.fill();
-            ctx.strokeStyle = "rgba(0,0,0,0.12)";
-            ctx.lineWidth = 0.4;
-            ctx.stroke();
-        }
-    }
-
-    // 5. SOVRAPPOSIZIONE QUOTE DIMENSIONALI CAD 3D (da visualization/dimension_overlay.py)
+    // Sovrapposizione Quote CAD 3D (da visualization/dimension_overlay.py)
     if (window.lmState.showDimensions && !window.lmState.importedCustomMesh) {
-        const halfL = bodyLen * 0.5;
-        const lbW = (Number(m.lower_bout_width) || 208) / 2;
-        const ubW = (Number(m.upper_bout_width) || 168) / 2;
-        const wW = (Number(m.waist_width) || 110) / 2;
-        const ribH = Number(m.rib_height) || 30;
-        const neckL = Number(m.neck_length) || 130;
+        const minY = modelObj.minY;
+        const bodyTopY = minY + spanY * 0.61;
+        const scrollTopY = modelObj.maxY;
+        const lbY = minY + spanY * 0.16;
+        const waistY = minY + spanY * 0.34;
+        const ubY = minY + spanY * 0.48;
+        const hw = modelObj.maxHalfW;
 
         const drawCadDim = (pA, pB, label, color) => {
-            const sA = projectPt(pA[0], pA[1], pA[2]);
-            const sB = projectPt(pB[0], pB[1], pB[2]);
+            const sA = projectOverlayPt(pA[0], pA[1], pA[2]);
+            const sB = projectOverlayPt(pB[0], pB[1], pB[2]);
             ctx.save();
             ctx.strokeStyle = color;
             ctx.lineWidth = 1.6;
@@ -6463,7 +6744,6 @@ window.renderLm3dCanvas = function() {
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // Punti terminali
             [sA, sB].forEach(pt => {
                 ctx.fillStyle = color;
                 ctx.beginPath();
@@ -6471,16 +6751,15 @@ window.renderLm3dCanvas = function() {
                 ctx.fill();
             });
 
-            // Etichetta centrale
             const mx = (sA.sx + sB.sx) * 0.5;
             const my = (sA.sy + sB.sy) * 0.5;
             ctx.font = "600 11px Inter, sans-serif";
             const tw = ctx.measureText(label).width;
-            ctx.fillStyle = "rgba(15, 17, 23, 0.85)";
-            ctx.fillRect(mx - tw * 0.5 - 5, my - 9, tw + 10, 18);
+            ctx.fillStyle = "rgba(15, 17, 23, 0.88)";
+            ctx.fillRect(mx - tw * 0.5 - 6, my - 9, tw + 12, 18);
             ctx.strokeStyle = color;
             ctx.lineWidth = 1;
-            ctx.strokeRect(mx - tw * 0.5 - 5, my - 9, tw + 10, 18);
+            ctx.strokeRect(mx - tw * 0.5 - 6, my - 9, tw + 12, 18);
             ctx.fillStyle = color;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -6488,24 +6767,25 @@ window.renderLm3dCanvas = function() {
             ctx.restore();
         };
 
-        // Quote principali (Colori di dimension_overlay.py)
-        drawCadDim([-lbW - 28, -halfL, 0], [-lbW - 28, halfL, 0], `Cassa: ${m.body_length} mm`, "#c8a96e");
-        drawCadDim([-ubW, halfL * 0.56, ribH * 0.6], [ubW, halfL * 0.56, ribH * 0.6], `Polm. Sup: ${m.upper_bout_width} mm`, "#60b0e0");
-        drawCadDim([-wW, 0, ribH * 0.7], [wW, 0, ribH * 0.7], `Vita: ${m.waist_width} mm`, "#b080d0");
-        drawCadDim([-lbW, -halfL * 0.56, ribH * 0.6], [lbW, -halfL * 0.56, ribH * 0.6], `Polm. Inf: ${m.lower_bout_width} mm`, "#e07070");
-        drawCadDim([lbW + 25, halfL, 0], [lbW + 25, halfL + neckL, 0], `Manico: ${m.neck_length} mm`, "#d0a060");
-        drawCadDim([wW + 18, 0, -ribH * 0.5], [wW + 18, 0, ribH * 0.5], `Fasce: ${m.rib_height} mm`, "#e8a040");
+        drawCadDim([-hw * 1.25, minY, 0], [-hw * 1.25, bodyTopY, 0], `Cassa: ${m.body_length} mm`, "#c8a96e");
+        drawCadDim([-hw * 0.82, ubY, hw * 0.25], [hw * 0.82, ubY, hw * 0.25], `Polm. Sup: ${m.upper_bout_width} mm`, "#60b0e0");
+        drawCadDim([-hw * 0.56, waistY, hw * 0.28], [hw * 0.56, waistY, hw * 0.28], `Vita: ${m.waist_width} mm`, "#b080d0");
+        drawCadDim([-hw, lbY, hw * 0.25], [hw, lbY, hw * 0.25], `Polm. Inf: ${m.lower_bout_width} mm`, "#e07070");
+        drawCadDim([hw * 1.22, bodyTopY, 0], [hw * 1.22, scrollTopY, 0], `Manico: ${m.neck_length} mm`, "#d0a060");
+        drawCadDim([hw * 0.68, waistY, -hw * 0.16], [hw * 0.68, waistY, hw * 0.16], `Fasce: ${m.rib_height} mm`, "#e8a040");
     }
 
-    // Legenda / Barra Colori Heatmap quando è attiva una simulazione Chladni o Spessori
+    // Barra Colori Heatmap Chladni / Spessori
+    const simMode = window.lmState.simMode;
     if (simMode !== "wood") {
-        const barW = 150, barH = 12;
+        const barW = 160, barH = 12;
         const bx = W - barW - 18, by = H - 34;
         const grad = ctx.createLinearGradient(bx, by, bx + barW, by);
-        grad.addColorStop(0, "rgb(59,130,246)");
+        grad.addColorStop(0, "rgb(59,76,192)");
+        grad.addColorStop(0.12, "rgb(250,214,89)");
         grad.addColorStop(0.5, "rgb(240,240,245)");
-        grad.addColorStop(1, "rgb(225,55,55)");
-        ctx.fillStyle = "rgba(15,17,23,0.82)";
+        grad.addColorStop(1, "rgb(199,31,38)");
+        ctx.fillStyle = "rgba(15,17,23,0.86)";
         ctx.fillRect(bx - 8, by - 20, barW + 16, 44);
         ctx.fillStyle = grad;
         ctx.fillRect(bx, by, barW, barH);
@@ -6561,7 +6841,7 @@ window.setupLm3dCanvasInteractions = function() {
         window.lmState.lastMouseX = e.clientX;
         window.lmState.lastMouseY = e.clientY;
         window.lmState.rotY += dx * 0.01;
-        window.lmState.rotX = Math.max(-1.45, Math.min(1.45, window.lmState.rotX + dy * 0.01));
+        window.lmState.rotX = Math.max(-1.48, Math.min(1.48, window.lmState.rotX + dy * 0.01));
         window.renderLm3dCanvas();
     };
     window.onmouseup = () => {
@@ -6570,12 +6850,17 @@ window.setupLm3dCanvasInteractions = function() {
     canvas.onwheel = (e) => {
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        window.lmState.zoom = Math.max(0.45, Math.min(2.6, window.lmState.zoom * factor));
+        window.lmState.zoom = Math.max(0.45, Math.min(2.8, window.lmState.zoom * factor));
         window.renderLm3dCanvas();
     };
 };
 
-// Importazione file 3D .OBJ o .STL nel visualizzatore di Liuteria Making
+window.toggleLmTextureFinish = function() {
+    window.lmWebGL.usePhotoTexture = !window.lmWebGL.usePhotoTexture;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+// Importazione file 3D .OBJ esterno direttamente nei buffer WebGL
 window.triggerLiuteriaMakingMeshImport = function() {
     const inp = document.getElementById("lmHiddenMeshInput");
     if (inp) inp.click();
@@ -6587,60 +6872,91 @@ window.handleLmMeshFileSelected = function(event) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const text = String(ev.target.result || "");
-        const verts = [];
-        const faces = [];
+        const rawV = [];
+        const rawVt = [];
+        const rawVn = [];
+        const tris = [];
+
         const lines = text.split(/\r?\n/);
         for (const rawLine of lines) {
             const line = rawLine.trim();
             if (line.startsWith("v ")) {
-                const parts = line.split(/\s+/);
-                if (parts.length >= 4) {
-                    verts.push([parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0]);
-                }
+                const p = line.split(/\s+/);
+                rawV.push([parseFloat(p[1]) || 0, parseFloat(p[2]) || 0, parseFloat(p[3]) || 0]);
+            } else if (line.startsWith("vt ")) {
+                const p = line.split(/\s+/);
+                rawVt.push([parseFloat(p[1]) || 0, 1.0 - (parseFloat(p[2]) || 0)]);
+            } else if (line.startsWith("vn ")) {
+                const p = line.split(/\s+/);
+                rawVn.push([parseFloat(p[1]) || 0, parseFloat(p[2]) || 0, parseFloat(p[3]) || 1]);
             } else if (line.startsWith("f ")) {
                 const parts = line.split(/\s+/).slice(1);
-                const idx = parts.map(p => (parseInt(p.split("/")[0], 10) || 1) - 1);
-                if (idx.length >= 3) {
-                    faces.push({ indices: [idx[0], idx[1], idx[2]], comp: 0 });
-                    if (idx.length >= 4) {
-                        faces.push({ indices: [idx[0], idx[2], idx[3]], comp: 0 });
-                    }
+                const c = parts.map(tok => {
+                    const sp = tok.split("/");
+                    return [(parseInt(sp[0], 10) || 1) - 1, (parseInt(sp[1], 10) || 1) - 1, (parseInt(sp[2], 10) || 1) - 1];
+                });
+                for (let k = 1; k < c.length - 1; k++) {
+                    tris.push([c[0], c[k], c[k + 1]]);
                 }
             }
         }
-        if (verts.length === 0) {
-            window.showToast("Formato mesh non riconosciuto o binario. Usa un file .OBJ ASCII.", "error");
+        if (rawV.length === 0 || tris.length === 0) {
+            window.showToast("Formato mesh non riconosciuto. Seleziona un file .OBJ valido.", "error");
             return;
         }
-        // Normalizza le coordinate a 356 mm
+
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (const v of verts) {
+        for (const v of rawV) {
             if (v[0] < minX) minX = v[0]; if (v[0] > maxX) maxX = v[0];
             if (v[1] < minY) minY = v[1]; if (v[1] > maxY) maxY = v[1];
             if (v[2] < minZ) minZ = v[2]; if (v[2] > maxZ) maxZ = v[2];
         }
         const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
-        const maxSpan = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
-        const scale = 380 / maxSpan;
-        // Decima se ci sono troppe facce per il rendering real-time
-        const step = Math.max(1, Math.floor(faces.length / 3500));
-        const decFaces = faces.filter((_, idx) => idx % step === 0);
+        const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-6);
+        const scale = 580.0 / span;
 
-        const normVerts = verts.map(v => {
-            const x = (v[0] - cx) * scale;
-            const y = (v[1] - cy) * scale;
-            const z = (v[2] - cz) * scale;
-            return { x, y, z, comp: 0, xn: x / 110, yn: y / 190 };
-        });
+        const numV = rawV.length;
+        const numT = tris.length;
+        const pos = new Float32Array(numV * 3);
+        const normMat = new Int8Array(numV * 4);
+        const uv = new Float32Array(numV * 2);
+        const idx = new Uint32Array(numT * 3);
+
+        for (let i = 0; i < numV; i++) {
+            pos[i * 3 + 0] = (rawV[i][0] - cx) * scale;
+            pos[i * 3 + 1] = (rawV[i][1] - cy) * scale;
+            pos[i * 3 + 2] = (rawV[i][2] - cz) * scale;
+            const n = rawVn[i] || [0, 0, 1];
+            normMat[i * 4 + 0] = Math.round(n[0] * 127);
+            normMat[i * 4 + 1] = Math.round(n[1] * 127);
+            normMat[i * 4 + 2] = Math.round(n[2] * 127);
+            normMat[i * 4 + 3] = 0;
+            const t = rawVt[i] || [0.5, 0.5];
+            uv[i * 2 + 0] = t[0];
+            uv[i * 2 + 1] = t[1];
+        }
+        for (let t = 0; t < numT; t++) {
+            idx[t * 3 + 0] = tris[t][0][0];
+            idx[t * 3 + 1] = tris[t][1][0];
+            idx[t * 3 + 2] = tris[t][2][0];
+        }
 
         window.lmState.importedCustomMesh = {
-            vertices: normVerts,
-            faces: decFaces,
-            lines: []
+            instType: "custom",
+            numV,
+            numT,
+            minY: (minY - cy) * scale,
+            maxY: (maxY - cy) * scale,
+            maxHalfW: Math.max((maxX - minX) * scale * 0.5, 50),
+            pos,
+            normMat,
+            uv,
+            idx,
+            gpuBuffers: null
         };
         window.lmState.importedMeshName = file.name;
-        window.renderLm3dCanvas();
-        window.showToast(`Modello 3D "${file.name}" importato (${verts.length.toLocaleString()} vertici)!`);
+        window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+        window.showToast(`Modello 3D "${file.name}" caricato in WebGL (${numV.toLocaleString()} vertici, ${numT.toLocaleString()} triangoli)!`);
     };
     reader.readAsText(file);
 };
@@ -7207,6 +7523,9 @@ window.renderLiuteriaMakingWorkspace = function(container) {
                                 `).join("")}
                             </div>
                             <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem; color:var(--accent-gold); border-color:rgba(212,175,55,0.4);" onclick="window.toggleLmTextureFinish()" title="Alterna tra Texture Fotografica 8K/2K e Shader Vernice ad Olio Cremonese (Acero Marezzato + Abete Val di Fiemme)">
+                                    ${window.lmWebGL && window.lmWebGL.usePhotoTexture ? "📷 Texture Scan 3D" : "🎻 Vernice Cremonese"}
+                                </button>
                                 <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem;" onclick="window.toggleLmWireframe()">
                                     ${window.lmState.wireframe ? "◼ Solido" : "🕸 Wireframe"}
                                 </button>
@@ -7222,10 +7541,14 @@ window.renderLiuteriaMakingWorkspace = function(container) {
                             </div>
                         </div>
 
-                        <div style="position:relative; width:100%; height:350px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+                        <div style="position:relative; width:100%; height:440px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); background:radial-gradient(circle at 50% 42%, #1d212b 0%, #090b10 100%);">
                             <canvas id="lm3dCanvas" style="width:100%; height:100%; display:block; cursor:grab;"></canvas>
-                            <div style="position:absolute; top:10px; left:12px; font-size:0.72rem; color:rgba(255,255,255,0.75); background:rgba(15,17,23,0.75); padding:0.3rem 0.6rem; border-radius:6px; pointer-events:none;">
-                                ${window.lmState.importedMeshName ? `📦 Mesh Importata: <strong>${window.lmState.importedMeshName}</strong>` : `${schema.icon} <strong>${schema.name} Parametrico 3D</strong> • Trascina col mouse per ruotare, rotella per zoom`}
+                            <canvas id="lm3dOverlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>
+                            <div style="position:absolute; top:10px; left:12px; font-size:0.72rem; color:rgba(255,255,255,0.85); background:rgba(15,17,23,0.82); padding:0.32rem 0.65rem; border-radius:6px; border:1px solid rgba(255,255,255,0.08); pointer-events:none; display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                                ${window.lmState.importedMeshName ? `📦 Mesh Importata: <strong>${window.lmState.importedMeshName}</strong>` : `${schema.icon} <strong>${schema.name} High-Poly 3D WebGL</strong> <span id="lm3dModelInfoTag" style="color:var(--accent-gold); font-size:0.68rem;">• Scansione 3D Reale PBR</span>`}
+                            </div>
+                            <div id="lm3dLoadingBadge" style="display:none; position:absolute; bottom:12px; left:12px; font-size:0.73rem; color:#fbbf24; background:rgba(15,17,23,0.88); padding:0.35rem 0.75rem; border-radius:6px; border:1px solid rgba(251,191,36,0.35); pointer-events:none;">
+                                ⏳ Caricamento scansione 3D ad alta risoluzione...
                             </div>
                         </div>
 
@@ -7348,6 +7671,12 @@ window.switchLmInstrumentType = function(typeKey) {
     lmData.activeInstrumentType = typeKey;
     window.lmState.importedCustomMesh = null;
     window.lmState.importedMeshName = "";
+    if (window.lmWebGL) {
+        // Come nel modello originale LiuteriaMaking (viola.py: use_obj_texture = False),
+        // per la Viola attiviamo di default lo Shader Vernice Cremonese + Acero Marezzato 3D
+        // mentre per Violino (scansione museale 8K) e Violoncello (9 materiali PBR) usiamo le texture fotografiche
+        window.lmWebGL.usePhotoTexture = (typeKey !== "viola");
+    }
     window.atelierDB.saveData();
     window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
 };
