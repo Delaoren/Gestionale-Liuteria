@@ -5933,11 +5933,11 @@ window.lmState = {
     woodSearch: "",
     activeComponentFilter: -1, // -1=All, 0=Tavola, 1=Fondo, 2=Fasce, 3=Manico, 4=Effe
     wireframe: false,
-    showDimensions: true,
+    showDimensions: false,
     autoRotate: false,
     simMode: "wood", // "wood" | "m1" | "m2" | "m5" | "vib440" | "thickness"
-    rotX: -0.62,
-    rotY: 0.42,
+    rotX: -0.28,
+    rotY: 0.35,
     zoom: 1.0,
     isDragging: false,
     lastMouseX: 0,
@@ -6286,13 +6286,13 @@ window.initLmWebGLContext = function(canvas) {
             vec3 n1 = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
             vec3 n2 = vec3(n1.x, n1.y * cx - n1.z * sx, n1.y * sx + n1.z * cx);
 
-            float normScale = (2.15 / max(spanY, 1.0)) * u_zoom;
+            float normScale = (1.68 / max(spanY, 1.0)) * u_zoom;
             vec3 viewPos = p2 * normScale;
 
-            // Proiezione prospettica con depth buffer
+            // Proiezione prospettica con depth buffer (inquadratura completa da cordiera a riccio)
             float camDist = 3.4;
             float zEye = camDist - viewPos.z;
-            float fovScale = 2.45;
+            float fovScale = 1.0;
             gl_Position = vec4(
                 (viewPos.x * fovScale) / max(u_aspect, 0.1),
                 viewPos.y * fovScale,
@@ -6570,9 +6570,11 @@ window.renderLm3dCanvas = function() {
     if (!canvas) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = canvas.getBoundingClientRect();
-    const targetW = Math.max(300, Math.floor(rect.width * dpr));
-    const targetH = Math.max(220, Math.floor(rect.height * dpr));
+    const parent = canvas.parentElement || canvas;
+    const cssW = Math.max(320, parent.clientWidth || canvas.clientWidth || Math.floor(canvas.getBoundingClientRect().width));
+    const cssH = Math.max(240, parent.clientHeight || canvas.clientHeight || Math.floor(canvas.getBoundingClientRect().height));
+    const targetW = Math.floor(cssW * dpr);
+    const targetH = Math.floor(cssH * dpr);
     if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
@@ -6701,10 +6703,12 @@ window.renderLm3dCanvas = function() {
 window.renderLm3dOverlayCanvas = function(modelObj, m, scaleX, scaleY, scaleZ) {
     const ov = document.getElementById("lm3dOverlayCanvas");
     if (!ov) return;
-    const rect = ov.getBoundingClientRect();
-    if (rect.width > 0 && (ov.width !== Math.floor(rect.width) || ov.height !== Math.floor(rect.height))) {
-        ov.width = Math.floor(rect.width);
-        ov.height = Math.floor(rect.height);
+    const parent = ov.parentElement || ov;
+    const cssW = Math.max(320, parent.clientWidth || ov.clientWidth || Math.floor(ov.getBoundingClientRect().width));
+    const cssH = Math.max(240, parent.clientHeight || ov.clientHeight || Math.floor(ov.getBoundingClientRect().height));
+    if (ov.width !== cssW || ov.height !== cssH) {
+        ov.width = cssW;
+        ov.height = cssH;
     }
     const W = ov.width;
     const H = ov.height;
@@ -6712,7 +6716,7 @@ window.renderLm3dOverlayCanvas = function(modelObj, m, scaleX, scaleY, scaleZ) {
     ctx.clearRect(0, 0, W, H);
 
     const spanY = Math.max(modelObj.maxY - modelObj.minY, 1.0);
-    const normScale = (2.15 / spanY) * window.lmState.zoom;
+    const normScale = (1.68 / spanY) * window.lmState.zoom;
     const aspect = W / Math.max(H, 1);
     const cy = Math.cos(window.lmState.rotY), sy = Math.sin(window.lmState.rotY);
     const cx = Math.cos(window.lmState.rotX), sx = Math.sin(window.lmState.rotX);
@@ -6731,8 +6735,8 @@ window.renderLm3dOverlayCanvas = function(modelObj, m, scaleX, scaleY, scaleZ) {
         const vz = z2 * normScale;
         const camDist = 3.4;
         const wClip = Math.max((camDist - vz) / camDist, 0.1);
-        const ndcX = ((vx * 2.45) / aspect) / wClip;
-        const ndcY = (vy * 2.45) / wClip;
+        const ndcX = (vx / aspect) / wClip;
+        const ndcY = vy / wClip;
         return {
             sx: (ndcX * 0.5 + 0.5) * W,
             sy: (0.5 - ndcY * 0.5) * H
@@ -7793,8 +7797,8 @@ window.toggleLmAutoRotate = function() {
 };
 
 window.resetLm3dView = function() {
-    window.lmState.rotX = -0.62;
-    window.lmState.rotY = 0.42;
+    window.lmState.rotX = -0.28;
+    window.lmState.rotY = 0.35;
     window.lmState.zoom = 1.0;
     window.renderLm3dCanvas();
 };
