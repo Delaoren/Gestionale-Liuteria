@@ -115,6 +115,24 @@ const defaultData = {
             pagine: 62,
             note: "Angolatura catena armonica 1.5° rispetto al filo d'abete. Tensione delle corde C-G-D-A.",
             tags: ["Violoncello", "Catena", "Ponticello"]
+        },
+        {
+            id: "bib-5",
+            titolo: "Guida Tecnica ai Pattern di Chladni e Analisi Modale (M1, M2, M5)",
+            autore: "Liuteria Making — Laboratorio Acustico",
+            categoria: "Analisi Scientifica",
+            anno: 2026,
+            formato: "PDF (.pdf)",
+            pagine: 28,
+            note: "Manuale operativo integrato da Liuteria Making per l'identificazione dei nodi modali M1, M2, M5 e delle risonanze di cavità B1- / B1+ su tavole e fondi.",
+            tags: ["Chladni", "FFT", "M2", "M5", "LiuteriaMaking"],
+            fileName: "ChladniGuide.pdf",
+            fileExt: "pdf",
+            fileMime: "application/pdf",
+            fileSizeBytes: 1631779,
+            fileSizeFormatted: "1.56 MB",
+            fileUrl: "./assets/ChladniGuide.pdf",
+            isIndexedDB: false
         }
     ],
     // 2. Calendario appuntamenti
@@ -675,7 +693,165 @@ const defaultData = {
                 }
             ]
         }
-    ]
+    ],
+    // 15. Liuteria Making (CAD 3D Parametrico, Analisi Acustica FFT, Chladni & Database Fisico Legni)
+    liuteriaMaking: {
+        activeInstrumentType: "violin",
+        selectedTopWood: "Abete di Paneveggio",
+        selectedBackWood: "Acero marezzato",
+        measurements: {
+            violin: {
+                rib_height: 30.0, rib_thickness: 1.2,
+                top_center: 2.8, top_upper: 2.5, top_lower: 2.5, top_f_holes: 2.3, edge_height: 4.5,
+                back_center: 4.2, back_upper: 3.5, back_lower: 3.5,
+                body_length: 356.0, upper_bout_width: 168.0, lower_bout_width: 208.0, waist_width: 110.0,
+                f_hole_length: 76.0, f_hole_width: 6.5, f_hole_position: 195.0,
+                purfling_depth: 2.0,
+                neck_length: 130.0, pegbox_width: 42.0, neck_cheek_thickness: 20.0,
+                corner_length: 15.0
+            },
+            viola: {
+                rib_height: 37.0, rib_thickness: 1.3,
+                top_center: 3.0, top_upper: 2.7, top_lower: 2.7, top_f_holes: 2.4, edge_height: 5.0,
+                back_center: 4.5, back_upper: 3.8, back_lower: 3.8,
+                body_length: 410.0, upper_bout_width: 195.0, lower_bout_width: 245.0, waist_width: 135.0,
+                f_hole_length: 82.0, f_hole_width: 7.0, f_hole_position: 210.0,
+                purfling_depth: 2.0,
+                neck_length: 152.0, pegbox_width: 46.0, neck_cheek_thickness: 23.0,
+                corner_length: 16.0
+            },
+            cello: {
+                rib_height: 118.0, rib_thickness: 1.8,
+                top_center: 4.5, top_upper: 3.8, top_lower: 3.8, top_f_holes: 3.2, edge_height: 7.0,
+                back_center: 6.0, back_upper: 5.0, back_lower: 5.0,
+                body_length: 755.0, upper_bout_width: 340.0, lower_bout_width: 440.0, waist_width: 240.0,
+                f_hole_length: 128.0, f_hole_width: 11.0, f_hole_position: 370.0,
+                purfling_depth: 2.5,
+                neck_length: 285.0, pegbox_width: 75.0, neck_cheek_thickness: 42.0,
+                corner_length: 22.0
+            }
+        },
+        woods: [
+            { id: "w-1", name: "Abete rosso (Picea abies)", density_kg_m3: 440, elastic_modulus_long: 12.8, elastic_modulus_trans: 0.7, sound_velocity: 5400, damping_factor: 0.008, notes: "Tavola armonica - standard liuteria classica", is_custom: false },
+            { id: "w-2", name: "Abete di Paneveggio", density_kg_m3: 420, elastic_modulus_long: 13.5, elastic_modulus_trans: 0.65, sound_velocity: 5600, damping_factor: 0.006, notes: "Abete di risonanza della Val di Fiemme", is_custom: false },
+            { id: "w-3", name: "Acero montano (Acer pseudoplatanus)", density_kg_m3: 660, elastic_modulus_long: 10.7, elastic_modulus_trans: 1.6, sound_velocity: 4000, damping_factor: 0.012, notes: "Fondo, fasce, manico - standard liuteria", is_custom: false },
+            { id: "w-4", name: "Acero marezzato", density_kg_m3: 680, elastic_modulus_long: 10.2, elastic_modulus_trans: 1.8, sound_velocity: 3900, damping_factor: 0.013, notes: "Fondo con marezzatura pronunciata", is_custom: false },
+            { id: "w-5", name: "Ebano (Diospyros ebenum)", density_kg_m3: 1150, elastic_modulus_long: 17.0, elastic_modulus_trans: 2.5, sound_velocity: 3800, damping_factor: 0.015, notes: "Tastiera, piroli, mentoniera, bottone", is_custom: false },
+            { id: "w-6", name: "Palissandro (Dalbergia nigra)", density_kg_m3: 850, elastic_modulus_long: 13.9, elastic_modulus_trans: 2.0, sound_velocity: 4000, damping_factor: 0.014, notes: "Tastiera alternativa, accessori", is_custom: false },
+            { id: "w-7", name: "Bosso (Buxus sempervirens)", density_kg_m3: 910, elastic_modulus_long: 8.9, elastic_modulus_trans: 1.4, sound_velocity: 3100, damping_factor: 0.016, notes: "Piroli, bottone, accessori barocchi", is_custom: false },
+            { id: "w-8", name: "Pioppo (Populus spp.)", density_kg_m3: 380, elastic_modulus_long: 8.5, elastic_modulus_trans: 0.5, sound_velocity: 4700, damping_factor: 0.010, notes: "Fondo e fasce - strumenti storici veneziani", is_custom: false },
+            { id: "w-9", name: "Salice (Salix alba)", density_kg_m3: 400, elastic_modulus_long: 7.8, elastic_modulus_trans: 0.45, sound_velocity: 4400, damping_factor: 0.011, notes: "Blocchetti interni, controfasce", is_custom: false },
+            { id: "w-10", name: "Cedro (Cedrus libani)", density_kg_m3: 490, elastic_modulus_long: 9.8, elastic_modulus_trans: 0.6, sound_velocity: 4500, damping_factor: 0.009, notes: "Tavola armonica per chitarra classica", is_custom: false },
+            { id: "w-11", name: "Abete Sitka (Picea sitchensis)", density_kg_m3: 380, elastic_modulus_long: 11.6, elastic_modulus_trans: 0.6, sound_velocity: 5500, damping_factor: 0.007, notes: "Tavola armonica alternativa, chitarra", is_custom: false },
+            { id: "w-12", name: "Cipresso (Cupressus sempervirens)", density_kg_m3: 510, elastic_modulus_long: 9.5, elastic_modulus_trans: 0.55, sound_velocity: 4300, damping_factor: 0.010, notes: "Fondo e fasce chitarra, liuto", is_custom: false },
+            { id: "w-13", name: "Pero (Pyrus communis)", density_kg_m3: 700, elastic_modulus_long: 9.2, elastic_modulus_trans: 1.3, sound_velocity: 3600, damping_factor: 0.014, notes: "Utilizzato in strumenti storici", is_custom: false },
+            { id: "w-14", name: "Noce (Juglans regia)", density_kg_m3: 640, elastic_modulus_long: 11.6, elastic_modulus_trans: 1.1, sound_velocity: 4200, damping_factor: 0.012, notes: "Fasce, fondo - liuto, mandolino", is_custom: false },
+            { id: "w-15", name: "Mogano (Swietenia macrophylla)", density_kg_m3: 540, elastic_modulus_long: 10.1, elastic_modulus_trans: 0.8, sound_velocity: 4300, damping_factor: 0.011, notes: "Manico chitarra, fondo", is_custom: false },
+            { id: "w-16", name: "Tiglio (Tilia europaea)", density_kg_m3: 520, elastic_modulus_long: 8.0, elastic_modulus_trans: 0.5, sound_velocity: 3900, damping_factor: 0.012, notes: "Blocchetti interni, controfasce, sculture", is_custom: false },
+            { id: "w-17", name: "Cirmolo (Pinus cembra)", density_kg_m3: 430, elastic_modulus_long: 10.0, elastic_modulus_trans: 0.55, sound_velocity: 4800, damping_factor: 0.009, notes: "Utilizzato in viola da gamba e strumenti barocchi", is_custom: false },
+            { id: "w-18", name: "Carpino (Carpinus betulus)", density_kg_m3: 740, elastic_modulus_long: 12.5, elastic_modulus_trans: 1.7, sound_velocity: 4100, damping_factor: 0.013, notes: "Meccaniche di pianoforte, accessori strumenti", is_custom: false },
+            { id: "w-19", name: "Cocobolo (Dalbergia retusa)", density_kg_m3: 1100, elastic_modulus_long: 18.1, elastic_modulus_trans: 2.3, sound_velocity: 4100, damping_factor: 0.014, notes: "Accessori di pregio, archetti", is_custom: false },
+            { id: "w-20", name: "Pernambuco (Paubrasilia echinata)", density_kg_m3: 950, elastic_modulus_long: 19.5, elastic_modulus_trans: 2.1, sound_velocity: 4500, damping_factor: 0.008, notes: "Bacchetta archetto - standard professionale", is_custom: false }
+        ],
+        historicalInstruments: [
+            {
+                id: "hist-1",
+                name: "Stradivari 'Il Cremonese' 1715",
+                instrument_type: "violino",
+                m1_freq: 100.0, m2_freq: 145.0, m5_freq: 340.0,
+                b1_minus_freq: 430.0, b1_plus_freq: 540.0,
+                notes: "Dati medi da letteratura tecnica standard (Forma G Cremonese)."
+            },
+            {
+                id: "hist-2",
+                name: "Guarneri del Gesù 'Il Cannone' 1743",
+                instrument_type: "violino",
+                m1_freq: 105.0, m2_freq: 155.0, m5_freq: 365.0,
+                b1_minus_freq: 440.0, b1_plus_freq: 555.0,
+                notes: "Caratterizzato da spessori maggiorati e risposta energica sulle alte frequenze."
+            },
+            {
+                id: "hist-3",
+                name: "A. Amati 'Stauffer' 1560",
+                instrument_type: "viola",
+                m1_freq: 85.0, m2_freq: 125.0, m5_freq: 280.0,
+                b1_minus_freq: 350.0, b1_plus_freq: 420.0,
+                notes: "Viola tenore classica cremonese."
+            },
+            {
+                id: "hist-4",
+                name: "D. Montagnana 'Sleeping Beauty' 1739",
+                instrument_type: "violoncello",
+                m1_freq: 58.0, m2_freq: 88.0, m5_freq: 185.0,
+                b1_minus_freq: 172.0, b1_plus_freq: 225.0,
+                notes: "Violoncello veneziano a cassa larga con profonda risonanza di cavità."
+            }
+        ],
+        archivedInstruments: [
+            {
+                id: "lm-inst-1",
+                name: "Provanone (Archivio Liuteria Making)",
+                instrument_type: "violin",
+                production_date: "07/03/2026",
+                owner_name: "Atelier Liuteria De Lorenzi",
+                owner_phone: "+39 0372 000000",
+                owner_email: "fabio.delorenzi@gmail.com",
+                notes: "Sperimentazione sugli spessori della tavola armonica (importato dal database SQLite di Liuteria Making).",
+                measurements: {
+                    rib_height: 30.0, rib_thickness: 1.2,
+                    top_center: 2.8, top_upper: 2.4, top_lower: 2.4, top_f_holes: 2.3, edge_height: 4.5,
+                    back_center: 4.3, back_upper: 3.5, back_lower: 3.5,
+                    body_length: 356.0, upper_bout_width: 168.0, lower_bout_width: 208.0, waist_width: 110.0,
+                    f_hole_length: 76.0, f_hole_width: 6.5, f_hole_position: 195.0,
+                    purfling_depth: 2.0, neck_length: 130.0, pegbox_width: 42.0, neck_cheek_thickness: 20.0, corner_length: 15.0
+                },
+                restorations: [
+                    {
+                        id: "lm-rest-1",
+                        intervention_type: "Calibrazione spessori polmone inferiore e controllo tap-tone M5 (346 Hz)",
+                        intervention_date: "2026-03-07"
+                    }
+                ],
+                savedSpectrums: [
+                    {
+                        id: "spec-1",
+                        label: "Tap-Tone Tavola Libera (Modo M5 F#)",
+                        created_at: "2026-03-07 10:15",
+                        fundamental: 346.0,
+                        peaks: [148.0, 346.0, 438.0, 542.0, 692.0]
+                    }
+                ]
+            },
+            {
+                id: "lm-inst-2",
+                name: "Opus 42 - Violino Modello Guarneri 'Il Cannone'",
+                instrument_type: "violin",
+                production_date: "25/09/2026",
+                owner_name: "Maestro Marco Rossi",
+                owner_phone: "+39 348 9123456",
+                owner_email: "m.rossi.violin@orchestra.it",
+                notes: "Tavola in Abete di Paneveggio 2012 (M5 = 358 Hz) e Fondo in Acero Marezzato Balcanico.",
+                measurements: {
+                    rib_height: 31.0, rib_thickness: 1.2,
+                    top_center: 3.0, top_upper: 2.6, top_lower: 2.6, top_f_holes: 2.5, edge_height: 4.6,
+                    back_center: 4.5, back_upper: 3.7, back_lower: 3.6,
+                    body_length: 354.0, upper_bout_width: 167.0, lower_bout_width: 207.0, waist_width: 112.0,
+                    f_hole_length: 77.0, f_hole_width: 6.8, f_hole_position: 194.0,
+                    purfling_depth: 2.0, neck_length: 130.0, pegbox_width: 42.0, neck_cheek_thickness: 20.5, corner_length: 14.0
+                },
+                restorations: [],
+                savedSpectrums: [
+                    {
+                        id: "spec-2",
+                        label: "Analisi Spettrale Cassa Chiusa (B1- / B1+)",
+                        created_at: "2026-09-29 16:40",
+                        fundamental: 440.0,
+                        peaks: [154.0, 362.0, 440.0, 552.0, 880.0]
+                    }
+                ]
+            }
+        ]
+    }
 };
 
 class DataStore {
@@ -701,6 +877,13 @@ class DataStore {
                     if (parsed.settings.atelierName === "Atelier Liuteria Master" || !parsed.settings.atelierName) {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";
                     }
+                }
+                if (!parsed.liuteriaMaking || !parsed.liuteriaMaking.measurements) {
+                    parsed.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));
+                }
+                if (Array.isArray(parsed.biblioteca) && !parsed.biblioteca.some(b => b.id === "bib-5")) {
+                    const bib5 = defaultData.biblioteca.find(b => b.id === "bib-5");
+                    if (bib5) parsed.biblioteca.push(JSON.parse(JSON.stringify(bib5)));
                 }
                 // Align sample appointment to today if still on initial fixture
                 if (parsed.calendarioAppuntamenti && Array.isArray(parsed.calendarioAppuntamenti)) {

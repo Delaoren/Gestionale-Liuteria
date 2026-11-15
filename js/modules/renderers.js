@@ -1997,5 +1997,14 @@ window.AppModules = {
         if (window.socialMediaDB && typeof window.socialMediaDB.hydrateDOMMedia === 'function') {
             setTimeout(() => window.socialMediaDB.hydrateDOMMedia(container), 40);
         }
+    },
+
+    // 15. Liuteria Making (Integrazione completa app CAD 3D Parametrico, Chladni, FFT & Database Legni)
+    renderLiuteriaMaking: function(container) {
+        if (typeof window.renderLiuteriaMakingWorkspace === 'function') {
+            window.renderLiuteriaMakingWorkspace(container);
+        } else {
+            container.innerHTML = `<div class="glass-panel"><p>Inizializzazione modulo Liuteria Making...</p></div>`;
+        }
     }
 };

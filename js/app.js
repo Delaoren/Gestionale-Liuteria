@@ -85,6 +85,16 @@ const APPS = [
         renderer: window.AppModules.renderLaboratorio
     },
     {
+        id: "liuteriaMaking",
+        name: "Liuteria Making",
+        tag: "CAD 3D, Chladni & Acustica FFT",
+        icon: "activity",
+        color: "linear-gradient(135deg, rgba(212, 175, 55, 0.25), rgba(180, 83, 9, 0.45))",
+        borderColor: "#d4af37",
+        desc: "Progettazione parametrica 3D (Violino, Viola, Violoncello), calcolo volume cassa, pattern nodali Chladni M1/M2/M5, analisi FFT microfono e database fisico legni.",
+        renderer: window.AppModules.renderLiuteriaMaking
+    },
+    {
         id: "magazzinoLegno",
         name: "Magazzino Legno",
         tag: "Legnami da Risonanza",
@@ -5825,6 +5835,1927 @@ window.sendBulkSendinblueReminders = async function() {
     } else {
         window.showToast(`Inviati ${okCount} promemoria (${errCount} errori).`, "info");
     }
+};
+
+// =========================================================================
+// MODULO INTEGRATO: LIUTERIA MAKING (CAD 3D, CHLADNI M1/M2/M5, FFT & LEGNI)
+// =========================================================================
+
+window.LM_MEASUREMENT_SCHEMA = {
+    violin: {
+        name: "Violino",
+        icon: "🎻",
+        fields: [
+            { key: "rib_height", label: "Altezza fasce", unit: "mm", min: 28, max: 34, def: 30.0, step: 0.2, group: "Fasce" },
+            { key: "rib_thickness", label: "Spessore fasce", unit: "mm", min: 1.0, max: 1.5, def: 1.2, step: 0.05, group: "Fasce" },
+            { key: "top_center", label: "Spessore tavola al centro", unit: "mm", min: 2.0, max: 4.0, def: 2.8, step: 0.1, group: "Tavola" },
+            { key: "top_upper", label: "Spessore tavola polmone sup.", unit: "mm", min: 2.0, max: 3.5, def: 2.5, step: 0.1, group: "Tavola" },
+            { key: "top_lower", label: "Spessore tavola polmone inf.", unit: "mm", min: 2.0, max: 3.5, def: 2.5, step: 0.1, group: "Tavola" },
+            { key: "top_f_holes", label: "Spessore tavola attorno effe", unit: "mm", min: 2.0, max: 3.5, def: 2.3, step: 0.1, group: "Tavola" },
+            { key: "edge_height", label: "Altezza bordo tavola", unit: "mm", min: 3.0, max: 6.0, def: 4.5, step: 0.1, group: "Tavola" },
+            { key: "back_center", label: "Spessore fondo al centro", unit: "mm", min: 3.0, max: 6.0, def: 4.2, step: 0.1, group: "Fondo" },
+            { key: "back_upper", label: "Spessore fondo polmone sup.", unit: "mm", min: 2.5, max: 5.0, def: 3.5, step: 0.1, group: "Fondo" },
+            { key: "back_lower", label: "Spessore fondo polmone inf.", unit: "mm", min: 2.5, max: 5.0, def: 3.5, step: 0.1, group: "Fondo" },
+            { key: "body_length", label: "Lunghezza cassa", unit: "mm", min: 340, max: 365, def: 356.0, step: 0.5, group: "Dimensioni" },
+            { key: "upper_bout_width", label: "Larghezza polmone sup.", unit: "mm", min: 155, max: 175, def: 168.0, step: 0.5, group: "Dimensioni" },
+            { key: "lower_bout_width", label: "Larghezza polmone inf.", unit: "mm", min: 195, max: 215, def: 208.0, step: 0.5, group: "Dimensioni" },
+            { key: "waist_width", label: "Larghezza al centro (vita)", unit: "mm", min: 100, max: 115, def: 110.0, step: 0.5, group: "Dimensioni" },
+            { key: "f_hole_length", label: "Lunghezza effe", unit: "mm", min: 70, max: 82, def: 76.0, step: 0.5, group: "Effe" },
+            { key: "f_hole_width", label: "Larghezza effe al centro", unit: "mm", min: 5, max: 9, def: 6.5, step: 0.1, group: "Effe" },
+            { key: "f_hole_position", label: "Posizione taglio effe (da fondo)", unit: "mm", min: 155, max: 205, def: 195.0, step: 0.5, group: "Effe" },
+            { key: "purfling_depth", label: "Profondità canale filetto", unit: "mm", min: 1.5, max: 3.0, def: 2.0, step: 0.1, group: "Filetto" },
+            { key: "neck_length", label: "Lunghezza manico", unit: "mm", min: 125, max: 135, def: 130.0, step: 0.5, group: "Manico" },
+            { key: "pegbox_width", label: "Larghezza testa (cavigliere)", unit: "mm", min: 38, max: 48, def: 42.0, step: 0.5, group: "Manico" },
+            { key: "neck_cheek_thickness", label: "Spessore ganasce manico", unit: "mm", min: 18, max: 24, def: 20.0, step: 0.5, group: "Manico" },
+            { key: "corner_length", label: "Lunghezza punte", unit: "mm", min: 10, max: 20, def: 15.0, step: 0.5, group: "Punte" }
+        ]
+    },
+    viola: {
+        name: "Viola",
+        icon: "🎻",
+        fields: [
+            { key: "rib_height", label: "Altezza fasce", unit: "mm", min: 33, max: 42, def: 37.0, step: 0.5, group: "Fasce" },
+            { key: "rib_thickness", label: "Spessore fasce", unit: "mm", min: 1.0, max: 1.6, def: 1.3, step: 0.05, group: "Fasce" },
+            { key: "top_center", label: "Spessore tavola al centro", unit: "mm", min: 2.5, max: 4.5, def: 3.0, step: 0.1, group: "Tavola" },
+            { key: "top_upper", label: "Spessore tavola polmone sup.", unit: "mm", min: 2.0, max: 4.0, def: 2.7, step: 0.1, group: "Tavola" },
+            { key: "top_lower", label: "Spessore tavola polmone inf.", unit: "mm", min: 2.0, max: 4.0, def: 2.7, step: 0.1, group: "Tavola" },
+            { key: "top_f_holes", label: "Spessore tavola attorno effe", unit: "mm", min: 2.0, max: 3.5, def: 2.4, step: 0.1, group: "Tavola" },
+            { key: "edge_height", label: "Altezza bordo tavola", unit: "mm", min: 3.0, max: 7.0, def: 5.0, step: 0.1, group: "Tavola" },
+            { key: "back_center", label: "Spessore fondo al centro", unit: "mm", min: 3.5, max: 6.5, def: 4.5, step: 0.1, group: "Fondo" },
+            { key: "back_upper", label: "Spessore fondo polmone sup.", unit: "mm", min: 3.0, max: 5.5, def: 3.8, step: 0.1, group: "Fondo" },
+            { key: "back_lower", label: "Spessore fondo polmone inf.", unit: "mm", min: 3.0, max: 5.5, def: 3.8, step: 0.1, group: "Fondo" },
+            { key: "body_length", label: "Lunghezza cassa", unit: "mm", min: 380, max: 430, def: 410.0, step: 0.5, group: "Dimensioni" },
+            { key: "upper_bout_width", label: "Larghezza polmone sup.", unit: "mm", min: 180, max: 210, def: 195.0, step: 0.5, group: "Dimensioni" },
+            { key: "lower_bout_width", label: "Larghezza polmone inf.", unit: "mm", min: 225, max: 260, def: 245.0, step: 0.5, group: "Dimensioni" },
+            { key: "waist_width", label: "Larghezza al centro (vita)", unit: "mm", min: 120, max: 145, def: 135.0, step: 0.5, group: "Dimensioni" },
+            { key: "f_hole_length", label: "Lunghezza effe", unit: "mm", min: 75, max: 90, def: 82.0, step: 0.5, group: "Effe" },
+            { key: "f_hole_width", label: "Larghezza effe al centro", unit: "mm", min: 5, max: 10, def: 7.0, step: 0.1, group: "Effe" },
+            { key: "f_hole_position", label: "Posizione taglio effe (da fondo)", unit: "mm", min: 175, max: 225, def: 210.0, step: 0.5, group: "Effe" },
+            { key: "purfling_depth", label: "Profondità canale filetto", unit: "mm", min: 1.5, max: 3.0, def: 2.0, step: 0.1, group: "Filetto" },
+            { key: "neck_length", label: "Lunghezza manico", unit: "mm", min: 140, max: 160, def: 152.0, step: 0.5, group: "Manico" },
+            { key: "pegbox_width", label: "Larghezza testa (cavigliere)", unit: "mm", min: 40, max: 52, def: 46.0, step: 0.5, group: "Manico" },
+            { key: "neck_cheek_thickness", label: "Spessore ganasce manico", unit: "mm", min: 20, max: 28, def: 23.0, step: 0.5, group: "Manico" },
+            { key: "corner_length", label: "Lunghezza punte", unit: "mm", min: 10, max: 22, def: 16.0, step: 0.5, group: "Punte" }
+        ]
+    },
+    cello: {
+        name: "Violoncello",
+        icon: "🎻",
+        fields: [
+            { key: "rib_height", label: "Altezza fasce", unit: "mm", min: 110, max: 130, def: 118.0, step: 0.5, group: "Fasce" },
+            { key: "rib_thickness", label: "Spessore fasce", unit: "mm", min: 1.5, max: 2.5, def: 1.8, step: 0.05, group: "Fasce" },
+            { key: "top_center", label: "Spessore tavola al centro", unit: "mm", min: 3.5, max: 6.0, def: 4.5, step: 0.1, group: "Tavola" },
+            { key: "top_upper", label: "Spessore tavola polmone sup.", unit: "mm", min: 3.0, max: 5.0, def: 3.8, step: 0.1, group: "Tavola" },
+            { key: "top_lower", label: "Spessore tavola polmone inf.", unit: "mm", min: 3.0, max: 5.0, def: 3.8, step: 0.1, group: "Tavola" },
+            { key: "top_f_holes", label: "Spessore tavola attorno effe", unit: "mm", min: 2.5, max: 4.5, def: 3.2, step: 0.1, group: "Tavola" },
+            { key: "edge_height", label: "Altezza bordo tavola", unit: "mm", min: 5.0, max: 10.0, def: 7.0, step: 0.2, group: "Tavola" },
+            { key: "back_center", label: "Spessore fondo al centro", unit: "mm", min: 5.0, max: 8.0, def: 6.0, step: 0.1, group: "Fondo" },
+            { key: "back_upper", label: "Spessore fondo polmone sup.", unit: "mm", min: 4.0, max: 7.0, def: 5.0, step: 0.1, group: "Fondo" },
+            { key: "back_lower", label: "Spessore fondo polmone inf.", unit: "mm", min: 4.0, max: 7.0, def: 5.0, step: 0.1, group: "Fondo" },
+            { key: "body_length", label: "Lunghezza cassa", unit: "mm", min: 740, max: 780, def: 755.0, step: 1.0, group: "Dimensioni" },
+            { key: "upper_bout_width", label: "Larghezza polmone sup.", unit: "mm", min: 330, max: 360, def: 340.0, step: 1.0, group: "Dimensioni" },
+            { key: "lower_bout_width", label: "Larghezza polmone inf.", unit: "mm", min: 420, max: 460, def: 440.0, step: 1.0, group: "Dimensioni" },
+            { key: "waist_width", label: "Larghezza al centro (vita)", unit: "mm", min: 220, max: 260, def: 240.0, step: 1.0, group: "Dimensioni" },
+            { key: "f_hole_length", label: "Lunghezza effe", unit: "mm", min: 115, max: 140, def: 128.0, step: 0.5, group: "Effe" },
+            { key: "f_hole_width", label: "Larghezza effe al centro", unit: "mm", min: 8, max: 14, def: 11.0, step: 0.2, group: "Effe" },
+            { key: "f_hole_position", label: "Posizione taglio effe (da fondo)", unit: "mm", min: 330, max: 400, def: 370.0, step: 1.0, group: "Effe" },
+            { key: "purfling_depth", label: "Profondità canale filetto", unit: "mm", min: 2.0, max: 4.0, def: 2.5, step: 0.1, group: "Filetto" },
+            { key: "neck_length", label: "Lunghezza manico", unit: "mm", min: 275, max: 295, def: 285.0, step: 1.0, group: "Manico" },
+            { key: "pegbox_width", label: "Larghezza testa (cavigliere)", unit: "mm", min: 65, max: 85, def: 75.0, step: 0.5, group: "Manico" },
+            { key: "neck_cheek_thickness", label: "Spessore ganasce manico", unit: "mm", min: 35, max: 48, def: 42.0, step: 0.5, group: "Manico" },
+            { key: "corner_length", label: "Lunghezza punte", unit: "mm", min: 15, max: 30, def: 22.0, step: 0.5, group: "Punte" }
+        ]
+    }
+};
+
+window.lmState = {
+    leftTab: "measurements", // "measurements" | "woods"
+    woodSearch: "",
+    activeComponentFilter: -1, // -1=All, 0=Tavola, 1=Fondo, 2=Fasce, 3=Manico, 4=Effe
+    wireframe: false,
+    showDimensions: true,
+    autoRotate: false,
+    simMode: "wood", // "wood" | "m1" | "m2" | "m5" | "vib440" | "thickness"
+    rotX: -0.62,
+    rotY: 0.42,
+    zoom: 1.0,
+    isDragging: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    importedCustomMesh: null,
+    importedMeshName: "",
+    animPhase: 0,
+    animReqId: null,
+    // Audio / FFT state
+    audioCtx: null,
+    analyser: null,
+    micStream: null,
+    synthOscs: [],
+    isCapturing: false,
+    isSynthetic: false,
+    isCalibrating: false,
+    calibrationFrames: [],
+    noiseProfile: null,
+    fftSize: 4096,
+    windowType: "hann",
+    selectedHistoricalId: "hist-1",
+    selectedArchiveId: "lm-inst-1",
+    latestFft: null
+};
+
+window.getLiuteriaMakingData = function() {
+    if (!window.atelierDB || !window.atelierDB.data) return {};
+    if (!window.atelierDB.data.liuteriaMaking) {
+        window.atelierDB.data.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));
+    }
+    return window.atelierDB.data.liuteriaMaking;
+};
+
+// Formula esatta da Violin.calculate_volume() in LiuteriaMaking/luthier_app/geometry/instruments/violin.py
+window.calculateLmInstrumentVolume = function(m) {
+    const body_len = Number(m.body_length) || 356;
+    const upper_w = (Number(m.upper_bout_width) || 168) / 2;
+    const lower_w = (Number(m.lower_bout_width) || 208) / 2;
+    const waist_w = (Number(m.waist_width) || 110) / 2;
+    const rib_h = Number(m.rib_height) || 30;
+    const rib_t = Number(m.rib_thickness) || 1.2;
+
+    const v_lower = Math.PI * lower_w * (lower_w * 0.55) * (body_len * 0.35) / 4;
+    const v_waist = Math.PI * waist_w * (waist_w * 0.48) * (body_len * 0.30) / 4;
+    const v_upper = Math.PI * upper_w * (upper_w * 0.55) * (body_len * 0.25) / 4;
+
+    const depth_ref = Math.max(lower_w * 0.55, upper_w * 0.55, waist_w * 0.48);
+    const total_ext = (v_lower + v_waist + v_upper) * (rib_h / depth_ref);
+
+    const top_avg = ((Number(m.top_center) || 2.8) + (Number(m.top_upper) || 2.5) + (Number(m.top_lower) || 2.5)) / 3;
+    const back_avg = ((Number(m.back_center) || 4.2) + (Number(m.back_upper) || 3.5) + (Number(m.back_lower) || 3.5)) / 3;
+    const h_internal = rib_h - top_avg - back_avg;
+    const reduction = Math.max(h_internal / rib_h, 0.5);
+    const perim_reduction = 1.0 - (2 * rib_t / Math.min(waist_w, 50));
+
+    return Number((total_ext * reduction * perim_reduction / 1000.0).toFixed(1));
+};
+
+window.calculateLmAcousticEstimates = function(instType, m, topWood, backWood) {
+    const volCm3 = window.calculateLmInstrumentVolume(m);
+    const topRho = (topWood && topWood.density_kg_m3) || 420;
+    const topVel = (topWood && topWood.sound_velocity) || 5600;
+    const backRho = (backWood && backWood.density_kg_m3) || 680;
+    const backVel = (backWood && backWood.sound_velocity) || 3900;
+
+    const bodyLenM = (Number(m.body_length) || 356) / 1000;
+    const avgWidthM = (((Number(m.upper_bout_width) || 168) + (Number(m.lower_bout_width) || 208) + (Number(m.waist_width) || 110)) / 3) / 1000;
+    const plateAreaM2 = bodyLenM * avgWidthM * 0.78;
+
+    const topAvgMm = ((Number(m.top_center) || 2.8) + (Number(m.top_upper) || 2.5) + (Number(m.top_lower) || 2.5)) / 3;
+    const backAvgMm = ((Number(m.back_center) || 4.2) + (Number(m.back_upper) || 3.5) + (Number(m.back_lower) || 3.5)) / 3;
+
+    const topWeightG = Math.round(plateAreaM2 * (topAvgMm / 1000) * topRho * 1000 * 10) / 10;
+    const backWeightG = Math.round(plateAreaM2 * (backAvgMm / 1000) * backRho * 1000 * 10) / 10;
+
+    // Stima fisica frequenze modali M1, M2, M5 (legge di scala h / L^2 * c)
+    const refL = instType === "cello" ? 755 : (instType === "viola" ? 410 : 356);
+    const refH = instType === "cello" ? 4.5 : (instType === "viola" ? 3.0 : 2.8);
+    const baseM5 = instType === "cello" ? 185 : (instType === "viola" ? 280 : 345);
+    const baseM2 = instType === "cello" ? 88 : (instType === "viola" ? 125 : 148);
+    const baseM1 = instType === "cello" ? 58 : (instType === "viola" ? 85 : 102);
+
+    const scaleFactor = ((topAvgMm / refH) * Math.pow(refL / (Number(m.body_length) || refL), 1.85) * ((topVel / 5500 + backVel / 3950) / 2));
+    const m1 = Math.round(baseM1 * scaleFactor);
+    const m2 = Math.round(baseM2 * scaleFactor);
+    const m5 = Math.round(baseM5 * scaleFactor);
+
+    // Stima Helmholtz A0 dalla superficie effe e volume cassa
+    const fAreaMm2 = 2 * (Number(m.f_hole_length) || 76) * (Number(m.f_hole_width) || 6.5) * 0.82;
+    const a0Base = instType === "cello" ? 98 : (instType === "viola" ? 215 : 278);
+    const refVol = instType === "cello" ? 17500 : (instType === "viola" ? 2650 : 1720);
+    const a0 = Math.round(a0Base * Math.sqrt(refVol / Math.max(volCm3, 200)) * Math.pow(fAreaMm2 / (instType === "cello" ? 2300 : 810), 0.25));
+
+    return {
+        volumeCm3: volCm3,
+        topWeightG,
+        backWeightG,
+        m1,
+        m2,
+        m5,
+        a0,
+        noteM5: window.freqToMusicalNote(m5)
+    };
+};
+
+window.freqToMusicalNote = function(freq) {
+    if (!freq || freq <= 20) return "-";
+    const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const midi = Math.round(69 + 12 * Math.log2(freq / 440.0));
+    const note = notes[((midi % 12) + 12) % 12];
+    const octave = Math.floor(midi / 12) - 1;
+    return `${note}${octave}`;
+};
+
+// Curva di Bézier cubica (identica a Violin._bezier3 in violin.py)
+window.lmBezier3 = function(p0, p1, p2, p3, n = 16) {
+    const pts = [];
+    for (let i = 1; i <= n; i++) {
+        const t = i / n;
+        const mt = 1 - t;
+        const x = mt * mt * mt * p0[0] + 3 * mt * mt * t * p1[0] + 3 * mt * t * t * p2[0] + t * t * t * p3[0];
+        const y = mt * mt * mt * p0[1] + 3 * mt * mt * t * p1[1] + 3 * mt * t * t * p2[1] + t * t * t * p3[1];
+        pts.push([x, y]);
+    }
+    return pts;
+};
+
+// Genera il contorno C-bouts + punte con curve di Bézier (da violin.py)
+window.generateLmBodyOutline = function(m, nSeg = 14) {
+    const body_len = Number(m.body_length) || 356;
+    const ub_w = (Number(m.upper_bout_width) || 168) / 2;
+    const lb_w = (Number(m.lower_bout_width) || 208) / 2;
+    const waist = (Number(m.waist_width) || 110) / 2;
+    const corner_len = Number(m.corner_length) || 15;
+    const neck_root_w = (Number(m.neck_cheek_thickness) || 20) / 2 + 5;
+
+    const y_bottom = 0.0;
+    const y_lb_max = body_len * 0.22;
+    const y_lower_corner = body_len * 0.355;
+    const y_waist = body_len * 0.50;
+    const y_upper_corner = body_len * 0.645;
+    const y_ub_max = body_len * 0.78;
+    const y_top = body_len;
+
+    const corner_x = waist + corner_len;
+
+    const right = [[0.0, y_bottom]];
+    right.push(...window.lmBezier3([0, y_bottom], [lb_w * 0.55, y_bottom], [lb_w, y_lb_max * 0.45], [lb_w, y_lb_max], nSeg));
+    right.push(...window.lmBezier3([lb_w, y_lb_max], [lb_w, y_lb_max + (y_lower_corner - y_lb_max) * 0.55], [corner_x + 3, y_lower_corner - 6], [corner_x, y_lower_corner], nSeg));
+    right.push(...window.lmBezier3([corner_x, y_lower_corner], [corner_x - 6, y_lower_corner + 10], [waist - 2, y_waist - 12], [waist, y_waist], nSeg));
+    right.push(...window.lmBezier3([waist, y_waist], [waist - 2, y_waist + 12], [corner_x - 6, y_upper_corner - 10], [corner_x, y_upper_corner], nSeg));
+    right.push(...window.lmBezier3([corner_x, y_upper_corner], [corner_x + 3, y_upper_corner + 6], [ub_w, y_ub_max - (y_ub_max - y_upper_corner) * 0.55], [ub_w, y_ub_max], nSeg));
+    right.push(...window.lmBezier3([ub_w, y_ub_max], [ub_w, y_ub_max + (y_top - y_ub_max) * 0.5], [neck_root_w + 5, y_top - 10], [neck_root_w, y_top], nSeg));
+
+    const outline = [...right, [0.0, y_top]];
+    for (let i = right.length - 2; i >= 1; i--) {
+        outline.push([-right[i][0], right[i][1]]);
+    }
+    return outline;
+};
+
+// Genera la mesh 3D parametrica completa con bombatura (Tavola, Fondo, Fasce, Manico/Riccio, Effe)
+window.buildLmParametricMesh = function(m) {
+    if (window.lmState.importedCustomMesh) {
+        return window.lmState.importedCustomMesh;
+    }
+
+    const outline = window.generateLmBodyOutline(m, 12);
+    const bodyLen = Number(m.body_length) || 356;
+    const ribH = Number(m.rib_height) || 30;
+    const archHeight = ribH * 0.48;
+    const cy = bodyLen * 0.5;
+    const nOut = outline.length;
+
+    const vertices = []; // { x, y, z, comp, xn, yn }
+    const faces = [];    // { indices: [i0, i1, i2], comp }
+    const lines = [];    // { p1, p2, comp }
+
+    const maxHalfW = Math.max((Number(m.lower_bout_width) || 208) / 2, 1);
+    const halfLen = Math.max(bodyLen / 2, 1);
+
+    const addVertex = (x, y, z, comp) => {
+        const idx = vertices.length;
+        vertices.push({
+            x,
+            y: y - cy, // centra sull'origine Y
+            z: z - ribH * 0.5,
+            rawY: y,
+            comp,
+            xn: x / maxHalfW,
+            yn: (y - cy) / halfLen
+        });
+        return idx;
+    };
+
+    // 1. TAVOLA ARMONICA (comp = 0) e FONDO (comp = 1) con anelli concentrici per bombatura realistica
+    const rings = [0.28, 0.58, 0.84, 1.0];
+    const buildArchedPlate = (comp, isTop) => {
+        const zBase = isTop ? ribH : 0;
+        const sign = isTop ? 1 : -1;
+        const centerIdx = addVertex(0, cy, zBase + sign * archHeight, comp);
+
+        const ringIndices = [];
+        for (let rIdx = 0; rIdx < rings.length; rIdx++) {
+            const s = rings[rIdx];
+            // Profilo di bombatura cremonese (coseno rialzato)
+            const arch = sign * archHeight * Math.pow(Math.cos(s * Math.PI * 0.5), 1.5);
+            const currRing = [];
+            for (let i = 0; i < nOut; i++) {
+                const ox = outline[i][0] * s;
+                const oy = cy + (outline[i][1] - cy) * s;
+                currRing.push(addVertex(ox, oy, zBase + arch, comp));
+            }
+            ringIndices.push(currRing);
+        }
+
+        // Triangoli dal centro al primo anello
+        for (let i = 0; i < nOut; i++) {
+            const next = (i + 1) % nOut;
+            faces.push({ indices: [centerIdx, ringIndices[0][i], ringIndices[0][next]], comp });
+        }
+        // Quad triangolati tra gli anelli
+        for (let rIdx = 0; rIdx < rings.length - 1; rIdx++) {
+            const rA = ringIndices[rIdx];
+            const rB = ringIndices[rIdx + 1];
+            for (let i = 0; i < nOut; i++) {
+                const next = (i + 1) % nOut;
+                faces.push({ indices: [rA[i], rB[i], rB[next]], comp });
+                faces.push({ indices: [rA[i], rB[next], rA[next]], comp });
+            }
+        }
+        return ringIndices[rings.length - 1];
+    };
+
+    const topEdgeRing = buildArchedPlate(0, true);
+    const backEdgeRing = buildArchedPlate(1, false);
+
+    // 2. FASCE LATERALI (comp = 2)
+    for (let i = 0; i < nOut; i++) {
+        const next = (i + 1) % nOut;
+        const b0 = addVertex(outline[i][0], outline[i][1], 0, 2);
+        const t0 = addVertex(outline[i][0], outline[i][1], ribH, 2);
+        const b1 = addVertex(outline[next][0], outline[next][1], 0, 2);
+        const t1 = addVertex(outline[next][0], outline[next][1], ribH, 2);
+        faces.push({ indices: [b0, t0, t1], comp: 2 });
+        faces.push({ indices: [b0, t1, b1], comp: 2 });
+    }
+
+    // 3. MANICO + CAVIGLIERE + RICCIO + TASTIERA (comp = 3)
+    const neckLen = Number(m.neck_length) || 130;
+    const cheek = Number(m.neck_cheek_thickness) || 20;
+    const pegW = Number(m.pegbox_width) || 42;
+    const neckSections = [
+        { y: bodyLen, w: cheek * 0.65, zLow: ribH * 0.25, zHigh: ribH * 1.15 },
+        { y: bodyLen + neckLen * 0.5, w: cheek * 0.52, zLow: ribH * 0.4, zHigh: ribH * 1.2 },
+        { y: bodyLen + neckLen, w: pegW * 0.46, zLow: ribH * 0.45, zHigh: ribH * 1.3 },
+        { y: bodyLen + neckLen + bodyLen * 0.11, w: pegW * 0.40, zLow: ribH * 0.3, zHigh: ribH * 1.35 },
+        { y: bodyLen + neckLen + bodyLen * 0.17, w: pegW * 0.28, zLow: ribH * 0.5, zHigh: ribH * 1.5 }
+    ];
+    for (let s = 0; s < neckSections.length - 1; s++) {
+        const A = neckSections[s];
+        const B = neckSections[s + 1];
+        const p0 = addVertex(-A.w, A.y, A.zHigh, 3);
+        const p1 = addVertex(A.w, A.y, A.zHigh, 3);
+        const p2 = addVertex(B.w, B.y, B.zHigh, 3);
+        const p3 = addVertex(-B.w, B.y, B.zHigh, 3);
+        faces.push({ indices: [p0, p1, p2], comp: 3 });
+        faces.push({ indices: [p0, p2, p3], comp: 3 });
+
+        const q0 = addVertex(-A.w, A.y, A.zLow, 3);
+        const q1 = addVertex(A.w, A.y, A.zLow, 3);
+        const q2 = addVertex(B.w, B.y, B.zLow, 3);
+        const q3 = addVertex(-B.w, B.y, B.zLow, 3);
+        faces.push({ indices: [q0, q2, q1], comp: 3 });
+        faces.push({ indices: [q0, q3, q2], comp: 3 });
+    }
+
+    // Tastiera (fingerboard) che si estende sopra la tavola
+    const fbStart = bodyLen * 0.62;
+    const fbEnd = bodyLen + neckLen;
+    const fb0 = addVertex(-cheek * 0.72, fbStart, ribH + archHeight * 0.92, 3);
+    const fb1 = addVertex(cheek * 0.72, fbStart, ribH + archHeight * 0.92, 3);
+    const fb2 = addVertex(cheek * 0.48, fbEnd, ribH * 1.25, 3);
+    const fb3 = addVertex(-cheek * 0.48, fbEnd, ribH * 1.25, 3);
+    faces.push({ indices: [fb0, fb1, fb2], comp: 3 });
+    faces.push({ indices: [fb0, fb2, fb3], comp: 3 });
+
+    // 4. EFFE (F-HOLES) & PONTICELLO (comp = 4)
+    const fLen = Number(m.f_hole_length) || 76;
+    const fWid = Number(m.f_hole_width) || 6.5;
+    const fPos = Number(m.f_hole_position) || 195;
+    const waistHalf = (Number(m.waist_width) || 110) / 2;
+    const fxBase = waistHalf * 0.58;
+
+    [-1, 1].forEach(side => {
+        const fPts = [];
+        const steps = 20;
+        for (let i = 0; i <= steps; i++) {
+            const t = -1 + (2 * i) / steps;
+            const y = fPos + t * (fLen / 2);
+            const xCurve = side * (fxBase + fWid * 0.65 * Math.sin(t * Math.PI));
+            const zTop = ribH + archHeight * 0.68;
+            const vA = addVertex(xCurve - fWid * 0.28, y, zTop, 4);
+            const vB = addVertex(xCurve + fWid * 0.28, y, zTop, 4);
+            fPts.push([vA, vB]);
+        }
+        for (let i = 0; i < fPts.length - 1; i++) {
+            faces.push({ indices: [fPts[i][0], fPts[i][1], fPts[i + 1][1]], comp: 4 });
+            faces.push({ indices: [fPts[i][0], fPts[i + 1][1], fPts[i + 1][0]], comp: 4 });
+        }
+    });
+
+    return {
+        vertices,
+        faces,
+        lines,
+        bounds: {
+            minX: -maxHalfW,
+            maxX: maxHalfW,
+            minY: -halfLen,
+            maxY: halfLen + neckLen + bodyLen * 0.17,
+            minZ: -ribH * 0.5 - archHeight,
+            maxZ: ribH * 0.5 + archHeight
+        }
+    };
+};
+
+// Calcola l'intensità scalare (0..1) su ogni vertice per Chladni M1, M2, M5, Vibrazione 440Hz o Confronto Spessori
+window.computeLmVertexScalar = function(v, mode, phase, m) {
+    const x = v.xn;
+    const y = v.yn;
+    if (mode === "m1") {
+        // Modo 1: torsione longitudinale
+        return Math.min(1, Math.max(0, Math.abs(Math.sin(x * Math.PI * 0.85) * Math.sin(y * Math.PI * 0.9))));
+    } else if (mode === "m2") {
+        // Modo 2 (da main_window.py _simulate_chladni_mode(2)): |x_norm * y_norm|
+        return Math.min(1, Math.max(0, Math.abs(x * y) * 2.1));
+    } else if (mode === "m5") {
+        // Modo 5 Ring Mode (da main_window.py _simulate_chladni_mode(5)): (cos(r * pi / 0.6) + 1) / 2
+        const r = Math.sqrt(x * x + y * y);
+        return Math.min(1, Math.max(0, (Math.cos((r * Math.PI) / 0.62) + 1.0) / 2.0));
+    } else if (mode === "vib440") {
+        const r = Math.sqrt(x * x + y * y);
+        const wave = Math.sin(r * 5.2 - phase * 2.2) * Math.cos(x * 2.5);
+        return Math.min(1, Math.max(0, (wave + 1) * 0.5));
+    } else if (mode === "thickness") {
+        // Mappa spessori tra centro e polmoni rispetto al target storico Stradivari/Guarneri
+        const r = Math.sqrt(x * x + y * y);
+        const topC = Number(m.top_center) || 2.8;
+        const topU = Number(m.top_upper) || 2.5;
+        const grad = (1 - Math.min(1, r)) * (topC / 3.5) + Math.min(1, r) * (topU / 3.5);
+        return Math.min(1, Math.max(0, grad));
+    }
+    return 0;
+};
+
+// Colormap "coolwarm" (Blu = 0.0 Nodo -> Bianco = 0.5 -> Rosso = 1.0 Ventre Acustico)
+window.lmCoolwarmColor = function(t, shade = 1.0) {
+    const v = Math.min(1, Math.max(0, t));
+    let r, g, b;
+    if (v < 0.5) {
+        const u = v * 2;
+        r = Math.round((59 + u * (240 - 59)) * shade);
+        g = Math.round((130 + u * (240 - 130)) * shade);
+        b = Math.round((246 + u * (245 - 246)) * shade);
+    } else {
+        const u = (v - 0.5) * 2;
+        r = Math.round((240 + u * (225 - 240)) * shade);
+        g = Math.round((240 - u * 185) * shade);
+        b = Math.round((245 - u * 190) * shade);
+    }
+    return `rgb(${r},${g},${b})`;
+};
+
+window.renderLm3dCanvas = function() {
+    const canvas = document.getElementById("lm3dCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && (canvas.width !== Math.floor(rect.width) || canvas.height !== Math.floor(rect.height))) {
+        canvas.width = Math.floor(rect.width);
+        canvas.height = Math.floor(rect.height);
+    }
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Sfondo gradiente studio CAD
+    const bgGrad = ctx.createRadialGradient(W * 0.5, H * 0.5, 20, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
+    bgGrad.addColorStop(0, "#1e222d");
+    bgGrad.addColorStop(1, "#0f1117");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    const m = (lmData.measurements && lmData.measurements[instType]) || defaultData.liuteriaMaking.measurements.violin;
+
+    const mesh = window.buildLmParametricMesh(m);
+    const bodyLen = Number(m.body_length) || 356;
+    const baseScale = (Math.min(W, H) / (bodyLen * 1.48)) * window.lmState.zoom;
+
+    const cosX = Math.cos(window.lmState.rotX);
+    const sinX = Math.sin(window.lmState.rotX);
+    const cosY = Math.cos(window.lmState.rotY);
+    const sinY = Math.sin(window.lmState.rotY);
+
+    const projectPt = (x, y, z) => {
+        // Rotazione attorno a Y e poi X
+        const x1 = x * cosY + z * sinY;
+        const z1 = -x * sinY + z * cosY;
+        const y2 = y * cosX - z1 * sinX;
+        const z2 = y * sinX + z1 * cosX;
+        const fov = 900;
+        const persp = fov / (fov + z2 * 0.35 + 420);
+        return {
+            sx: W * 0.5 + x1 * baseScale * persp * 1.65,
+            sy: H * 0.54 - y2 * baseScale * persp * 1.65,
+            depth: z2,
+            x1, y2, z2
+        };
+    };
+
+    const simMode = window.lmState.simMode;
+    const phase = window.lmState.animPhase;
+    const compFilter = window.lmState.activeComponentFilter;
+
+    // Colori componenti (da viewer_3d.py: ["#d4a76a", "#8b6914", "#a0522d", "#5c3a1e", "#1a1a1a"])
+    const compPalette = [
+        [212, 167, 106], // 0: Tavola (Abete caldo)
+        [158, 114, 48],  // 1: Fondo (Acero ambrato)
+        [160, 82, 45],   // 2: Fasce
+        [105, 68, 38],   // 3: Manico & Tastiera
+        [28, 24, 22]     // 4: Effe
+    ];
+
+    const projVerts = mesh.vertices.map(v => {
+        let dz = 0;
+        const scalar = simMode !== "wood" ? window.computeLmVertexScalar(v, simMode, phase, m) : 0;
+        if (simMode === "vib440" || simMode === "m2" || simMode === "m5" || simMode === "m1") {
+            dz = (scalar - 0.5) * (Number(m.rib_height) || 30) * 0.22 * Math.sin(phase);
+        }
+        const p = projectPt(v.x, v.y, v.z + dz);
+        return { ...p, scalar, comp: v.comp };
+    });
+
+    // Ordina facce per profondità (Painter's algorithm)
+    const drawableFaces = [];
+    for (const f of mesh.faces) {
+        if (compFilter >= 0 && f.comp !== compFilter) continue;
+        const v0 = projVerts[f.indices[0]];
+        const v1 = projVerts[f.indices[1]];
+        const v2 = projVerts[f.indices[2]];
+        if (!v0 || !v1 || !v2) continue;
+
+        const avgDepth = (v0.depth + v1.depth + v2.depth) / 3;
+        // Normale per illuminazione direzionale
+        const ux = v1.x1 - v0.x1, uy = v1.y2 - v0.y2, uz = v1.z2 - v0.z2;
+        const vx = v2.x1 - v0.x1, vy = v2.y2 - v0.y2, vz = v2.z2 - v0.z2;
+        let nx = uy * vz - uz * vy;
+        let ny = uz * vx - ux * vz;
+        let nz = ux * vy - uy * vx;
+        const nLen = Math.hypot(nx, ny, nz) || 1;
+        nx /= nLen; ny /= nLen; nz /= nLen;
+
+        const lightDot = Math.abs(nx * 0.35 + ny * 0.45 + nz * 0.82);
+        const shade = 0.52 + 0.52 * lightDot;
+        const avgScalar = (v0.scalar + v1.scalar + v2.scalar) / 3;
+
+        drawableFaces.push({ f, v0, v1, v2, avgDepth, shade, avgScalar });
+    }
+
+    drawableFaces.sort((a, b) => a.avgDepth - b.avgDepth);
+
+    for (const item of drawableFaces) {
+        const { f, v0, v1, v2, shade, avgScalar } = item;
+        ctx.beginPath();
+        ctx.moveTo(v0.sx, v0.sy);
+        ctx.lineTo(v1.sx, v1.sy);
+        ctx.lineTo(v2.sx, v2.sy);
+        ctx.closePath();
+
+        if (window.lmState.wireframe) {
+            ctx.strokeStyle = simMode === "wood" ? "rgba(212,175,55,0.55)" : window.lmCoolwarmColor(avgScalar, 1.0);
+            ctx.lineWidth = 0.85;
+            ctx.stroke();
+        } else {
+            if (simMode !== "wood" && f.comp !== 4) {
+                ctx.fillStyle = window.lmCoolwarmColor(avgScalar, shade);
+            } else {
+                const rgb = compPalette[f.comp] || compPalette[0];
+                const r = Math.min(255, Math.round(rgb[0] * shade));
+                const g = Math.min(255, Math.round(rgb[1] * shade));
+                const b = Math.min(255, Math.round(rgb[2] * shade));
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+            }
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.12)";
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+        }
+    }
+
+    // 5. SOVRAPPOSIZIONE QUOTE DIMENSIONALI CAD 3D (da visualization/dimension_overlay.py)
+    if (window.lmState.showDimensions && !window.lmState.importedCustomMesh) {
+        const halfL = bodyLen * 0.5;
+        const lbW = (Number(m.lower_bout_width) || 208) / 2;
+        const ubW = (Number(m.upper_bout_width) || 168) / 2;
+        const wW = (Number(m.waist_width) || 110) / 2;
+        const ribH = Number(m.rib_height) || 30;
+        const neckL = Number(m.neck_length) || 130;
+
+        const drawCadDim = (pA, pB, label, color) => {
+            const sA = projectPt(pA[0], pA[1], pA[2]);
+            const sB = projectPt(pB[0], pB[1], pB[2]);
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.6;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(sA.sx, sA.sy);
+            ctx.lineTo(sB.sx, sB.sy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Punti terminali
+            [sA, sB].forEach(pt => {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pt.sx, pt.sy, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Etichetta centrale
+            const mx = (sA.sx + sB.sx) * 0.5;
+            const my = (sA.sy + sB.sy) * 0.5;
+            ctx.font = "600 11px Inter, sans-serif";
+            const tw = ctx.measureText(label).width;
+            ctx.fillStyle = "rgba(15, 17, 23, 0.85)";
+            ctx.fillRect(mx - tw * 0.5 - 5, my - 9, tw + 10, 18);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(mx - tw * 0.5 - 5, my - 9, tw + 10, 18);
+            ctx.fillStyle = color;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, mx, my);
+            ctx.restore();
+        };
+
+        // Quote principali (Colori di dimension_overlay.py)
+        drawCadDim([-lbW - 28, -halfL, 0], [-lbW - 28, halfL, 0], `Cassa: ${m.body_length} mm`, "#c8a96e");
+        drawCadDim([-ubW, halfL * 0.56, ribH * 0.6], [ubW, halfL * 0.56, ribH * 0.6], `Polm. Sup: ${m.upper_bout_width} mm`, "#60b0e0");
+        drawCadDim([-wW, 0, ribH * 0.7], [wW, 0, ribH * 0.7], `Vita: ${m.waist_width} mm`, "#b080d0");
+        drawCadDim([-lbW, -halfL * 0.56, ribH * 0.6], [lbW, -halfL * 0.56, ribH * 0.6], `Polm. Inf: ${m.lower_bout_width} mm`, "#e07070");
+        drawCadDim([lbW + 25, halfL, 0], [lbW + 25, halfL + neckL, 0], `Manico: ${m.neck_length} mm`, "#d0a060");
+        drawCadDim([wW + 18, 0, -ribH * 0.5], [wW + 18, 0, ribH * 0.5], `Fasce: ${m.rib_height} mm`, "#e8a040");
+    }
+
+    // Legenda / Barra Colori Heatmap quando è attiva una simulazione Chladni o Spessori
+    if (simMode !== "wood") {
+        const barW = 150, barH = 12;
+        const bx = W - barW - 18, by = H - 34;
+        const grad = ctx.createLinearGradient(bx, by, bx + barW, by);
+        grad.addColorStop(0, "rgb(59,130,246)");
+        grad.addColorStop(0.5, "rgb(240,240,245)");
+        grad.addColorStop(1, "rgb(225,55,55)");
+        ctx.fillStyle = "rgba(15,17,23,0.82)";
+        ctx.fillRect(bx - 8, by - 20, barW + 16, 44);
+        ctx.fillStyle = grad;
+        ctx.fillRect(bx, by, barW, barH);
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.strokeRect(bx, by, barW, barH);
+        ctx.fillStyle = "#e5e7eb";
+        ctx.font = "600 10px Inter, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(simMode === "thickness" ? "Sottile (2mm)" : "0.0 (Nodo)", bx, by - 5);
+        ctx.textAlign = "right";
+        ctx.fillText(simMode === "thickness" ? "Spesso (5mm)" : "1.0 (Ventre)", bx + barW, by - 5);
+    }
+};
+
+window.startLm3dAnimationLoop = function() {
+    if (window.lmState.animReqId) {
+        cancelAnimationFrame(window.lmState.animReqId);
+        window.lmState.animReqId = null;
+    }
+    const tick = () => {
+        const canvas = document.getElementById("lm3dCanvas");
+        if (!canvas) return;
+        let needsRedraw = false;
+        if (window.lmState.autoRotate && !window.lmState.isDragging) {
+            window.lmState.rotY += 0.012;
+            needsRedraw = true;
+        }
+        if (window.lmState.simMode !== "wood") {
+            window.lmState.animPhase += 0.14;
+            needsRedraw = true;
+        }
+        if (needsRedraw) {
+            window.renderLm3dCanvas();
+        }
+        window.lmState.animReqId = requestAnimationFrame(tick);
+    };
+    window.lmState.animReqId = requestAnimationFrame(tick);
+};
+
+window.setupLm3dCanvasInteractions = function() {
+    const canvas = document.getElementById("lm3dCanvas");
+    if (!canvas) return;
+
+    canvas.onmousedown = (e) => {
+        window.lmState.isDragging = true;
+        window.lmState.lastMouseX = e.clientX;
+        window.lmState.lastMouseY = e.clientY;
+    };
+    window.onmousemove = (e) => {
+        if (!window.lmState.isDragging) return;
+        const dx = e.clientX - window.lmState.lastMouseX;
+        const dy = e.clientY - window.lmState.lastMouseY;
+        window.lmState.lastMouseX = e.clientX;
+        window.lmState.lastMouseY = e.clientY;
+        window.lmState.rotY += dx * 0.01;
+        window.lmState.rotX = Math.max(-1.45, Math.min(1.45, window.lmState.rotX + dy * 0.01));
+        window.renderLm3dCanvas();
+    };
+    window.onmouseup = () => {
+        window.lmState.isDragging = false;
+    };
+    canvas.onwheel = (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        window.lmState.zoom = Math.max(0.45, Math.min(2.6, window.lmState.zoom * factor));
+        window.renderLm3dCanvas();
+    };
+};
+
+// Importazione file 3D .OBJ o .STL nel visualizzatore di Liuteria Making
+window.triggerLiuteriaMakingMeshImport = function() {
+    const inp = document.getElementById("lmHiddenMeshInput");
+    if (inp) inp.click();
+};
+
+window.handleLmMeshFileSelected = function(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const text = String(ev.target.result || "");
+        const verts = [];
+        const faces = [];
+        const lines = text.split(/\r?\n/);
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (line.startsWith("v ")) {
+                const parts = line.split(/\s+/);
+                if (parts.length >= 4) {
+                    verts.push([parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0]);
+                }
+            } else if (line.startsWith("f ")) {
+                const parts = line.split(/\s+/).slice(1);
+                const idx = parts.map(p => (parseInt(p.split("/")[0], 10) || 1) - 1);
+                if (idx.length >= 3) {
+                    faces.push({ indices: [idx[0], idx[1], idx[2]], comp: 0 });
+                    if (idx.length >= 4) {
+                        faces.push({ indices: [idx[0], idx[2], idx[3]], comp: 0 });
+                    }
+                }
+            }
+        }
+        if (verts.length === 0) {
+            window.showToast("Formato mesh non riconosciuto o binario. Usa un file .OBJ ASCII.", "error");
+            return;
+        }
+        // Normalizza le coordinate a 356 mm
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const v of verts) {
+            if (v[0] < minX) minX = v[0]; if (v[0] > maxX) maxX = v[0];
+            if (v[1] < minY) minY = v[1]; if (v[1] > maxY) maxY = v[1];
+            if (v[2] < minZ) minZ = v[2]; if (v[2] > maxZ) maxZ = v[2];
+        }
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+        const maxSpan = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
+        const scale = 380 / maxSpan;
+        // Decima se ci sono troppe facce per il rendering real-time
+        const step = Math.max(1, Math.floor(faces.length / 3500));
+        const decFaces = faces.filter((_, idx) => idx % step === 0);
+
+        const normVerts = verts.map(v => {
+            const x = (v[0] - cx) * scale;
+            const y = (v[1] - cy) * scale;
+            const z = (v[2] - cz) * scale;
+            return { x, y, z, comp: 0, xn: x / 110, yn: y / 190 };
+        });
+
+        window.lmState.importedCustomMesh = {
+            vertices: normVerts,
+            faces: decFaces,
+            lines: []
+        };
+        window.lmState.importedMeshName = file.name;
+        window.renderLm3dCanvas();
+        window.showToast(`Modello 3D "${file.name}" importato (${verts.length.toLocaleString()} vertici)!`);
+    };
+    reader.readAsText(file);
+};
+
+// =========================================================================
+// ANALIZZATORE ACUSTICO FFT REAL-TIME (Microfono + Sintetizzatore Tap-Tone)
+// =========================================================================
+
+window.renderLmFftCanvas = function(freqArray, dbArray, peakList, fundamentalHz) {
+    const canvas = document.getElementById("lmFftCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && (canvas.width !== Math.floor(rect.width) || canvas.height !== Math.floor(rect.height))) {
+        canvas.width = Math.floor(rect.width);
+        canvas.height = Math.floor(rect.height);
+    }
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 46, padR = 16, padT = 18, padB = 28;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+
+    ctx.fillStyle = "#161922";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#1f2430";
+    ctx.fillRect(padL, padT, plotW, plotH);
+
+    const maxFreq = 2000; // focus 0..2000 Hz dove risiedono M1, M2, M5, B1-, B1+ e armoniche
+    const minDb = -85, maxDb = 0;
+
+    const xOfFreq = (f) => padL + Math.min(1, Math.max(0, f / maxFreq)) * plotW;
+    const yOfDb = (db) => padT + (1 - (Math.min(maxDb, Math.max(minDb, db)) - minDb) / (maxDb - minDb)) * plotH;
+
+    // Griglia Hz e dB
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 1;
+    ctx.font = "10px Inter, sans-serif";
+    ctx.fillStyle = "#9ca3af";
+    for (let f = 0; f <= maxFreq; f += 250) {
+        const x = xOfFreq(f);
+        ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
+        ctx.textAlign = "center";
+        ctx.fillText(`${f}Hz`, x, H - 8);
+    }
+    for (let db = -80; db <= 0; db += 20) {
+        const y = yOfDb(db);
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        ctx.textAlign = "right";
+        ctx.fillText(`${db}dB`, padL - 6, y + 3);
+    }
+
+    // 1. Marcatori di Confronto Storico (M1, M2, M5, B1-, B1+) come in audio_panel.py
+    const lmData = window.getLiuteriaMakingData();
+    const hist = (lmData.historicalInstruments || []).find(h => h.id === window.lmState.selectedHistoricalId);
+    if (hist) {
+        const markers = [
+            { f: hist.m1_freq, label: `M1 (${hist.m1_freq}Hz)`, color: "#f59e0b" },
+            { f: hist.m2_freq, label: `M2 (${hist.m2_freq}Hz)`, color: "#ec4899" },
+            { f: hist.m5_freq, label: `M5 (${hist.m5_freq}Hz)`, color: "#a855f7" },
+            { f: hist.b1_minus_freq, label: `B1- (${hist.b1_minus_freq}Hz)`, color: "#3b82f6" },
+            { f: hist.b1_plus_freq, label: `B1+ (${hist.b1_plus_freq}Hz)`, color: "#22c55e" }
+        ];
+        markers.forEach((mk, idx) => {
+            if (!mk.f) return;
+            const x = xOfFreq(mk.f);
+            ctx.save();
+            ctx.strokeStyle = mk.color;
+            ctx.lineWidth = 1.4;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(x, padT);
+            ctx.lineTo(x, padT + plotH);
+            ctx.stroke();
+            ctx.fillStyle = mk.color;
+            ctx.font = "600 9.5px Inter, sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(mk.label, x + 4, padT + 14 + (idx % 3) * 13);
+            ctx.restore();
+        });
+    }
+
+    // 2. Tracciato Spettro FFT
+    if (freqArray && dbArray && freqArray.length > 0) {
+        ctx.save();
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i < freqArray.length; i++) {
+            const f = freqArray[i];
+            if (f > maxFreq) break;
+            const x = xOfFreq(f);
+            const y = yOfDb(dbArray[i]);
+            if (!started) {
+                ctx.moveTo(x, y);
+                started = true;
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.strokeStyle = "#c8a96e";
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // Area sottesa dorata
+        ctx.lineTo(xOfFreq(Math.min(maxFreq, freqArray[freqArray.length - 1] || maxFreq)), padT + plotH);
+        ctx.lineTo(padL, padT + plotH);
+        ctx.closePath();
+        const fillG = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+        fillG.addColorStop(0, "rgba(200, 169, 110, 0.32)");
+        fillG.addColorStop(1, "rgba(200, 169, 110, 0.02)");
+        ctx.fillStyle = fillG;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 3. Evidenzia Picchi (cerchi rossi #e05040 come in audio_panel.py)
+    if (Array.isArray(peakList)) {
+        peakList.slice(0, 8).forEach(pk => {
+            if (pk.freq <= maxFreq) {
+                const x = xOfFreq(pk.freq);
+                const y = yOfDb(pk.db);
+                ctx.fillStyle = "#e05040";
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#fca5a5";
+                ctx.font = "600 9.5px Inter, sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(`${Math.round(pk.freq)}Hz`, x, Math.max(padT + 10, y - 7));
+            }
+        });
+    }
+
+    const infoEl = document.getElementById("lmFftStatusLabel");
+    if (infoEl && fundamentalHz) {
+        infoEl.innerHTML = `🔴 <strong>Fondamentale rilevata:</strong> <span style="color:var(--accent-gold);">${fundamentalHz.toFixed(1)} Hz (${window.freqToMusicalNote(fundamentalHz)})</span> • Picchi principali: ${(peakList || []).slice(0, 5).map(p => Math.round(p.freq) + "Hz").join(", ")}`;
+    }
+};
+
+// Avvia acquisizione da microfono reale tramite Web Audio API
+window.startLmMicrophoneCapture = async function() {
+    window.stopLmAudioCapture();
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContextClass();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = Number(document.getElementById("lmFftSizeSelect")?.value || 4096);
+        analyser.smoothingTimeConstant = 0.75;
+        source.connect(analyser);
+
+        window.lmState.audioCtx = audioCtx;
+        window.lmState.analyser = analyser;
+        window.lmState.micStream = stream;
+        window.lmState.isCapturing = true;
+        window.lmState.isSynthetic = false;
+
+        window.loopLmRealtimeFft();
+        window.showToast("Acquisizione microfono FFT avviata in tempo reale!");
+    } catch (err) {
+        // Se non c'è microfono o permesso negato, avvia la simulazione acustica Tap-Tone
+        window.showToast("Microfono non rilevato: avvio generatore Tap-Tone acustico integrato!", "info");
+        window.startLmSyntheticTapTone();
+    }
+};
+
+// Simulatore Tap-Tone / Spettro Acustico basato sulle misure e sui legni correnti dello strumento
+window.startLmSyntheticTapTone = function() {
+    window.stopLmAudioCapture();
+    window.lmState.isCapturing = true;
+    window.lmState.isSynthetic = true;
+    window.lmState.simMode = "m5";
+    window.loopLmRealtimeFft();
+    window.showToast("Simulazione spettro Tap-Tone + risonanza 3D attivata!");
+};
+
+window.stopLmAudioCapture = function() {
+    window.lmState.isCapturing = false;
+    window.lmState.isSynthetic = false;
+    if (window.lmState.micStream) {
+        window.lmState.micStream.getTracks().forEach(t => t.stop());
+        window.lmState.micStream = null;
+    }
+    if (window.lmState.audioCtx) {
+        window.lmState.audioCtx.close().catch(() => {});
+        window.lmState.audioCtx = null;
+    }
+};
+
+window.calibrateLmNoiseFloor = function() {
+    if (!window.lmState.isCapturing) {
+        window.startLmSyntheticTapTone();
+    }
+    window.lmState.isCalibrating = true;
+    window.lmState.calibrationFrames = [];
+    const infoEl = document.getElementById("lmFftStatusLabel");
+    if (infoEl) infoEl.innerHTML = "⏱ <strong>Calibrazione rumore ambientale in corso (20 frame)...</strong>";
+};
+
+window.loopLmRealtimeFft = function() {
+    if (!window.lmState.isCapturing) return;
+    const canvas = document.getElementById("lmFftCanvas");
+    if (!canvas) {
+        window.stopLmAudioCapture();
+        return;
+    }
+
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    const m = (lmData.measurements && lmData.measurements[instType]) || defaultData.liuteriaMaking.measurements.violin;
+    const topW = (lmData.woods || []).find(w => w.name === lmData.selectedTopWood);
+    const backW = (lmData.woods || []).find(w => w.name === lmData.selectedBackWood);
+    const est = window.calculateLmAcousticEstimates(instType, m, topW, backW);
+
+    const nBins = 512;
+    const freqs = new Array(nBins);
+    const mags = new Array(nBins);
+
+    if (window.lmState.analyser && !window.lmState.isSynthetic) {
+        const bufLen = window.lmState.analyser.frequencyBinCount;
+        const dataArr = new Float32Array(bufLen);
+        window.lmState.analyser.getFloatFrequencyData(dataArr);
+        const sr = window.lmState.audioCtx ? window.lmState.audioCtx.sampleRate : 44100;
+        const step = Math.max(1, Math.floor((2000 / (sr / 2)) * bufLen / nBins));
+        for (let i = 0; i < nBins; i++) {
+            const idx = Math.min(bufLen - 1, i * step);
+            freqs[i] = (idx * sr) / (2 * bufLen);
+            let db = dataArr[idx];
+            if (window.lmState.noiseProfile && window.lmState.noiseProfile[i] !== undefined) {
+                if (db < window.lmState.noiseProfile[i] + 5) db = -82;
+            }
+            mags[i] = Math.max(-85, Math.min(0, db));
+        }
+    } else {
+        // Spettro sintetico realistico calcolato sulle risonanze fisiche M1, M2, M5, A0, B1-, B1+ dello strumento
+        const resonances = [
+            { f: est.m1, amp: 28, w: 14 },
+            { f: est.m2, amp: 38, w: 16 },
+            { f: est.a0, amp: 44, w: 18 },
+            { f: est.m5, amp: 64, w: 18 },
+            { f: est.m5 * 1.26, amp: 48, w: 22 },
+            { f: est.m5 * 1.58, amp: 45, w: 25 },
+            { f: est.m5 * 2.0, amp: 32, w: 30 },
+            { f: est.m5 * 3.0, amp: 24, w: 40 }
+        ];
+        for (let i = 0; i < nBins; i++) {
+            const f = (i / nBins) * 2000;
+            freqs[i] = f;
+            let val = -76 + (Math.random() - 0.5) * 3.2;
+            for (const r of resonances) {
+                const dist = (f - r.f) / r.w;
+                val += r.amp * Math.exp(-0.5 * dist * dist);
+            }
+            if (window.lmState.noiseProfile) val -= 3;
+            mags[i] = Math.max(-84, Math.min(-2, val));
+        }
+    }
+
+    if (window.lmState.isCalibrating) {
+        window.lmState.calibrationFrames.push([...mags]);
+        if (window.lmState.calibrationFrames.length >= 18) {
+            window.lmState.isCalibrating = false;
+            window.lmState.noiseProfile = mags.map((_, idx) => {
+                return window.lmState.calibrationFrames.reduce((acc, fr) => acc + fr[idx], 0) / window.lmState.calibrationFrames.length;
+            });
+            window.showToast("Calibrazione rumore ambientale completata!");
+        }
+    }
+
+    // Trova i picchi principali
+    const peaks = [];
+    for (let i = 3; i < nBins - 3; i++) {
+        if (mags[i] > -58 && mags[i] > mags[i - 1] && mags[i] > mags[i + 1] && mags[i] > mags[i - 2] && mags[i] > mags[i + 2]) {
+            peaks.push({ freq: freqs[i], db: mags[i] });
+        }
+    }
+    peaks.sort((a, b) => b.db - a.db);
+    const topPeaks = [];
+    for (const p of peaks) {
+        if (!topPeaks.some(tp => Math.abs(tp.freq - p.freq) < 35)) {
+            topPeaks.push(p);
+        }
+        if (topPeaks.length >= 6) break;
+    }
+
+    const fundamental = topPeaks.length > 0 ? topPeaks[0].freq : est.m5;
+    window.lmState.latestFft = {
+        frequencies: freqs,
+        magnitudes: mags,
+        peaks: topPeaks,
+        fundamental
+    };
+
+    window.renderLmFftCanvas(freqs, mags, topPeaks, fundamental);
+
+    setTimeout(() => {
+        if (window.lmState.isCapturing) {
+            requestAnimationFrame(window.loopLmRealtimeFft);
+        }
+    }, 65);
+};
+
+window.saveCurrentLmFftSpectrum = function() {
+    const lmData = window.getLiuteriaMakingData();
+    if (!window.lmState.latestFft) {
+        window.startLmSyntheticTapTone();
+    }
+    const fft = window.lmState.latestFft;
+    if (!fft) return;
+
+    const label = prompt("Etichetta lettura FFT (es. Tap-Tone Tavola Libera M5 oppure Pre-restauro cassa chiusa):", `Tap-Tone ${lmData.selectedTopWood} (${Math.round(fft.fundamental)} Hz)`);
+    if (!label) return;
+
+    const archList = lmData.archivedInstruments || [];
+    let targetInst = archList.find(a => a.id === window.lmState.selectedArchiveId) || archList[0];
+    if (!targetInst) {
+        targetInst = {
+            id: "lm-inst-" + Date.now(),
+            name: "Nuovo Strumento Atelier",
+            instrument_type: lmData.activeInstrumentType || "violin",
+            production_date: new Date().toLocaleDateString("it-IT"),
+            owner_name: "Liuteria De Lorenzi",
+            notes: "Creato durante analisi spettrale FFT",
+            measurements: JSON.parse(JSON.stringify(lmData.measurements[lmData.activeInstrumentType || "violin"])),
+            restorations: [],
+            savedSpectrums: []
+        };
+        archList.unshift(targetInst);
+        window.lmState.selectedArchiveId = targetInst.id;
+    }
+    if (!Array.isArray(targetInst.savedSpectrums)) targetInst.savedSpectrums = [];
+    targetInst.savedSpectrums.unshift({
+        id: "spec-" + Date.now(),
+        label: label.trim(),
+        created_at: new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+        fundamental: Math.round(fft.fundamental * 10) / 10,
+        peaks: (fft.peaks || []).map(p => Math.round(p.freq * 10) / 10)
+    });
+
+    window.atelierDB.saveData();
+    window.showToast(`Spettro "${label}" salvato su ${targetInst.name}!`);
+    if (window.appController && window.appController.activeModuleId === "liuteriaMaking") {
+        window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+    }
+};
+
+// =========================================================================
+// RENDER PRINCIPALE WORKSPACE LIUTERIA MAKING NEL GESTIONALE
+// =========================================================================
+
+window.renderLiuteriaMakingWorkspace = function(container) {
+    if (!container) return;
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    const schema = window.LM_MEASUREMENT_SCHEMA[instType] || window.LM_MEASUREMENT_SCHEMA.violin;
+    const m = (lmData.measurements && lmData.measurements[instType]) || defaultData.liuteriaMaking.measurements.violin;
+    const woods = lmData.woods || [];
+    const topWood = woods.find(w => w.name === lmData.selectedTopWood) || woods[1] || woods[0];
+    const backWood = woods.find(w => w.name === lmData.selectedBackWood) || woods[3] || woods[2];
+    const est = window.calculateLmAcousticEstimates(instType, m, topWood, backWood);
+
+    // Raggruppa i 22 campi per categoria (Fasce, Tavola, Fondo, Dimensioni, Effe, Filetto, Manico, Punte)
+    const groups = {};
+    for (const f of schema.fields) {
+        if (!groups[f.group]) groups[f.group] = [];
+        groups[f.group].push(f);
+    }
+
+    const groupColors = {
+        Dimensioni: "#c8a96e",
+        Tavola: "#60b0e0",
+        Fondo: "#e07070",
+        Fasce: "#e8a040",
+        Effe: "#b080d0",
+        Filetto: "#70c0a0",
+        Manico: "#d0a060",
+        Punte: "#c0c060"
+    };
+
+    const activeArch = (lmData.archivedInstruments || []).find(a => a.id === window.lmState.selectedArchiveId) || (lmData.archivedInstruments || [])[0];
+    const savedSpecs = (activeArch && Array.isArray(activeArch.savedSpectrums)) ? activeArch.savedSpectrums : [];
+
+    const filteredWoods = woods.filter(w => !window.lmState.woodSearch || w.name.toLowerCase().includes(window.lmState.woodSearch.toLowerCase()) || (w.notes || "").toLowerCase().includes(window.lmState.woodSearch.toLowerCase()));
+
+    container.innerHTML = `
+        <div class="glass-panel" style="padding:1.25rem;">
+            <!-- Input nascosto per importazione file 3D .OBJ / .STL -->
+            <input type="file" id="lmHiddenMeshInput" accept=".obj,.stl,.ply" style="display:none;" onchange="window.handleLmMeshFileSelected(event)">
+
+            <!-- Top Toolbar: Selettore Strumento + Azioni Menu di Liuteria Making -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem; padding-bottom:1rem; margin-bottom:1.1rem; border-bottom:1px solid rgba(255,255,255,0.08);">
+                <div style="display:flex; align-items:center; gap:0.55rem; flex-wrap:wrap;">
+                    <span style="font-size:0.78rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700; margin-right:0.25rem;">Modello Parametrico:</span>
+                    ${["violin", "viola", "cello"].map(typeKey => {
+                        const s = window.LM_MEASUREMENT_SCHEMA[typeKey];
+                        const isAct = instType === typeKey;
+                        return `
+                            <button type="button" class="btn ${isAct ? 'btn-primary' : 'btn-secondary'}" style="padding:0.42rem 0.9rem; font-size:0.82rem; ${isAct ? 'box-shadow:0 0 14px rgba(212,175,55,0.35);' : ''}" onclick="window.switchLmInstrumentType('${typeKey}')">
+                                ${s.icon} ${s.name}
+                            </button>
+                        `;
+                    }).join("")}
+                </div>
+
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" style="font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="window.triggerLiuteriaMakingMeshImport()" title="Importa un file mesh 3D esterno (.OBJ)">
+                        <i data-lucide="box" style="width:14px; height:14px; color:var(--accent-cyan);"></i> Importa Mesh 3D (.OBJ)
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="window.openLiuteriaMakingArchiveModal()" title="Apri l'Archivio Strumenti, Diario Restauri ed Esportazione Scheda PDF">
+                        <i data-lucide="archive" style="width:14px; height:14px; color:var(--accent-gold);"></i> 🗄 Archivio Strumenti (${(lmData.archivedInstruments || []).length})
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="font-size:0.78rem; padding:0.4rem 0.8rem;" onclick="window.openBibliotecaReaderModal('bib-5')" title="Apri il manuale PDF sui Pattern di Chladni integrato da Liuteria Making">
+                        <i data-lucide="book-open" style="width:14px; height:14px; color:#a855f7;"></i> 📘 Guida Chladni (PDF)
+                    </button>
+                    <button type="button" class="btn btn-primary" style="font-size:0.78rem; padding:0.4rem 0.85rem;" onclick="window.saveLmToGestionaleCostruzione()" title="Salva questo progetto con misure e frequenze nel modulo Costruzione del Gestionale">
+                        <i data-lucide="hammer" style="width:14px; height:14px;"></i> Invia a Costruzione
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Acustici e Volumetrici in Tempo Reale -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(195px, 1fr)); gap:0.85rem; margin-bottom:1.25rem;">
+                <div style="background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.28); border-radius:10px; padding:0.8rem 1rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Volume Aria Cassa Armonica</div>
+                    <div style="font-size:1.35rem; font-weight:800; color:var(--accent-gold); margin-top:0.15rem;" id="lmKpiVol">${est.volumeCm3} cm³</div>
+                    <div style="font-size:0.73rem; color:var(--text-secondary);">Risonanza Cavità A0 ≈ <strong id="lmKpiA0">${est.a0} Hz</strong></div>
+                </div>
+                <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.28); border-radius:10px; padding:0.8rem 1rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Modi Chladni Stimati (Tavola)</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:#c084fc; margin-top:0.2rem;" id="lmKpiModes">
+                        M1: ${est.m1}Hz • M2: ${est.m2}Hz • M5: ${est.m5}Hz
+                    </div>
+                    <div style="font-size:0.73rem; color:var(--text-secondary);">Nota Tap-Tone M5: <strong style="color:#fff;" id="lmKpiNote">${est.noteM5}</strong></div>
+                </div>
+                <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.28); border-radius:10px; padding:0.8rem 1rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Legno Tavola Selezionato</div>
+                    <div style="font-size:0.95rem; font-weight:700; color:#38bdf8; margin-top:0.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${topWood ? topWood.name : "-"}</div>
+                    <div style="font-size:0.73rem; color:var(--text-secondary);">
+                        ρ: ${topWood ? topWood.density_kg_m3 : 420} kg/m³ • c: ${topWood ? topWood.sound_velocity : 5600} m/s • Peso ≈ <strong id="lmKpiTopW">${est.topWeightG} g</strong>
+                    </div>
+                </div>
+                <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.28); border-radius:10px; padding:0.8rem 1rem;">
+                    <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">Legno Fondo & Fasce</div>
+                    <div style="font-size:0.95rem; font-weight:700; color:#34d399; margin-top:0.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${backWood ? backWood.name : "-"}</div>
+                    <div style="font-size:0.73rem; color:var(--text-secondary);">
+                        ρ: ${backWood ? backWood.density_kg_m3 : 680} kg/m³ • c: ${backWood ? backWood.sound_velocity : 3900} m/s • Peso ≈ <strong id="lmKpiBackW">${est.backWeightG} g</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layout Principale a 2 Colonne (come MainWindow QSplitter in LiuteriaMaking) -->
+            <div style="display:grid; grid-template-columns:minmax(340px, 410px) 1fr; gap:1.2rem; align-items:start;">
+
+                <!-- COLONNA SINISTRA: Schede "📏 Misure (22 Quote)" | "🪵 Legni (20 Essenze)" -->
+                <div style="background:rgba(0,0,0,0.28); border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden;">
+                    <div style="display:flex; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02);">
+                        <button type="button" onclick="window.switchLmLeftTab('measurements')" style="flex:1; padding:0.75rem; border:none; background:${window.lmState.leftTab === 'measurements' ? 'rgba(212,175,55,0.16)' : 'transparent'}; color:${window.lmState.leftTab === 'measurements' ? 'var(--accent-gold)' : 'var(--text-secondary)'}; font-weight:700; font-size:0.84rem; cursor:pointer; border-bottom:2px solid ${window.lmState.leftTab === 'measurements' ? 'var(--accent-gold)' : 'transparent'};">
+                            📏 Misure Parametriche (22)
+                        </button>
+                        <button type="button" onclick="window.switchLmLeftTab('woods')" style="flex:1; padding:0.75rem; border:none; background:${window.lmState.leftTab === 'woods' ? 'rgba(212,175,55,0.16)' : 'transparent'}; color:${window.lmState.leftTab === 'woods' ? 'var(--accent-gold)' : 'var(--text-secondary)'}; font-weight:700; font-size:0.84rem; cursor:pointer; border-bottom:2px solid ${window.lmState.leftTab === 'woods' ? 'var(--accent-gold)' : 'transparent'};">
+                            🪵 Database Legni (${woods.length})
+                        </button>
+                    </div>
+
+                    ${window.lmState.leftTab === "measurements" ? `
+                        <div style="padding:0.9rem; max-height:690px; overflow-y:auto;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                                <span style="font-size:0.76rem; color:var(--text-secondary);">Modifica le quote per aggiornare Mesh 3D, Volume e Chladni:</span>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:0.25rem 0.55rem;" onclick="window.resetLmMeasurementsToDefault()">
+                                    ↺ Reset Default
+                                </button>
+                            </div>
+
+                            ${Object.keys(groups).map(gName => `
+                                <div style="margin-bottom:0.85rem; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-left:3px solid ${groupColors[gName] || '#c8a96e'}; border-radius:8px; padding:0.65rem 0.75rem;">
+                                    <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:${groupColors[gName] || '#c8a96e'}; margin-bottom:0.45rem; letter-spacing:0.5px;">
+                                        ${gName}
+                                    </div>
+                                    ${groups[gName].map(field => {
+                                        const val = m[field.key] !== undefined ? m[field.key] : field.def;
+                                        return `
+                                            <div style="margin-bottom:0.45rem;">
+                                                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.77rem; margin-bottom:0.15rem;">
+                                                    <span style="color:#e5e7eb;">${field.label}</span>
+                                                    <span style="color:var(--accent-gold); font-family:var(--font-mono); font-weight:600;">
+                                                        <span id="lmValLbl_${field.key}">${Number(val).toFixed(1)}</span> ${field.unit}
+                                                    </span>
+                                                </div>
+                                                <div style="display:flex; align-items:center; gap:0.45rem;">
+                                                    <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" value="${val}"
+                                                        style="flex:1; accent-color:${groupColors[gName] || '#d4af37'}; cursor:pointer;"
+                                                        oninput="window.onLmMeasurementInput('${field.key}', this.value)">
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join("")}
+                                </div>
+                            `).join("")}
+                        </div>
+                    ` : `
+                        <div style="padding:0.9rem; max-height:690px; overflow-y:auto;">
+                            <div style="display:flex; gap:0.45rem; margin-bottom:0.75rem;">
+                                <input type="text" class="form-control" placeholder="Cerca essenza (es. Abete, Acero, Pernambuco...)" value="${window.lmState.woodSearch}" oninput="window.filterLmWoodTable(this.value)" style="font-size:0.8rem; padding:0.4rem 0.65rem;">
+                                <button type="button" class="btn btn-primary" style="font-size:0.76rem; padding:0.4rem 0.65rem; white-space:nowrap;" onclick="window.openAddLmCustomWoodModal()">
+                                    + Legno
+                                </button>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                                ${filteredWoods.map(w => {
+                                    const isTop = lmData.selectedTopWood === w.name;
+                                    const isBack = lmData.selectedBackWood === w.name;
+                                    const radCoeff = (w.sound_velocity / w.density_kg_m3).toFixed(1);
+                                    return `
+                                        <div style="background:rgba(255,255,255,0.03); border:1px solid ${(isTop || isBack) ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.07)'}; border-radius:8px; padding:0.65rem 0.75rem;">
+                                            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.4rem;">
+                                                <strong style="color:#fff; font-size:0.83rem;">${w.name}</strong>
+                                                <div style="display:flex; gap:0.25rem;">
+                                                    ${isTop ? '<span class="badge badge-info" style="font-size:0.64rem;">Tavola</span>' : ''}
+                                                    ${isBack ? '<span class="badge badge-success" style="font-size:0.64rem;">Fondo</span>' : ''}
+                                                </div>
+                                            </div>
+                                            <div style="font-size:0.73rem; color:var(--text-secondary); margin:0.25rem 0;">
+                                                Densità: <strong>${w.density_kg_m3} kg/m³</strong> • E<sub>L</sub>: <strong>${w.elastic_modulus_long} GPa</strong> • Suono: <strong>${w.sound_velocity} m/s</strong> • R: <strong>${radCoeff}</strong>
+                                            </div>
+                                            <div style="font-size:0.71rem; color:var(--text-muted); margin-bottom:0.45rem;">${w.notes || ""}</div>
+                                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                                <button type="button" class="btn btn-secondary" style="font-size:0.7rem; padding:0.22rem 0.5rem; color:#38bdf8;" onclick="window.selectLmWoodForPlate('${w.name.replace(/'/g, "\\'")}', 'top')">
+                                                    Usa per Tavola
+                                                </button>
+                                                <button type="button" class="btn btn-secondary" style="font-size:0.7rem; padding:0.22rem 0.5rem; color:#34d399;" onclick="window.selectLmWoodForPlate('${w.name.replace(/'/g, "\\'")}', 'back')">
+                                                    Usa per Fondo
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join("")}
+                            </div>
+                        </div>
+                    `}
+                </div>
+
+                <!-- COLONNA DESTRA: Visualizzatore 3D Interattivo + Simulazione Chladni + Analizzatore Spettrale Audio FFT -->
+                <div style="display:flex; flex-direction:column; gap:1.1rem;">
+
+                    <!-- PANNELLO 1: VISUALIZZATORE 3D & SIMULAZIONE CHLADNI -->
+                    <div style="background:rgba(0,0,0,0.32); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.65rem;">
+                            <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+                                <span style="font-size:0.8rem; font-weight:700; color:#fff;">🌐 Vista 3D & Simulazione Chladni:</span>
+                                ${[
+                                    { id: "wood", label: "🎨 Legno" },
+                                    { id: "m1", label: "🔵 Chladni M1" },
+                                    { id: "m2", label: "🟣 Chladni M2" },
+                                    { id: "m5", label: "🔴 Chladni M5 (Ring)" },
+                                    { id: "vib440", label: "〰️ Vibrazione 440Hz" },
+                                    { id: "thickness", label: "🌡️ Heatmap Spessori" }
+                                ].map(sm => `
+                                    <button type="button" class="btn ${window.lmState.simMode === sm.id ? 'btn-primary' : 'btn-secondary'}" style="font-size:0.72rem; padding:0.26rem 0.55rem;" onclick="window.setLmSimMode('${sm.id}')">
+                                        ${sm.label}
+                                    </button>
+                                `).join("")}
+                            </div>
+                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem;" onclick="window.toggleLmWireframe()">
+                                    ${window.lmState.wireframe ? "◼ Solido" : "🕸 Wireframe"}
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem;" onclick="window.toggleLmDimensions()">
+                                    📏 Misure ${window.lmState.showDimensions ? "ON" : "OFF"}
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem;" onclick="window.toggleLmAutoRotate()">
+                                    🔄 Auto-Rot ${window.lmState.autoRotate ? "ON" : "OFF"}
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.24rem 0.5rem;" onclick="window.resetLm3dView()">
+                                    Reset Vista
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="position:relative; width:100%; height:350px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+                            <canvas id="lm3dCanvas" style="width:100%; height:100%; display:block; cursor:grab;"></canvas>
+                            <div style="position:absolute; top:10px; left:12px; font-size:0.72rem; color:rgba(255,255,255,0.75); background:rgba(15,17,23,0.75); padding:0.3rem 0.6rem; border-radius:6px; pointer-events:none;">
+                                ${window.lmState.importedMeshName ? `📦 Mesh Importata: <strong>${window.lmState.importedMeshName}</strong>` : `${schema.icon} <strong>${schema.name} Parametrico 3D</strong> • Trascina col mouse per ruotare, rotella per zoom`}
+                            </div>
+                        </div>
+
+                        <!-- Barra Filtro Singoli Componenti (come in viewer_3d.py: Tutto, Tavola, Fondo, Fasce, Manico, Effe) -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-top:0.65rem;">
+                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap; align-items:center;">
+                                <span style="font-size:0.73rem; color:var(--text-muted);">Isola Componente:</span>
+                                ${[
+                                    { id: -1, label: "Tutto" },
+                                    { id: 0, label: "Tavola" },
+                                    { id: 1, label: "Fondo" },
+                                    { id: 2, label: "Fasce" },
+                                    { id: 3, label: "Manico & Tastiera" },
+                                    { id: 4, label: "Effe" }
+                                ].map(c => `
+                                    <button type="button" class="btn ${window.lmState.activeComponentFilter === c.id ? 'btn-primary' : 'btn-secondary'}" style="font-size:0.71rem; padding:0.22rem 0.55rem;" onclick="window.setLmComponentFilter(${c.id})">
+                                        ${c.label}
+                                    </button>
+                                `).join("")}
+                            </div>
+                            ${window.lmState.importedCustomMesh ? `
+                                <button type="button" class="btn btn-secondary" style="font-size:0.71rem; padding:0.22rem 0.55rem; color:#f59e0b;" onclick="window.lmState.importedCustomMesh=null; window.lmState.importedMeshName=''; window.renderLiuteriaMakingWorkspace(document.getElementById('moduleContentContainer'));">
+                                    Torna a Mesh Parametrica
+                                </button>
+                            ` : ""}
+                        </div>
+                    </div>
+
+                    <!-- PANNELLO 2: ANALIZZATORE ACUSTICO FFT REAL-TIME & CONFRONTO STORICO -->
+                    <div style="background:rgba(0,0,0,0.32); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0.9rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.65rem;">
+                            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                <span style="font-size:0.82rem; font-weight:700; color:#fff;">🎙️ Analisi Spettrale FFT & Confronto Storico:</span>
+                                <select id="lmFftSizeSelect" class="form-control" style="width:auto; font-size:0.75rem; padding:0.22rem 0.5rem;">
+                                    <option value="2048">FFT 2048</option>
+                                    <option value="4096" selected>FFT 4096 (Hann)</option>
+                                    <option value="8192">FFT 8192</option>
+                                </select>
+                                <select id="lmHistSelect" class="form-control" style="width:auto; font-size:0.75rem; padding:0.22rem 0.5rem;" onchange="window.onLmHistoricalChanged(this.value)">
+                                    <option value="">Nessun Confronto Storico</option>
+                                    ${(lmData.historicalInstruments || []).map(h => `
+                                        <option value="${h.id}" ${window.lmState.selectedHistoricalId === h.id ? "selected" : ""}>
+                                            Ref: ${h.name}
+                                        </option>
+                                    `).join("")}
+                                </select>
+                            </div>
+
+                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-primary" style="font-size:0.73rem; padding:0.28rem 0.65rem; background:linear-gradient(135deg, #10b981, #059669); border:none;" onclick="window.startLmMicrophoneCapture()">
+                                    ▶ Microfono Live
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.73rem; padding:0.28rem 0.65rem; color:var(--accent-gold);" onclick="window.startLmSyntheticTapTone()">
+                                    🎶 Simula Tap-Tone
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.73rem; padding:0.28rem 0.55rem;" onclick="window.stopLmAudioCapture()">
+                                    ■ Stop
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.73rem; padding:0.28rem 0.55rem;" onclick="window.calibrateLmNoiseFloor()">
+                                    🔇 Calibra Rumore
+                                </button>
+                                <button type="button" class="btn btn-secondary" style="font-size:0.73rem; padding:0.28rem 0.6rem; color:#38bdf8;" onclick="window.saveCurrentLmFftSpectrum()">
+                                    💾 Salva Spettro
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="width:100%; height:205px; border-radius:8px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+                            <canvas id="lmFftCanvas" style="width:100%; height:100%; display:block;"></canvas>
+                        </div>
+
+                        <div id="lmFftStatusLabel" style="font-size:0.76rem; color:var(--text-secondary); margin-top:0.45rem;">
+                            Pronto • Marcatori storici attivi: <strong>M1, M2, M5 (Modi del legno)</strong> e <strong>B1-, B1+ (Modi d'aria/corpo)</strong>. Premi <em>"▶ Microfono Live"</em> o <em>"🎶 Simula Tap-Tone"</em>.
+                        </div>
+
+                        <!-- Lista Spettri FFT Salvati per lo strumento attivo -->
+                        <div style="margin-top:0.65rem; padding-top:0.55rem; border-top:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+                            <div style="font-size:0.74rem; color:var(--text-muted);">
+                                Spettri salvati su <strong>${activeArch ? activeArch.name : "Strumento"}</strong>:
+                            </div>
+                            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                                ${savedSpecs.map(sp => `
+                                    <button type="button" class="btn btn-secondary" style="font-size:0.7rem; padding:0.2rem 0.55rem;" onclick="window.loadSavedLmSpectrum('${sp.id}')">
+                                        📊 ${sp.label} (${sp.fundamental}Hz)
+                                    </button>
+                                `).join("")}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+
+    setTimeout(() => {
+        window.setupLm3dCanvasInteractions();
+        window.renderLm3dCanvas();
+        window.startLm3dAnimationLoop();
+        if (window.lmState.latestFft) {
+            window.renderLmFftCanvas(
+                window.lmState.latestFft.frequencies,
+                window.lmState.latestFft.magnitudes,
+                window.lmState.latestFft.peaks,
+                window.lmState.latestFft.fundamental
+            );
+        } else {
+            window.renderLmFftCanvas([], [], [], null);
+        }
+    }, 30);
+};
+
+// Handlers interattivi per Liuteria Making
+window.switchLmInstrumentType = function(typeKey) {
+    const lmData = window.getLiuteriaMakingData();
+    lmData.activeInstrumentType = typeKey;
+    window.lmState.importedCustomMesh = null;
+    window.lmState.importedMeshName = "";
+    window.atelierDB.saveData();
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.switchLmLeftTab = function(tabName) {
+    window.lmState.leftTab = tabName;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.onLmMeasurementInput = function(key, rawVal) {
+    const val = parseFloat(rawVal);
+    if (isNaN(val)) return;
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    if (!lmData.measurements[instType]) {
+        lmData.measurements[instType] = JSON.parse(JSON.stringify(defaultData.liuteriaMaking.measurements[instType]));
+    }
+    lmData.measurements[instType][key] = val;
+    window.atelierDB.saveData();
+
+    const lbl = document.getElementById(`lmValLbl_${key}`);
+    if (lbl) lbl.textContent = val.toFixed(1);
+
+    const woods = lmData.woods || [];
+    const topWood = woods.find(w => w.name === lmData.selectedTopWood) || woods[1];
+    const backWood = woods.find(w => w.name === lmData.selectedBackWood) || woods[3];
+    const est = window.calculateLmAcousticEstimates(instType, lmData.measurements[instType], topWood, backWood);
+
+    const vEl = document.getElementById("lmKpiVol");
+    const a0El = document.getElementById("lmKpiA0");
+    const mEl = document.getElementById("lmKpiModes");
+    const nEl = document.getElementById("lmKpiNote");
+    const twEl = document.getElementById("lmKpiTopW");
+    const bwEl = document.getElementById("lmKpiBackW");
+
+    if (vEl) vEl.textContent = `${est.volumeCm3} cm³`;
+    if (a0El) a0El.textContent = `${est.a0} Hz`;
+    if (mEl) mEl.textContent = `M1: ${est.m1}Hz • M2: ${est.m2}Hz • M5: ${est.m5}Hz`;
+    if (nEl) nEl.textContent = est.noteM5;
+    if (twEl) twEl.textContent = `${est.topWeightG} g`;
+    if (bwEl) bwEl.textContent = `${est.backWeightG} g`;
+
+    window.renderLm3dCanvas();
+};
+
+window.resetLmMeasurementsToDefault = function() {
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    lmData.measurements[instType] = JSON.parse(JSON.stringify(defaultData.liuteriaMaking.measurements[instType]));
+    window.atelierDB.saveData();
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+    window.showToast("Quote parametriche ripristinate ai valori standard!");
+};
+
+window.filterLmWoodTable = function(query) {
+    window.lmState.woodSearch = query;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.selectLmWoodForPlate = function(woodName, target) {
+    const lmData = window.getLiuteriaMakingData();
+    if (target === "top") {
+        lmData.selectedTopWood = woodName;
+        window.showToast(`"${woodName}" impostato per la Tavola Armonica!`);
+    } else {
+        lmData.selectedBackWood = woodName;
+        window.showToast(`"${woodName}" impostato per Fondo e Fasce!`);
+    }
+    window.atelierDB.saveData();
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.setLmSimMode = function(mode) {
+    window.lmState.simMode = mode;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.setLmComponentFilter = function(compId) {
+    window.lmState.activeComponentFilter = compId;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.toggleLmWireframe = function() {
+    window.lmState.wireframe = !window.lmState.wireframe;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.toggleLmDimensions = function() {
+    window.lmState.showDimensions = !window.lmState.showDimensions;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.toggleLmAutoRotate = function() {
+    window.lmState.autoRotate = !window.lmState.autoRotate;
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+};
+
+window.resetLm3dView = function() {
+    window.lmState.rotX = -0.62;
+    window.lmState.rotY = 0.42;
+    window.lmState.zoom = 1.0;
+    window.renderLm3dCanvas();
+};
+
+window.onLmHistoricalChanged = function(histId) {
+    window.lmState.selectedHistoricalId = histId;
+    if (window.lmState.latestFft) {
+        window.renderLmFftCanvas(
+            window.lmState.latestFft.frequencies,
+            window.lmState.latestFft.magnitudes,
+            window.lmState.latestFft.peaks,
+            window.lmState.latestFft.fundamental
+        );
+    } else {
+        window.renderLmFftCanvas([], [], [], null);
+    }
+};
+
+window.loadSavedLmSpectrum = function(specId) {
+    window.stopLmAudioCapture();
+    const lmData = window.getLiuteriaMakingData();
+    const activeArch = (lmData.archivedInstruments || []).find(a => a.id === window.lmState.selectedArchiveId) || (lmData.archivedInstruments || [])[0];
+    if (!activeArch || !Array.isArray(activeArch.savedSpectrums)) return;
+    const sp = activeArch.savedSpectrums.find(s => s.id === specId);
+    if (!sp) return;
+
+    const nBins = 512;
+    const freqs = [];
+    const mags = [];
+    const peaks = (sp.peaks || [sp.fundamental]).map((f, i) => ({ freq: f, db: -12 - i * 6 }));
+    for (let i = 0; i < nBins; i++) {
+        const f = (i / nBins) * 2000;
+        freqs.push(f);
+        let v = -75;
+        for (const p of peaks) {
+            const d = (f - p.freq) / 16;
+            v += (80 + p.db) * Math.exp(-0.5 * d * d);
+        }
+        mags.push(Math.min(-2, Math.max(-82, v)));
+    }
+    window.lmState.latestFft = { frequencies: freqs, magnitudes: mags, peaks, fundamental: sp.fundamental };
+    window.renderLmFftCanvas(freqs, mags, peaks, sp.fundamental);
+    window.showToast(`Caricato spettro "${sp.label}" (Fond. ${sp.fundamental} Hz)`);
+};
+
+window.openAddLmCustomWoodModal = function() {
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    if (!modalOverlay || !modalTitle || !modalBody) return;
+
+    modalTitle.innerHTML = `<i data-lucide="trees" style="color:var(--accent-gold);"></i> Aggiungi Nuovo Legno al Database Fisico`;
+    modalBody.innerHTML = `
+        <form onsubmit="window.saveNewLmCustomWood(event)">
+            <div class="form-group">
+                <label>Nome Essenza Legnosa *</label>
+                <input type="text" id="lm_w_name" class="form-control" required placeholder="Es. Abete Rosso Val di Fiemme Stagionato 2010">
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Densità (kg/m³) *</label>
+                    <input type="number" step="1" id="lm_w_density" class="form-control" required value="415">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Velocità del Suono (m/s) *</label>
+                    <input type="number" step="10" id="lm_w_vel" class="form-control" required value="5650">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Modulo Elastico Long. E<sub>L</sub> (GPa)</label>
+                    <input type="number" step="0.1" id="lm_w_el" class="form-control" required value="13.8">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Modulo Elastico Trasv. E<sub>T</sub> (GPa)</label>
+                    <input type="number" step="0.05" id="lm_w_et" class="form-control" required value="0.68">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Smorzamento (tan δ)</label>
+                    <input type="number" step="0.001" id="lm_w_damp" class="form-control" required value="0.006">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Note Tecniche & Impiego</label>
+                <input type="text" id="lm_w_notes" class="form-control" placeholder="Es. Tavola armonica ad altissima radiazione acustica">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;">
+                Salva Essenza nel Database
+            </button>
+        </form>
+    `;
+    modalOverlay.classList.add("active");
+};
+
+window.saveNewLmCustomWood = function(e) {
+    e.preventDefault();
+    const lmData = window.getLiuteriaMakingData();
+    const newWood = {
+        id: "w-" + Date.now(),
+        name: document.getElementById("lm_w_name").value.trim(),
+        density_kg_m3: parseFloat(document.getElementById("lm_w_density").value) || 420,
+        sound_velocity: parseFloat(document.getElementById("lm_w_vel").value) || 5500,
+        elastic_modulus_long: parseFloat(document.getElementById("lm_w_el").value) || 13.0,
+        elastic_modulus_trans: parseFloat(document.getElementById("lm_w_et").value) || 0.7,
+        damping_factor: parseFloat(document.getElementById("lm_w_damp").value) || 0.008,
+        notes: document.getElementById("lm_w_notes").value.trim(),
+        is_custom: true
+    };
+    lmData.woods.unshift(newWood);
+    window.atelierDB.saveData();
+    window.closeModal();
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+    window.showToast(`Essenza "${newWood.name}" aggiunta al database!`);
+};
+
+// Modale Archivio Strumenti di Liuteria Making (con Diario Restauri e Stampa Scheda Tecnica PDF)
+window.openLiuteriaMakingArchiveModal = function() {
+    const lmData = window.getLiuteriaMakingData();
+    const list = lmData.archivedInstruments || [];
+    const active = list.find(a => a.id === window.lmState.selectedArchiveId) || list[0];
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    if (!modalOverlay || !modalTitle || !modalBody) return;
+
+    modalTitle.innerHTML = `<i data-lucide="archive" style="color:var(--accent-gold);"></i> Archivio Strumenti & Schede Tecniche (Liuteria Making)`;
+    modalBody.innerHTML = `
+        <div style="display:grid; grid-template-columns:240px 1fr; gap:1rem; min-height:360px;">
+            <div style="border-right:1px solid rgba(255,255,255,0.08); padding-right:0.85rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem;">
+                    <strong style="color:var(--accent-gold); font-size:0.85rem;">I Miei Strumenti</strong>
+                    <button type="button" class="btn btn-primary" style="font-size:0.72rem; padding:0.25rem 0.55rem;" onclick="window.addCurrentLmInstrumentToArchive()">
+                        + Salva Attuale
+                    </button>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:0.4rem;">
+                    ${list.map(inst => `
+                        <div onclick="window.lmState.selectedArchiveId='${inst.id}'; window.openLiuteriaMakingArchiveModal();"
+                             style="padding:0.6rem 0.7rem; border-radius:8px; cursor:pointer; background:${active && active.id === inst.id ? 'rgba(212,175,55,0.18)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${active && active.id === inst.id ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.06)'};">
+                            <div style="font-weight:700; font-size:0.82rem; color:#fff;">${inst.name}</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">${inst.production_date || "-"} • ${inst.owner_name || "-"}</div>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+
+            <div>
+                ${active ? `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+                        <div>
+                            <h4 style="margin:0; color:#fff; font-size:1.1rem;">${active.name}</h4>
+                            <div style="font-size:0.78rem; color:#88eedd; margin-top:0.2rem;">
+                                👤 Cliente: ${active.owner_name || "-"} | ${active.owner_phone || ""} | ${active.owner_email || ""}
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:0.4rem;">
+                            <button type="button" class="btn btn-secondary" style="font-size:0.74rem; padding:0.3rem 0.65rem;" onclick="window.loadArchivedLmMeasurements('${active.id}')">
+                                📐 Carica Quote nel 3D
+                            </button>
+                            <button type="button" class="btn btn-primary" style="font-size:0.74rem; padding:0.3rem 0.7rem;" onclick="window.printLmInstrumentPdfSheet('${active.id}')">
+                                📑 Esporta Scheda PDF
+                            </button>
+                        </div>
+                    </div>
+                    <p style="font-size:0.82rem; color:var(--text-secondary); background:rgba(255,255,255,0.03); padding:0.6rem 0.8rem; border-radius:8px;">
+                        ${active.notes || "Nessuna nota."}
+                    </p>
+
+                    <div style="margin-top:0.9rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                            <strong style="color:var(--accent-gold); font-size:0.82rem;">Diario Restauri e Interventi Acustici</strong>
+                            <button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:0.22rem 0.55rem;" onclick="window.addLmRestorationEntry('${active.id}')">
+                                + Aggiungi Intervento
+                            </button>
+                        </div>
+                        ${(active.restorations && active.restorations.length > 0) ? active.restorations.map(r => `
+                            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:7px; padding:0.55rem 0.75rem; margin-bottom:0.4rem; font-size:0.8rem;">
+                                <strong style="color:#fff;">${r.intervention_type}</strong>
+                                <div style="font-size:0.71rem; color:var(--text-muted);">Data: ${r.intervention_date}</div>
+                            </div>
+                        `).join("") : `<div style="font-size:0.78rem; color:var(--text-muted); font-style:italic;">Nessun intervento registrato.</div>`}
+                    </div>
+                ` : `<p>Seleziona uno strumento dall'elenco.</p>`}
+            </div>
+        </div>
+    `;
+    modalOverlay.classList.add("active");
+};
+
+window.addCurrentLmInstrumentToArchive = function() {
+    const name = prompt("Nome del nuovo strumento / modello da salvare in Archivio:", "Violino Cremonese Opus " + new Date().getFullYear());
+    if (!name) return;
+    const owner = prompt("Nome Cliente / Destinatario (opzionale):", "Atelier Liuteria De Lorenzi") || "";
+    const notes = prompt("Note tecniche sugli spessori e sul legno:", "Tavola in Abete di Paneveggio, Fondo in Acero Marezzato") || "";
+
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    const newInst = {
+        id: "lm-inst-" + Date.now(),
+        name: name.trim(),
+        instrument_type: instType,
+        production_date: new Date().toLocaleDateString("it-IT"),
+        owner_name: owner.trim(),
+        owner_phone: "",
+        owner_email: "",
+        notes: notes.trim(),
+        measurements: JSON.parse(JSON.stringify(lmData.measurements[instType])),
+        restorations: [],
+        savedSpectrums: []
+    };
+    lmData.archivedInstruments.unshift(newInst);
+    window.lmState.selectedArchiveId = newInst.id;
+    window.atelierDB.saveData();
+    window.openLiuteriaMakingArchiveModal();
+    window.showToast(`Strumento "${newInst.name}" salvato nell'Archivio Liuteria Making!`);
+};
+
+window.loadArchivedLmMeasurements = function(instId) {
+    const lmData = window.getLiuteriaMakingData();
+    const inst = (lmData.archivedInstruments || []).find(a => a.id === instId);
+    if (!inst || !inst.measurements) return;
+    const typeKey = inst.instrument_type || "violin";
+    lmData.activeInstrumentType = typeKey;
+    lmData.measurements[typeKey] = JSON.parse(JSON.stringify(inst.measurements));
+    window.lmState.selectedArchiveId = inst.id;
+    window.atelierDB.saveData();
+    window.closeModal();
+    window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
+    window.showToast(`Quote di "${inst.name}" caricate nel modello 3D!`);
+};
+
+window.addLmRestorationEntry = function(instId) {
+    const lmData = window.getLiuteriaMakingData();
+    const inst = (lmData.archivedInstruments || []).find(a => a.id === instId);
+    if (!inst) return;
+    const desc = prompt("Descrizione intervento o calibrazione acustica:");
+    if (!desc) return;
+    if (!Array.isArray(inst.restorations)) inst.restorations = [];
+    inst.restorations.unshift({
+        id: "lm-rest-" + Date.now(),
+        intervention_type: desc.trim(),
+        intervention_date: new Date().toISOString().split("T")[0]
+    });
+    window.atelierDB.saveData();
+    window.openLiuteriaMakingArchiveModal();
+};
+
+window.printLmInstrumentPdfSheet = function(instId) {
+    const lmData = window.getLiuteriaMakingData();
+    const inst = (lmData.archivedInstruments || []).find(a => a.id === instId);
+    if (!inst) return;
+    const m = inst.measurements || {};
+    const vol = window.calculateLmInstrumentVolume(m);
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`
+        <html><head><title>Scheda Tecnica - ${inst.name}</title>
+        <style>
+            body { font-family: Georgia, serif; padding: 36px; color: #1a1a1a; }
+            h1 { color: #8b6914; border-bottom: 2px solid #d4af37; padding-bottom: 8px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-top: 16px; font-size: 14px; }
+            .row { display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding: 4px 0; }
+        </style></head><body>
+            <h1>Liuteria De Lorenzi — Scheda Tecnica & Acustica (Liuteria Making)</h1>
+            <p><strong>Strumento:</strong> ${inst.name} &nbsp;|&nbsp; <strong>Data:</strong> ${inst.production_date || "-"} &nbsp;|&nbsp; <strong>Proprietario:</strong> ${inst.owner_name || "-"}</p>
+            <p><strong>Volume Cassa Stimato:</strong> ${vol} cm³ &nbsp;|&nbsp; <strong>Legni:</strong> ${lmData.selectedTopWood} / ${lmData.selectedBackWood}</p>
+            <p><strong>Note:</strong> ${inst.notes || "-"}</p>
+            <h3>Quote Parametriche (mm)</h3>
+            <div class="grid">
+                ${Object.entries(m).map(([k, v]) => `<div class="row"><span>${k}</span><strong>${v} mm</strong></div>`).join("")}
+            </div>
+            <script>window.onload = () => window.print();<\/script>
+        </body></html>
+    `);
+    w.document.close();
+};
+
+window.saveLmToGestionaleCostruzione = function() {
+    const lmData = window.getLiuteriaMakingData();
+    const instType = lmData.activeInstrumentType || "violin";
+    const schema = window.LM_MEASUREMENT_SCHEMA[instType];
+    const m = lmData.measurements[instType];
+    const woods = lmData.woods || [];
+    const topWood = woods.find(w => w.name === lmData.selectedTopWood);
+    const backWood = woods.find(w => w.name === lmData.selectedBackWood);
+    const est = window.calculateLmAcousticEstimates(instType, m, topWood, backWood);
+
+    const opNum = prompt("Numero d'Opera per il registro Costruzione:", `Opus ${(window.atelierDB.data.costruzione || []).length + 43}`);
+    if (!opNum) return;
+
+    const newCostruzione = {
+        id: "cost-" + Date.now(),
+        opNumero: opNum.trim(),
+        modello: `${schema.name} Parametrico (${m.body_length} mm)`,
+        committente: "Progetto Liuteria Making",
+        legnoTavola: lmData.selectedTopWood,
+        legnoFondo: lmData.selectedBackWood,
+        faseAttuale: `Calibrazione Spessori (Centro ${m.top_center}mm / Fondo ${m.back_center}mm)`,
+        progresso: 35,
+        frequenzaTavola: `${est.noteM5} (${est.m5} Hz) • M2: ${est.m2} Hz`,
+        pesoTavola: `${est.topWeightG} g (Volume cassa ${est.volumeCm3} cm³)`,
+        dataInizio: new Date().toISOString().split("T")[0],
+        consegnaPrevista: ""
+    };
+
+    window.atelierDB.addItem("costruzione", newCostruzione);
+    window.showToast(`Progetto "${opNum}" salvato nel modulo Costruzione con frequenze M5 (${est.m5} Hz) e peso tavola (${est.topWeightG} g)!`);
 };
 
 document.addEventListener("DOMContentLoaded", () => {
