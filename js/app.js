@@ -8782,10 +8782,10 @@ window.openMailAccountConfigModal = function(focusAccount = "gmail") {
     }
 
     modal.innerHTML = `
-        <div class="modal-box" style="max-width:780px; width:95%;">
+        <div class="modal-container" style="max-width:780px; width:95%;">
             <div class="modal-header">
                 <h3>⚙️ Configurazione Caselle Mail (IMAP / SMTP SSL)</h3>
-                <button class="modal-close" onclick="document.getElementById('mailConfigModal').classList.remove('open')">&times;</button>
+                <button type="button" class="modal-close-btn" onclick="document.getElementById('mailConfigModal').classList.remove('active')">&times;</button>
             </div>
             <div class="modal-body" style="max-height:78vh; overflow-y:auto;">
                 <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:1.1rem;">
@@ -8898,14 +8898,19 @@ window.openMailAccountConfigModal = function(focusAccount = "gmail") {
                 </div>
 
                 <div id="mailConfigFeedbackBox" style="margin-top:0.9rem; font-size:0.82rem;"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailConfigModal').classList.remove('open')">Chiudi</button>
-                <button type="button" class="btn btn-primary" onclick="window.saveAndTestMailConfig(null)">💾 Salva Configurazione</button>
+
+                <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; gap:0.65rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailConfigModal').classList.remove('active')">Chiudi</button>
+                    <button type="button" class="btn btn-primary" onclick="window.saveAndTestMailConfig(null)">💾 Salva Configurazione</button>
+                </div>
             </div>
         </div>
     `;
-    modal.classList.add("open");
+    modal.classList.add("active");
+    setTimeout(() => {
+        const targetInput = document.getElementById(focusAccount === "domain" ? "mailCfgDomainPass" : "mailCfgGmailPass");
+        if (targetInput) targetInput.focus();
+    }, 60);
 };
 
 window.applyDomainMailPreset = function(preset) {
@@ -8987,7 +8992,7 @@ window.saveAndTestMailConfig = async function(testAccId = null) {
         if (!testAccId) {
             if (fb) fb.innerHTML = `<span style="color:var(--accent-emerald);">✓ Configurazione salvata con successo!</span>`;
             window.showToast("Configurazione caselle Mail salvata!");
-            setTimeout(() => document.getElementById("mailConfigModal")?.classList.remove("open"), 700);
+            setTimeout(() => document.getElementById("mailConfigModal")?.classList.remove("active"), 700);
         } else if (data.syncResult && data.syncResult.success) {
             if (fb) fb.innerHTML = `<span style="color:var(--accent-emerald);">✓ Connessione IMAP riuscita! Scaricate ${data.syncResult.fetchedCount} email reali.</span>`;
             window.showToast(`Connessione IMAP riuscita (${data.syncResult.fetchedCount} email sincronizzate)!`);
@@ -9013,10 +9018,10 @@ window.openComposeMailModal = function(prefill = {}) {
     }
 
     modal.innerHTML = `
-        <div class="modal-box" style="max-width:680px; width:95%;">
+        <div class="modal-container" style="max-width:680px; width:95%;">
             <div class="modal-header">
                 <h3>✍️ ${prefill.title || "Nuovo Messaggio Email"}</h3>
-                <button class="modal-close" onclick="document.getElementById('mailComposeModal').classList.remove('open')">&times;</button>
+                <button type="button" class="modal-close-btn" onclick="document.getElementById('mailComposeModal').classList.remove('active')">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -9052,16 +9057,17 @@ window.openComposeMailModal = function(prefill = {}) {
                     <label>Messaggio</label>
                     <textarea id="composeMailBody" class="form-control" rows="9" style="font-family:var(--font-body); line-height:1.55;">${window.escapeMailHtml(prefill.bodyText || "\n\n--\nMaestro Fabio De Lorenzi\nLiuteria De Lorenzi — Cremona\ninfo@liuteriadelorenzi.it | liuteriadelorenzi@gmail.com")}</textarea>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailComposeModal').classList.remove('open')">Annulla</button>
-                <button type="button" id="composeMailSendBtn" class="btn btn-primary" onclick="window.sendComposedMail()">
-                    <i data-lucide="send"></i> 📤 Invia Email
-                </button>
+
+                <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; gap:0.65rem;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('mailComposeModal').classList.remove('active')">Annulla</button>
+                    <button type="button" id="composeMailSendBtn" class="btn btn-primary" onclick="window.sendComposedMail()">
+                        <i data-lucide="send"></i> 📤 Invia Email
+                    </button>
+                </div>
             </div>
         </div>
     `;
-    modal.classList.add("open");
+    modal.classList.add("active");
     if (window.appController) window.appController.setupLucideIcons();
 };
 
@@ -9112,7 +9118,7 @@ window.sendComposedMail = async function() {
             window.atelierDB.data.mail = data.messages;
             window.atelierDB.saveData();
         }
-        document.getElementById("mailComposeModal")?.classList.remove("open");
+        document.getElementById("mailComposeModal")?.classList.remove("active");
         window.renderMailWorkspace();
 
         if (data.success && !data.localOnly) {
@@ -9123,7 +9129,7 @@ window.sendComposedMail = async function() {
             window.showToast(`Errore invio: ${data.error || "Verifica configurazione SMTP"}`);
         }
     } catch (e) {
-        document.getElementById("mailComposeModal")?.classList.remove("open");
+        document.getElementById("mailComposeModal")?.classList.remove("active");
         window.showToast("Email salvata localmente in Posta Inviata.");
     }
 };
