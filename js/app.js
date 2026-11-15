@@ -6063,10 +6063,33 @@ window.lmWebGL = {
     extUint: null,
     modelsCache: {},      // { violin: { numV, numT, minY, maxY, maxHalfW, pos, normMat, uv, idx, gpuBuffers }, ... }
     loadingModels: {},    // { violin: Promise, ... }
+    imagesCache: {},      // { url: HTMLImageElement }
     texturesCache: {},    // { url: WebGLTexture }
     loadingTextures: {},  // { url: true }
     whiteTex: null,
-    usePhotoTexture: true // true = texture fotografica 2K ove presente, false = shader procedurale Acero Marezzato & Vernice Cremonese
+    usePhotoTexture: true // true = texture fotografica 2K reale per Violino, Viola e Violoncello
+};
+
+window.createLmWebGLTextureFromImage = function(g, img) {
+    const tex = g.createTexture();
+    g.bindTexture(g.TEXTURE_2D, tex);
+    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, img);
+    const isPOT = (v) => (v & (v - 1)) === 0;
+    if (isPOT(img.width) && isPOT(img.height)) {
+        g.generateMipmap(g.TEXTURE_2D);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR);
+    } else {
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+    }
+    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+    const extAniso = g.getExtension("EXT_texture_filter_anisotropic") || g.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
+    if (extAniso) {
+        const maxAniso = g.getParameter(extAniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+        g.texParameterf(g.TEXTURE_2D, extAniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, maxAniso));
+    }
+    return tex;
 };
 
 // Carica una texture 2K in WebGL con mipmapping trilineare e filtro anisotropico
@@ -6074,7 +6097,7 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
     if (!window.lmWebGL.whiteTex) {
         const wt = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, wt);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([225, 175, 115, 255]));
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([135, 82, 46, 255]));
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -6085,34 +6108,21 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
     if (window.lmWebGL.texturesCache[url]) {
         return window.lmWebGL.texturesCache[url];
     }
+    if (window.lmWebGL.imagesCache[url]) {
+        const tex = window.createLmWebGLTextureFromImage(gl, window.lmWebGL.imagesCache[url]);
+        window.lmWebGL.texturesCache[url] = tex;
+        return tex;
+    }
     if (!window.lmWebGL.loadingTextures[url]) {
         window.lmWebGL.loadingTextures[url] = true;
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = () => {
             delete window.lmWebGL.loadingTextures[url];
-            if (!window.lmWebGL.gl) return;
-            const g = window.lmWebGL.gl;
-            const tex = g.createTexture();
-            g.bindTexture(g.TEXTURE_2D, tex);
-            g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, img);
-            // Power of 2 check
-            const isPOT = (v) => (v & (v - 1)) === 0;
-            if (isPOT(img.width) && isPOT(img.height)) {
-                g.generateMipmap(g.TEXTURE_2D);
-                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR);
-            } else {
-                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
-                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
-                g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+            window.lmWebGL.imagesCache[url] = img;
+            if (window.lmWebGL.gl) {
+                window.lmWebGL.texturesCache[url] = window.createLmWebGLTextureFromImage(window.lmWebGL.gl, img);
             }
-            g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
-            const extAniso = g.getExtension("EXT_texture_filter_anisotropic") || g.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
-            if (extAniso) {
-                const maxAniso = g.getParameter(extAniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-                g.texParameterf(g.TEXTURE_2D, extAniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, maxAniso));
-            }
-            window.lmWebGL.texturesCache[url] = tex;
             window.renderLm3dCanvas();
         };
         img.onerror = () => {
@@ -6123,7 +6133,7 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
     return window.lmWebGL.whiteTex;
 };
 
-// Carica i modelli 3D ad alta risoluzione convertiti da violin.obj (228k tris), v_Reduced.obj (306k tris) e sketchfab.obj (74k tris)
+// Carica i modelli 3D ad alta risoluzione convertiti da violin.obj (405k tris), v_Reduced.obj (468k tris) e sketchfab.obj (77k tris)
 window.loadLmBinaryModel = async function(instType) {
     if (window.lmWebGL.modelsCache[instType]) {
         return window.lmWebGL.modelsCache[instType];
@@ -6140,7 +6150,7 @@ window.loadLmBinaryModel = async function(instType) {
 
     const promise = (async () => {
         try {
-            const res = await fetch(`./assets/models/${instType}.bin`);
+            const res = await fetch(`./assets/models/${instType}.bin?v=1.3.3`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const buf = await res.arrayBuffer();
             const dv = new DataView(buf);
@@ -6404,21 +6414,19 @@ window.initLmWebGLContext = function(canvas) {
                 return;
             }
 
-            // Illuminazione Studio a 3 punti per Liuteria
-            vec3 L1 = normalize(vec3(0.48, 0.62, 0.75));   // Key light calda
-            vec3 L2 = normalize(vec3(-0.65, 0.25, 0.55));  // Fill light morbida
+            // Illuminazione Studio neutra e fedele ai colori fotografici per Liuteria
+            vec3 L1 = normalize(vec3(0.45, 0.58, 0.78));   // Key light neutra da studio
+            vec3 L2 = normalize(vec3(-0.62, 0.25, 0.58));  // Fill light morbida
             vec3 L3 = normalize(vec3(0.0, -0.75, -0.65));  // Rim / controluce
 
             float diff1 = max(dot(N, L1), 0.0);
             float diff2 = max(dot(N, L2), 0.0);
             float diff3 = max(dot(N, L3), 0.0);
 
-            // Speculare vernice ad olio (doppio lobo: base satinata + clearcoat lucido)
+            // Riflesso speculare nitido da vernice liutaria (senza patine o velature gialle)
             vec3 H1 = normalize(L1 + V);
             vec3 H2 = normalize(L2 + V);
-            float specCoat = pow(max(dot(N, H1), 0.0), 72.0) * 0.62 + pow(max(dot(N, H2), 0.0), 36.0) * 0.22;
-            float specBase = pow(max(dot(N, H1), 0.0), 16.0) * 0.18;
-            float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.2) * 0.22;
+            float specCoat = pow(max(dot(N, H1), 0.0), 96.0) * 0.24 + pow(max(dot(N, H2), 0.0), 48.0) * 0.08;
 
             // Modalità Simulazione Chladni / Vibrazione / Heatmap Spessori
             if (u_simMode > 0) {
@@ -6429,55 +6437,65 @@ window.initLmWebGLContext = function(canvas) {
                 return;
             }
 
-            // Modalità Fotorealistica Legno & Texture
-            vec3 albedo = vec3(0.78, 0.52, 0.26);
+            // Modalità Fotorealistica Legno & Texture (fedele al 100% alle texture 2K senza patina gialla)
+            vec3 albedo = vec3(0.68, 0.42, 0.22);
             float ao = 1.0;
             float glossWeight = 1.0;
 
             if (u_instId == 0) {
-                // VIOLINO: Scansione 3D museale MT_E_3270_Skrzypce con Texture Fotografica 2K + Mappa AO 2K + Velatura Ambrata Cremonese
+                // VIOLINO: Scansione 3D museale MT_E_3270_Skrzypce con Texture Fotografica 2K + Mappa AO 2K naturale
                 if (u_useTexture == 1) {
                     vec3 texCol = texture2D(u_tex0, v_uv).rgb;
-                    ao = mix(0.52, 1.0, texture2D(u_tex1, v_uv).r);
-                    vec3 contrastTex = pow(clamp(texCol, 0.0, 1.0), vec3(1.28));
-                    albedo = contrastTex * vec3(1.18, 0.78, 0.42);
+                    ao = mix(0.68, 1.0, texture2D(u_tex1, v_uv).r);
+                    albedo = clamp(texCol, 0.0, 1.0);
+                    if (max(albedo.r, max(albedo.g, albedo.b)) < 0.22) {
+                        glossWeight = 0.25; // Ebano (tastiera, cordiera, mentoniera, piroli) satinato
+                    }
                 } else {
                     albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
                 }
             } else if (u_instId == 1) {
-                // VIOLA: Scansione 3D v_Reduced.obj con Shader Maestro Liutaio Cremonese (Acero Marezzato + Abete + Ebano) o Texture Scanner
+                // VIOLA: Scansione 3D v_Reduced.obj con Texture Fotografica 2K (viola_mat0.jpg)
                 if (u_useTexture == 1) {
-                    vec3 vTex = pow(clamp(texture2D(u_tex0, v_uv).rgb, 0.0, 1.0), vec3(1.22));
-                    albedo = vTex * vec3(1.15, 0.78, 0.44);
+                    if (v_texSlot > 4.0) {
+                        // Zona attacco mentoniera inferiore (GeneratedMat1): ebano satinato pulito
+                        albedo = vec3(0.09, 0.085, 0.085);
+                        glossWeight = 0.22;
+                    } else {
+                        vec3 vTex = texture2D(u_tex0, v_uv).rgb;
+                        albedo = clamp(vTex, 0.0, 1.0);
+                        if (max(albedo.r, max(albedo.g, albedo.b)) < 0.22) {
+                            glossWeight = 0.25;
+                        }
+                    }
                 } else {
                     albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
-                    if (abs(v_texSlot - 5.0) < 0.4 || abs(v_texSlot - 2.0) < 0.4) {
-                        glossWeight = 0.28; // Ebano e ponticello sono satinati, non laccati a specchio
-                    }
                 }
             } else if (u_instId == 2) {
-                // VIOLONCELLO: Modello multi-materiale sketchfab.obj con 5 texture dedicate + Ebano + Corde metalliche
+                // VIOLONCELLO: Modello multi-materiale sketchfab.obj con 5 texture fotografiche dedicate
                 if (u_useTexture == 1) {
                     if (abs(v_texSlot - 0.0) < 0.4) {
-                        vec3 bodyTex = pow(clamp(texture2D(u_tex0, v_uv).rgb, 0.0, 1.0), vec3(1.25));
-                        vec3 procFlame = proceduralCremoneseWood(v_rawPos * 0.55, N, V, v_comp, 0.0);
-                        albedo = mix(bodyTex * vec3(1.16, 0.74, 0.36), procFlame, 0.38);
+                        albedo = clamp(texture2D(u_tex0, v_uv).rgb, 0.0, 1.0);
                     } else if (abs(v_texSlot - 1.0) < 0.4) {
-                        vec3 neckTex = pow(clamp(texture2D(u_tex1, v_uv).rgb, 0.0, 1.0), vec3(1.20));
-                        vec3 procNeck = proceduralCremoneseWood(v_rawPos * 0.55, N, V, 3.0, 1.0);
-                        albedo = mix(neckTex * vec3(1.14, 0.78, 0.44), procNeck, 0.35);
+                        albedo = clamp(texture2D(u_tex1, v_uv).rgb, 0.0, 1.0);
                     } else if (abs(v_texSlot - 2.0) < 0.4) {
-                        albedo = texture2D(u_tex2, v_uv).rgb;
-                        glossWeight = 0.2;
+                        albedo = clamp(texture2D(u_tex2, v_uv).rgb, 0.0, 1.0);
+                        glossWeight = 0.18;
                     } else if (abs(v_texSlot - 3.0) < 0.4) {
-                        albedo = texture2D(u_tex3, v_uv).rgb * 0.55;
-                        glossWeight = 0.3;
+                        albedo = clamp(texture2D(u_tex3, v_uv).rgb, 0.0, 1.0) * 0.42;
+                        glossWeight = 0.25;
                     } else if (abs(v_texSlot - 4.0) < 0.4) {
-                        albedo = texture2D(u_tex4, v_uv).rgb * 0.65;
-                        glossWeight = 0.35;
+                        albedo = clamp(texture2D(u_tex4, v_uv).rgb, 0.0, 1.0) * 0.48;
+                        glossWeight = 0.28;
+                    } else if (abs(v_texSlot - 5.0) < 0.4) {
+                        albedo = vec3(0.08, 0.08, 0.09); // Piroli in ebano
+                        glossWeight = 0.25;
+                    } else if (abs(v_texSlot - 6.0) < 0.4) {
+                        albedo = vec3(0.82, 0.84, 0.88); // Corde armoniche in metallo
+                        glossWeight = 1.25;
                     } else {
-                        albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
-                        glossWeight = (abs(v_texSlot - 6.0) < 0.4 || abs(v_texSlot - 7.0) < 0.4) ? 1.35 : 0.3;
+                        albedo = vec3(0.18, 0.16, 0.14); // Tiracantini e puntale
+                        glossWeight = 0.85;
                     }
                 } else {
                     albedo = proceduralCremoneseWood(v_rawPos * 0.55, N, V, v_comp, v_texSlot);
@@ -6486,16 +6504,10 @@ window.initLmWebGLContext = function(canvas) {
                 albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
             }
 
-            vec3 ambient = vec3(0.28, 0.25, 0.22) * ao;
-            vec3 diffuse = (diff1 * vec3(1.02, 0.97, 0.90) * 0.72 +
-                            diff2 * vec3(0.75, 0.82, 0.95) * 0.32 +
-                            diff3 * vec3(0.95, 0.75, 0.50) * 0.20) * ao;
+            float lightFactor = (0.44 + diff1 * 0.52 + diff2 * 0.18 + diff3 * 0.08) * ao;
+            vec3 specular = vec3(specCoat) * glossWeight;
+            vec3 color = clamp(albedo * lightFactor + specular, 0.0, 1.0);
 
-            vec3 specular = (specCoat * vec3(1.0, 0.96, 0.88) + specBase * albedo + fresnel * vec3(0.90, 0.68, 0.38)) * glossWeight;
-            vec3 color = albedo * (ambient + diffuse) + specular;
-
-            // Tone mapping morbido per evitare saturazione sulle alte luci della vernice
-            color = color / (color + vec3(0.18));
             gl_FragColor = vec4(color, 1.0);
         }
     `;
@@ -7695,10 +7707,7 @@ window.switchLmInstrumentType = function(typeKey) {
     window.lmState.importedCustomMesh = null;
     window.lmState.importedMeshName = "";
     if (window.lmWebGL) {
-        // Come nel modello originale LiuteriaMaking (viola.py: use_obj_texture = False),
-        // per la Viola attiviamo di default lo Shader Vernice Cremonese + Acero Marezzato 3D
-        // mentre per Violino (scansione museale 8K) e Violoncello (9 materiali PBR) usiamo le texture fotografiche
-        window.lmWebGL.usePhotoTexture = (typeKey !== "viola");
+        window.lmWebGL.usePhotoTexture = true;
     }
     window.atelierDB.saveData();
     window.renderLiuteriaMakingWorkspace(document.getElementById("moduleContentContainer"));
