@@ -8141,6 +8141,9 @@ window.mailClientState = {
     unreadOnly: false,
     searchQuery: "",
     selectedMessageId: null,
+    popupOpen: false,
+    darkReaderMode: true,       // true = Sfondo Scuro Alta Leggibilità (#0b1120 + #f8fafc), false = Carta Chiara
+    readerFontRem: 1.04,        // Dimensione testo regolabile (A- / A+)
     syncing: false,
     lastGlobalSync: "",
     initializedFromServer: false
@@ -8240,12 +8243,66 @@ window.escapeMailHtml = function(str) {
         .replace(/"/g, "&quot;");
 };
 
-window.sanitizeMailBodyHtml = function(htmlStr) {
+window.sanitizeMailBodyHtml = function(htmlStr, isDarkMode = true) {
     if (!htmlStr) return "";
-    return String(htmlStr)
+    let cleaned = String(htmlStr)
         .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
         .replace(/\son\w+="[^"]*"/gi, "")
         .replace(/\son\w+='[^']*'/gi, "");
+
+    if (isDarkMode) {
+        // Rimuovi fogli di stile incorporati e attributi inline color/background che rendono il testo scuro illeggibile su sfondo scuro
+        cleaned = cleaned
+            .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+            .replace(/\b(?:background-color|background|color)\s*:\s*[^;"']+;?/gi, "")
+            .replace(/\s(?:bgcolor|color|text)=["'][^"']*["']/gi, "");
+    }
+    return cleaned;
+};
+
+window.formatMailBodyContent = function(msg, isDarkMode = true) {
+    if (!msg) return "";
+    if (msg.bodyHtml && String(msg.bodyHtml).trim()) {
+        return `<div class="mail-html-inner" style="white-space:normal;">${window.sanitizeMailBodyHtml(msg.bodyHtml, isDarkMode)}</div>`;
+    }
+    const rawText = String(msg.bodyText || "");
+    const lines = rawText.split(/\r?\n/);
+    const textColor = isDarkMode ? "#f8fafc" : "#111827";
+    const quoteColor = isDarkMode ? "#cbd5e1" : "#4b5563";
+    const quoteBg = isDarkMode ? "rgba(30, 41, 59, 0.65)" : "rgba(0, 0, 0, 0.04)";
+    const linkColor = isDarkMode ? "#38bdf8" : "#0369a1";
+
+    const formattedLines = lines.map(line => {
+        let esc = window.escapeMailHtml(line);
+        // Linkifica URL
+        esc = esc.replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" target="_blank" rel="noopener noreferrer" style="color:${linkColor}; text-decoration:underline; font-weight:600;">$1</a>`);
+        if (line.trim().startsWith(">") || line.trim().startsWith("--- Messaggio originale")) {
+            return `<div style="border-left:3px solid #f59e0b; background:${quoteBg}; color:${quoteColor}; padding:0.2rem 0.75rem; margin:0.15rem 0; border-radius:0 6px 6px 0;">${esc}</div>`;
+        }
+        if (line.trim().startsWith("- ") || line.trim().startsWith("• ")) {
+            return `<div style="padding-left:0.6rem; margin:0.2rem 0; color:${textColor};"><span style="color:#fbbf24; font-weight:700;">•</span> ${esc.replace(/^[-•]\s+/, "")}</div>`;
+        }
+        return esc === "" ? `<div style="height:0.65rem;"></div>` : `<div style="color:${textColor};">${esc}</div>`;
+    });
+    return formattedLines.join("");
+};
+
+window.enhanceMailDarkReadability = function(containerEl) {
+    if (!containerEl || !window.mailClientState.darkReaderMode) return;
+    const nodes = containerEl.querySelectorAll("*");
+    nodes.forEach(el => {
+        const tag = (el.tagName || "").toLowerCase();
+        if (tag === "a") {
+            el.style.setProperty("color", "#38bdf8", "important");
+            el.style.setProperty("text-decoration", "underline", "important");
+            if (!el.getAttribute("target")) el.setAttribute("target", "_blank");
+        } else {
+            el.style.setProperty("color", "#f8fafc", "important");
+            if (tag !== "blockquote") {
+                el.style.setProperty("background-color", "transparent", "important");
+            }
+        }
+    });
 };
 
 window.getFilteredMailMessages = function() {
@@ -8453,36 +8510,41 @@ window.renderMailWorkspace = function(container) {
                         const hasAtt = Array.isArray(m.attachments) && m.attachments.length > 0;
 
                         return `
-                            <div onclick="window.selectMailMessage('${m.id}')" style="padding:0.9rem 1.1rem; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.06); border-left:3.5px solid ${isSel ? 'var(--accent-gold)' : (!m.read ? '#38bdf8' : 'transparent')}; background:${isSel ? 'rgba(245, 158, 11, 0.12)' : (!m.read ? 'rgba(56, 189, 248, 0.05)' : 'transparent')}; transition:background 0.15s;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
-                                    <div style="display:flex; align-items:center; gap:0.4rem; min-width:0;">
+                            <div class="mail-item-row" onclick="window.selectMailMessage('${m.id}', true)" title="Clicca per aprire l'email nel Pop-up ad alta leggibilità" style="padding:0.95rem 1.1rem; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.08); border-left:3.5px solid ${isSel ? 'var(--accent-gold)' : (!m.read ? '#38bdf8' : 'transparent')}; background:${isSel ? 'rgba(245, 158, 11, 0.14)' : (!m.read ? 'rgba(56, 189, 248, 0.07)' : 'transparent')};">
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.32rem;">
+                                    <div style="display:flex; align-items:center; gap:0.42rem; min-width:0;">
                                         ${!m.read ? `<span style="width:8px; height:8px; border-radius:50%; background:#38bdf8; flex-shrink:0;" title="Non letta"></span>` : ''}
-                                        <span style="font-size:0.66rem; font-weight:700; padding:1px 6px; border-radius:6px; background:${badgeBg}; color:${badgeCol}; border:1px solid ${badgeBorder}; flex-shrink:0;">
+                                        <span style="font-size:0.68rem; font-weight:700; padding:1px 6px; border-radius:6px; background:${badgeBg}; color:${badgeCol}; border:1px solid ${badgeBorder}; flex-shrink:0;">
                                             ${badgeLabel}
                                         </span>
-                                        <span style="font-size:0.83rem; font-weight:${!m.read ? '700' : '600'}; color:${!m.read ? '#fff' : '#d1d5db'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        <span style="font-size:0.86rem; font-weight:${!m.read ? '800' : '600'}; color:#ffffff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                             ${window.escapeMailHtml(m.fromName || m.fromEmail)}
                                         </span>
                                     </div>
-                                    <div style="display:flex; align-items:center; gap:0.35rem; flex-shrink:0;">
-                                        <button type="button" onclick="event.stopPropagation(); window.performMailAction('${m.id}', 'toggle_star')" style="background:none; border:none; cursor:pointer; color:${m.starred ? '#fbbf24' : 'rgba(255,255,255,0.28)'}; padding:0; font-size:0.95rem;" title="Contrassegna come speciale">
+                                    <div style="display:flex; align-items:center; gap:0.38rem; flex-shrink:0;">
+                                        <button type="button" onclick="event.stopPropagation(); window.performMailAction('${m.id}', 'toggle_star')" style="background:none; border:none; cursor:pointer; color:${m.starred ? '#fbbf24' : 'rgba(255,255,255,0.35)'}; padding:0; font-size:0.98rem;" title="Contrassegna come speciale">
                                             ★
                                         </button>
-                                        <span style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">
+                                        <span style="font-size:0.72rem; color:#cbd5e1; font-family:var(--font-mono);">
                                             ${window.escapeMailHtml(m.dateFormatted || "")}
                                         </span>
                                     </div>
                                 </div>
 
-                                <div style="font-size:0.84rem; font-weight:${!m.read ? '700' : '500'}; color:${!m.read ? '#f9fafb' : '#cbd5e1'}; margin-bottom:0.25rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                <div style="font-size:0.88rem; font-weight:${!m.read ? '700' : '600'}; color:#f8fafc; margin-bottom:0.28rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                     ${window.escapeMailHtml(m.subject)}
                                 </div>
 
                                 <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
-                                    <div style="font-size:0.75rem; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">
+                                    <div style="font-size:0.78rem; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">
                                         ${window.escapeMailHtml(m.snippet || "")}
                                     </div>
-                                    ${hasAtt ? `<span style="font-size:0.68rem; color:var(--accent-gold); flex-shrink:0;">📎 ${m.attachments.length}</span>` : ''}
+                                    <div style="display:flex; align-items:center; gap:0.35rem; flex-shrink:0;">
+                                        ${hasAtt ? `<span style="font-size:0.7rem; color:var(--accent-gold);">📎 ${m.attachments.length}</span>` : ''}
+                                        <span style="font-size:0.68rem; color:#38bdf8; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); padding:1px 6px; border-radius:6px; font-weight:600;">
+                                            🔍 Pop-up
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -8524,7 +8586,13 @@ window.renderMailWorkspace = function(container) {
                                     </button>
                                 </div>
 
-                                <div style="display:flex; gap:0.4rem;">
+                                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.76rem; border-color:var(--accent-gold); color:#fff;" onclick="window.openMailReaderPopup('${selectedMsg.id}')" title="Apri l'email in una finestra Pop-up ampia ad alta leggibilità">
+                                        <i data-lucide="maximize-2"></i> 🔍 Apri in Pop-up
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem;" onclick="window.toggleMailReaderTheme()" title="Cambia contrasto Sfondo Scuro / Carta Chiara">
+                                        ${st.darkReaderMode ? '🌙 Alto Contrasto Scuro' : '☀️ Carta Chiara'}
+                                    </button>
                                     <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.65rem; font-size:0.75rem;" onclick="window.performMailAction('${selectedMsg.id}', '${selectedMsg.read ? 'mark_unread' : 'mark_read'}')" title="${selectedMsg.read ? 'Segna come non letta' : 'Segna come letta'}">
                                         <i data-lucide="${selectedMsg.read ? 'mail' : 'mail-open'}"></i> ${selectedMsg.read ? 'Segna non letta' : 'Segna letta'}
                                     </button>
@@ -8597,8 +8665,8 @@ window.renderMailWorkspace = function(container) {
                                 </div>
                             ` : ''}
 
-                            <!-- Corpo del Messaggio -->
-                            <div style="background:rgba(13, 17, 25, 0.72); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:1.35rem 1.5rem; min-height:260px; color:#f3f4f6; font-size:0.92rem; line-height:1.7; white-space:pre-wrap; word-break:break-word;">${selectedMsg.bodyHtml ? `<div style="white-space:normal;">${window.sanitizeMailBodyHtml(selectedMsg.bodyHtml)}</div>` : window.escapeMailHtml(selectedMsg.bodyText || "")}</div>
+                            <!-- Corpo del Messaggio (Alta Leggibilità su Sfondo Scuro) -->
+                            <div id="mailInlineReaderBody" class="${st.darkReaderMode ? 'mail-dark-reader' : 'mail-light-reader'}" style="min-height:260px; font-size:${st.readerFontRem || 1.04}rem;">${window.formatMailBodyContent(selectedMsg, st.darkReaderMode)}</div>
                         </div>
 
                         <!-- Risposta Rapida Inline -->
@@ -8618,6 +8686,13 @@ window.renderMailWorkspace = function(container) {
 
     if (window.appController) {
         window.appController.setupLucideIcons();
+    }
+    const inlineBody = document.getElementById("mailInlineReaderBody");
+    if (inlineBody) {
+        window.enhanceMailDarkReadability(inlineBody);
+    }
+    if (window.mailClientState.popupOpen && window.mailClientState.selectedMessageId) {
+        window.renderMailReaderPopupContent(window.mailClientState.selectedMessageId);
     }
 };
 
@@ -8650,7 +8725,7 @@ window.handleMailSearchInput = function(val) {
     }
 };
 
-window.selectMailMessage = function(msgId) {
+window.selectMailMessage = function(msgId, openPopup = true) {
     window.mailClientState.selectedMessageId = msgId;
     const msgs = window.getMailMessagesList();
     const found = msgs.find(m => m.id === msgId);
@@ -8664,6 +8739,232 @@ window.selectMailMessage = function(msgId) {
         }).catch(() => {});
     }
     window.renderMailWorkspace();
+    if (openPopup) {
+        window.openMailReaderPopup(msgId);
+    }
+};
+
+window.toggleMailReaderTheme = function() {
+    window.mailClientState.darkReaderMode = !window.mailClientState.darkReaderMode;
+    window.renderMailWorkspace();
+};
+
+window.adjustMailReaderFontSize = function(delta) {
+    const cur = window.mailClientState.readerFontRem || 1.04;
+    window.mailClientState.readerFontRem = Math.max(0.88, Math.min(1.40, Math.round((cur + delta) * 100) / 100));
+    window.renderMailWorkspace();
+};
+
+window.closeMailReaderPopup = function() {
+    window.mailClientState.popupOpen = false;
+    const modal = document.getElementById("mailReaderPopupModal");
+    if (modal) modal.classList.remove("active");
+};
+
+window.navigateMailPopup = function(step) {
+    const filtered = window.getFilteredMailMessages();
+    if (filtered.length === 0) return;
+    const idx = filtered.findIndex(m => m.id === window.mailClientState.selectedMessageId);
+    const nextIdx = idx === -1 ? 0 : (idx + step + filtered.length) % filtered.length;
+    window.selectMailMessage(filtered[nextIdx].id, true);
+};
+
+window.openMailReaderPopup = function(msgId) {
+    if (msgId) window.mailClientState.selectedMessageId = msgId;
+    window.mailClientState.popupOpen = true;
+    window.renderMailReaderPopupContent(window.mailClientState.selectedMessageId);
+};
+
+window.renderMailReaderPopupContent = function(msgId) {
+    const allMsgs = window.getMailMessagesList();
+    const msg = allMsgs.find(m => m.id === msgId);
+    if (!msg) return;
+
+    const st = window.mailClientState;
+    const filtered = window.getFilteredMailMessages();
+    const curIdx = filtered.findIndex(m => m.id === msg.id);
+    const posLabel = curIdx !== -1 ? `${curIdx + 1} di ${filtered.length}` : "";
+
+    const isGmail = msg.accountId === "gmail" || msg.accountEmail === "liuteriadelorenzi@gmail.com";
+    const accEmail = isGmail ? "liuteriadelorenzi@gmail.com" : "info@liuteriadelorenzi.it";
+    const accBadgeBg = isGmail ? "rgba(239, 68, 68, 0.22)" : "rgba(56, 189, 248, 0.22)";
+    const accBadgeCol = isGmail ? "#fecaca" : "#bae6fd";
+    const accBorder = isGmail ? "rgba(239, 68, 68, 0.5)" : "rgba(56, 189, 248, 0.5)";
+    const atts = Array.isArray(msg.attachments) ? msg.attachments : [];
+
+    let modal = document.getElementById("mailReaderPopupModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "mailReaderPopupModal";
+        modal.className = "modal-overlay";
+        modal.addEventListener("click", (ev) => {
+            if (ev.target === modal) window.closeMailReaderPopup();
+        });
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-container" style="max-width:960px; width:96%; max-height:92vh; display:flex; flex-direction:column; background:#0f172a; border:1.5px solid rgba(245, 158, 11, 0.45); box-shadow:0 25px 70px rgba(0, 0, 0, 0.85);">
+            <!-- Top Popup Header -->
+            <div class="modal-header" style="background:#090d16; padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,0.12); flex-wrap:wrap; gap:0.75rem;">
+                <div style="display:flex; align-items:center; gap:0.65rem; flex-wrap:wrap;">
+                    <span style="font-size:0.78rem; font-weight:700; padding:0.28rem 0.75rem; border-radius:16px; background:${accBadgeBg}; color:${accBadgeCol}; border:1px solid ${accBorder};">
+                        📬 ${accEmail}
+                    </span>
+                    ${posLabel ? `<span style="font-size:0.76rem; color:#cbd5e1; font-family:var(--font-mono);">Email ${posLabel}</span>` : ''}
+                    <div style="display:flex; gap:0.3rem; margin-left:0.25rem;">
+                        <button type="button" class="btn btn-secondary" style="padding:0.25rem 0.65rem; font-size:0.74rem; color:#fff;" onclick="window.navigateMailPopup(-1)" title="Email precedente">
+                            ◀ Prec
+                        </button>
+                        <button type="button" class="btn btn-secondary" style="padding:0.25rem 0.65rem; font-size:0.74rem; color:#fff;" onclick="window.navigateMailPopup(1)" title="Email successiva">
+                            Succ ▶
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Controlli Leggibilità (Tema Scuro/Chiaro + Zoom Testo + Chiudi) -->
+                <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.28rem 0.6rem; font-size:0.75rem; color:#fff;" onclick="window.adjustMailReaderFontSize(-0.08)" title="Riduci dimensione testo">
+                        A-
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.28rem 0.6rem; font-size:0.75rem; color:#fff;" onclick="window.adjustMailReaderFontSize(0.08)" title="Ingrandisci dimensione testo">
+                        A+
+                    </button>
+                    <button type="button" class="btn ${st.darkReaderMode ? 'btn-primary' : 'btn-secondary'}" style="padding:0.28rem 0.75rem; font-size:0.75rem;" onclick="window.toggleMailReaderTheme()">
+                        ${st.darkReaderMode ? '🌙 Sfondo Scuro Alta Leggibilità' : '☀️ Sfondo Chiaro'}
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.28rem 0.65rem; font-size:0.75rem; color:#fff;" onclick="window.printMailMessage('${msg.id}')" title="Stampa questa email">
+                        🖨️ Stampa
+                    </button>
+                    <button type="button" class="modal-close-btn" style="margin-left:0.35rem; color:#fff; font-size:1.75rem; line-height:1;" onclick="window.closeMailReaderPopup()" title="Chiudi Pop-up">&times;</button>
+                </div>
+            </div>
+
+            <!-- Scrollable Popup Body -->
+            <div class="modal-body" style="padding:1.5rem 1.85rem; overflow-y:auto; flex:1; background:#0f172a;">
+                <!-- Oggetto ad altissimo contrasto -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1.1rem;">
+                    <h2 style="font-family:var(--font-heading); font-size:1.42rem; font-weight:800; color:#ffffff; margin:0; line-height:1.38; letter-spacing:0.01em;">
+                        ${window.escapeMailHtml(msg.subject)}
+                    </h2>
+                    <button type="button" onclick="window.performMailAction('${msg.id}', 'toggle_star')" style="background:none; border:none; cursor:pointer; color:${msg.starred ? '#fbbf24' : 'rgba(255,255,255,0.35)'}; font-size:1.45rem; line-height:1; flex-shrink:0;" title="Contrassegna come speciale">
+                        ★
+                    </button>
+                </div>
+
+                <!-- Box Mittente & Destinatario -->
+                <div style="background:#1e293b; border:1px solid rgba(148, 163, 184, 0.25); border-radius:12px; padding:1rem 1.25rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem;">
+                    <div style="display:flex; align-items:center; gap:0.85rem;">
+                        <div style="width:46px; height:46px; border-radius:50%; background:linear-gradient(135deg, #f59e0b, #d97706); color:#000; font-weight:800; font-size:1.15rem; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            ${window.escapeMailHtml((msg.fromName || msg.fromEmail || "M").trim().charAt(0).toUpperCase())}
+                        </div>
+                        <div>
+                            <div style="font-size:1rem; font-weight:700; color:#ffffff;">
+                                ${window.escapeMailHtml(msg.fromName || msg.fromEmail)}
+                                <span style="font-weight:500; color:#93c5fd; font-size:0.88rem; margin-left:0.35rem;">&lt;${window.escapeMailHtml(msg.fromEmail)}&gt;</span>
+                            </div>
+                            <div style="font-size:0.82rem; color:#e2e8f0; margin-top:0.2rem;">
+                                Destinatario: <strong style="color:#ffffff;">${window.escapeMailHtml(msg.toEmail || accEmail)}</strong>
+                                ${msg.deliveryMethod ? ` • <span style="color:#34d399; font-weight:600;">${window.escapeMailHtml(msg.deliveryMethod)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="font-size:0.86rem; font-weight:700; color:#fbbf24; font-family:var(--font-mono); background:rgba(0,0,0,0.35); padding:0.35rem 0.75rem; border-radius:8px; border:1px solid rgba(251, 191, 36, 0.3);">
+                        📅 ${window.escapeMailHtml(msg.dateFormatted || "")}
+                    </div>
+                </div>
+
+                <!-- Allegati Scaricabili -->
+                ${atts.length > 0 ? `
+                    <div style="margin-bottom:1.25rem; padding:0.85rem 1.1rem; background:rgba(245, 158, 11, 0.12); border:1px solid rgba(245, 158, 11, 0.38); border-radius:10px;">
+                        <div style="font-size:0.78rem; font-weight:800; color:#fbbf24; text-transform:uppercase; margin-bottom:0.5rem;">
+                            📎 Allegati (${atts.length})
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
+                            ${atts.map((att, aIdx) => `
+                                <div style="display:inline-flex; align-items:center; gap:0.55rem; background:#090d16; border:1px solid rgba(255,255,255,0.18); padding:0.45rem 0.85rem; border-radius:8px; font-size:0.82rem;">
+                                    <i data-lucide="file-text" style="width:15px; height:15px; color:#fbbf24;"></i>
+                                    <span style="color:#ffffff; font-weight:600;">${window.escapeMailHtml(att.filename || "Allegato")}</span>
+                                    <span style="color:#cbd5e1; font-size:0.74rem;">(${window.escapeMailHtml(att.sizeFormatted || "")})</span>
+                                    <button type="button" class="btn btn-primary" style="padding:0.2rem 0.6rem; font-size:0.72rem;" onclick="window.downloadMailAttachment('${msg.id}', ${aIdx})">
+                                        ⬇️ Scarica
+                                    </button>
+                                </div>
+                            `).join("")}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Area Testo Email ad Altissima Leggibilità -->
+                <div id="mailPopupReaderBody" class="${st.darkReaderMode ? 'mail-dark-reader' : 'mail-light-reader'}" style="min-height:290px; font-size:${st.readerFontRem || 1.04}rem;">
+                    ${window.formatMailBodyContent(msg, st.darkReaderMode)}
+                </div>
+            </div>
+
+            <!-- Popup Footer Actions -->
+            <div style="background:#090d16; padding:1rem 1.65rem; border-top:1px solid rgba(255,255,255,0.12); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" style="padding:0.48rem 1.05rem; font-size:0.84rem;" onclick="window.closeMailReaderPopup(); window.openReplyMailModal('${msg.id}', false);">
+                        <i data-lucide="reply"></i> ↩️ Rispondi
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.48rem 0.95rem; font-size:0.84rem; color:#fff;" onclick="window.closeMailReaderPopup(); window.openReplyMailModal('${msg.id}', true);">
+                        <i data-lucide="forward"></i> ➡️ Inoltra
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.48rem 0.9rem; font-size:0.82rem; border-color:rgba(139, 92, 246, 0.55); color:#e9d5ff;" onclick="window.createAppointmentFromMail('${msg.id}')">
+                        <i data-lucide="calendar-plus"></i> 📅 Crea Appuntamento
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.48rem 0.9rem; font-size:0.82rem; border-color:rgba(16, 185, 129, 0.55); color:#bbf7d0;" onclick="window.saveSenderToClienti('${msg.id}')">
+                        <i data-lucide="user-plus"></i> 👤 Salva nei Clienti
+                    </button>
+                </div>
+
+                <div style="display:flex; gap:0.45rem;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.45rem 0.85rem; font-size:0.8rem; color:#fda4af;" onclick="window.performMailAction('${msg.id}', 'trash'); window.closeMailReaderPopup();">
+                        <i data-lucide="trash-2"></i> 🗑️ Sposta nel Cestino
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.45rem 1rem; font-size:0.82rem; color:#fff;" onclick="window.closeMailReaderPopup()">
+                        Chiudi
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.classList.add("active");
+    const popupBody = document.getElementById("mailPopupReaderBody");
+    if (popupBody) {
+        window.enhanceMailDarkReadability(popupBody);
+    }
+    if (window.appController) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.printMailMessage = function(msgId) {
+    const msgs = window.getMailMessagesList();
+    const m = msgs.find(x => x.id === msgId);
+    if (!m) return;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`
+        <html><head><title>${window.escapeMailHtml(m.subject)}</title>
+        <style>
+            body { font-family: Georgia, serif; padding: 36px; color: #111827; max-width: 780px; margin: 0 auto; line-height: 1.65; }
+            h1 { font-size: 20px; border-bottom: 2px solid #b45309; padding-bottom: 8px; margin-bottom: 12px; }
+            .meta { background: #f8fafc; border: 1px solid #cbd5e1; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
+            .body { white-space: pre-wrap; font-size: 15px; }
+        </style></head><body>
+            <h1>${window.escapeMailHtml(m.subject)}</h1>
+            <div class="meta">
+                <div><strong>Da:</strong> ${window.escapeMailHtml(m.fromName)} &lt;${window.escapeMailHtml(m.fromEmail)}&gt;</div>
+                <div><strong>A:</strong> ${window.escapeMailHtml(m.toEmail || m.accountEmail)}</div>
+                <div><strong>Data:</strong> ${window.escapeMailHtml(m.dateFormatted || "")}</div>
+            </div>
+            <div class="body">${m.bodyHtml ? window.sanitizeMailBodyHtml(m.bodyHtml, false) : window.escapeMailHtml(m.bodyText || "")}</div>
+            <script>window.onload = () => window.print();<\/script>
+        </body></html>
+    `);
+    w.document.close();
 };
 
 window.performMailAction = async function(msgId, action) {
