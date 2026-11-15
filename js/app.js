@@ -6075,6 +6075,10 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
         const wt = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, wt);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([225, 175, 115, 255]));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         window.lmWebGL.whiteTex = wt;
     }
     if (!url) return window.lmWebGL.whiteTex;
@@ -6086,6 +6090,7 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = () => {
+            delete window.lmWebGL.loadingTextures[url];
             if (!window.lmWebGL.gl) return;
             const g = window.lmWebGL.gl;
             const tex = g.createTexture();
@@ -6109,6 +6114,9 @@ window.getOrLoadLmWebGLTexture = function(gl, url) {
             }
             window.lmWebGL.texturesCache[url] = tex;
             window.renderLm3dCanvas();
+        };
+        img.onerror = () => {
+            delete window.lmWebGL.loadingTextures[url];
         };
         img.src = url;
     }
@@ -6196,6 +6204,9 @@ window.initLmWebGLContext = function(canvas) {
     const extUint = isWebGL2 ? true : gl.getExtension("OES_element_index_uint");
 
     const vsSource = `
+        precision highp float;
+        precision highp int;
+
         attribute vec3 a_pos;
         attribute vec4 a_normMat;
         attribute vec2 a_uv;
@@ -6301,6 +6312,7 @@ window.initLmWebGLContext = function(canvas) {
 
     const fsSource = `
         precision highp float;
+        precision highp int;
 
         varying vec3 v_worldPos;
         varying vec3 v_rawPos;
@@ -6587,6 +6599,11 @@ window.renderLm3dCanvas = function() {
         }
     }
 
+    const infoTag = document.getElementById("lm3dModelInfoTag");
+    if (infoTag && modelObj) {
+        infoTag.innerHTML = `✓ Scansione 3D Reale: <strong>${modelObj.numV.toLocaleString("it-IT")} vertici</strong> • <strong>${modelObj.numT.toLocaleString("it-IT")} triangoli</strong>`;
+    }
+
     const bufs = window.ensureLmModelGpuBuffers(gl, modelObj);
     const prog = window.lmWebGL.program;
     gl.useProgram(prog);
@@ -6630,6 +6647,7 @@ window.renderLm3dCanvas = function() {
 
     // Bind Textures (Unit 0..4)
     const bindUnit = (unitIdx, uniformName, texUrl) => {
+        gl.activeTexture(gl.TEXTURE0 + unitIdx);
         const tex = window.getOrLoadLmWebGLTexture(gl, texUrl);
         gl.activeTexture(gl.TEXTURE0 + unitIdx);
         gl.bindTexture(gl.TEXTURE_2D, tex);
