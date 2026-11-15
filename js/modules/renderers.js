@@ -1350,11 +1350,15 @@ window.AppModules = {
         `;
     },
 
-    // 10. Media (Archivio Universale Foto, Audio, Video, 3D, CAD & Documenti)
+    // 10. Media (Archivio Universale Foto, Audio, Video, 3D, CAD & Motore di Ricerca Globale File)
     renderMedia: function(container) {
-        const allItems = window.atelierDB.data.media || [];
+        const allMediaItems = window.atelierDB.data.media || [];
         const activeFilter = window.mediaTypeFilter || "all";
         const activeCatFilter = window.mediaCategoryFilter || "all";
+        const activeScope = window.mediaScopeFilter || "all_atelier";
+        const activeExtGroup = window.mediaExtGroupFilter || "all";
+        const activeSortBy = window.mediaSortBy || "recent";
+        const activeViewMode = window.mediaViewMode || "grid";
         const searchQ = (window.mediaSearchQuery || "").trim().toLowerCase();
 
         const detectKind = window.detectMediaItemKind || function(item) {
@@ -1369,8 +1373,44 @@ window.AppModules = {
             return "other";
         };
 
+        // Raccogli tutti i file indicizzati del Gestionale (Media + Biblioteca + Certificati + Social + 3D)
+        const allGlobalFiles = (typeof window.collectAllSearchableAtelierFiles === "function")
+            ? window.collectAllSearchableAtelierFiles()
+            : allMediaItems.map((it, idx) => ({
+                uid: `media::${it.id}`,
+                rawId: it.id,
+                sourceApp: "media",
+                sourceLabel: "Galleria Media",
+                sourceBadgeClass: "badge-gold",
+                titolo: it.titolo || "File Media",
+                fileName: it.fileName || it.url || "",
+                fileExt: (it.fileExt || "").toLowerCase(),
+                formato: it.formato || "Media",
+                tipo: it.tipo || "File Media",
+                categoria: it.categoria || "Archivio Media",
+                dimensione: it.dimensione || "-",
+                sizeBytes: it.sizeBytes || 0,
+                descrizione: it.descrizione || "",
+                url: it.url || "",
+                fileId: it.fileId || "",
+                thumbnailDataUrl: it.thumbnailDataUrl || "",
+                duration: it.duration || "",
+                dimensions: it.dimensions || "",
+                mediaKind: detectKind(it),
+                sortOrder: 5000 - idx,
+                originalItem: it
+            }));
+
+        // Filtra prima per Scope ("Dove cercare")
+        const scopeFiles = allGlobalFiles.filter(f => {
+            if (activeScope === "all_atelier") return true;
+            if (activeScope === "media_only") return f.sourceApp === "media";
+            return f.sourceApp === activeScope;
+        });
+
+        // Contatori per tipo sul perimetro attivo
         let imgCount = 0, audioCount = 0, videoCount = 0, otherCount = 0;
-        allItems.forEach(it => {
+        scopeFiles.forEach(it => {
             const k = detectKind(it);
             if (k === "image") imgCount++;
             else if (k === "audio") audioCount++;
@@ -1378,15 +1418,42 @@ window.AppModules = {
             else otherCount++;
         });
 
-        const filteredItems = allItems.filter(item => {
+        // Contatori per sorgente
+        const countBySource = {
+            all_atelier: allGlobalFiles.length,
+            media_only: allGlobalFiles.filter(f => f.sourceApp === "media").length,
+            biblioteca: allGlobalFiles.filter(f => f.sourceApp === "biblioteca").length,
+            certificati: allGlobalFiles.filter(f => f.sourceApp === "certificati").length,
+            social: allGlobalFiles.filter(f => f.sourceApp === "social").length,
+            "3d_models": allGlobalFiles.filter(f => f.sourceApp === "3d_models").length
+        };
+
+        // Applica filtri (Tipo + Estensione/Formato + Categoria + Testo libero)
+        const filteredItems = scopeFiles.filter(item => {
             const k = detectKind(item);
             if (activeFilter !== "all" && k !== activeFilter) return false;
             if (activeCatFilter !== "all" && (item.categoria || "") !== activeCatFilter) return false;
+            if (activeExtGroup !== "all" && typeof window.matchesMediaExtGroup === "function") {
+                if (!window.matchesMediaExtGroup(item, activeExtGroup)) return false;
+            }
             if (searchQ) {
-                const hay = `${item.titolo || ""} ${item.descrizione || ""} ${item.tipo || ""} ${item.formato || ""} ${item.categoria || ""} ${item.fileName || ""}`.toLowerCase();
-                if (!hay.includes(searchQ)) return false;
+                const hay = `${item.titolo || ""} ${item.fileName || ""} ${item.fileExt || ""} ${item.descrizione || ""} ${item.tipo || ""} ${item.formato || ""} ${item.categoria || ""} ${item.sourceLabel || ""} ${item.dimensione || ""}`.toLowerCase();
+                const tokens = searchQ.split(/\s+/).filter(Boolean);
+                for (const tok of tokens) {
+                    if (!hay.includes(tok)) return false;
+                }
             }
             return true;
+        });
+
+        // Ordina risultati
+        filteredItems.sort((a, b) => {
+            if (activeSortBy === "name_asc") return (a.titolo || "").localeCompare(b.titolo || "", "it");
+            if (activeSortBy === "name_desc") return (b.titolo || "").localeCompare(a.titolo || "", "it");
+            if (activeSortBy === "size_desc") return (b.sizeBytes || 0) - (a.sizeBytes || 0);
+            if (activeSortBy === "size_asc") return (a.sizeBytes || 0) - (b.sizeBytes || 0);
+            if (activeSortBy === "format") return (a.formato || "").localeCompare(b.formato || "", "it");
+            return (b.sortOrder || 0) - (a.sortOrder || 0);
         });
 
         const categories = Array.from(new Set([
@@ -1394,15 +1461,23 @@ window.AppModules = {
             "Test Acustici",
             "Lavorazione Atelier",
             "Certificati & Foto Ufficiali",
-            "Modelli 3D & Rilievi CAD",
-            "Video & Documentari",
-            ...allItems.map(i => i.categoria).filter(Boolean)
+            "Modelli 3D & CAD",
+            "Disegni e Modelli",
+            "Tecnica Costruttiva",
+            ...allGlobalFiles.map(i => i.categoria).filter(Boolean)
         ]));
+
+        const hasActiveSearchFilters = (
+            activeFilter !== "all" ||
+            activeCatFilter !== "all" ||
+            activeExtGroup !== "all" ||
+            Boolean(searchQ)
+        );
 
         container.innerHTML = `
             <!-- Top KPI Summary Cards -->
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:1rem; margin-bottom:1.25rem;">
-                <div class="glass-panel" onclick="window.setMediaTypeFilter('image')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-emerald);">
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('image')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-emerald); ${activeFilter === 'image' ? 'box-shadow:0 0 0 1px var(--accent-emerald);' : ''}">
                     <div style="width:44px; height:44px; border-radius:12px; background:rgba(16, 185, 129, 0.16); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="image"></i>
                     </div>
@@ -1413,7 +1488,7 @@ window.AppModules = {
                     </div>
                 </div>
 
-                <div class="glass-panel" onclick="window.setMediaTypeFilter('audio')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-gold);">
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('audio')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-gold); ${activeFilter === 'audio' ? 'box-shadow:0 0 0 1px var(--accent-gold);' : ''}">
                     <div style="width:44px; height:44px; border-radius:12px; background:rgba(245, 158, 11, 0.16); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="music"></i>
                     </div>
@@ -1424,7 +1499,7 @@ window.AppModules = {
                     </div>
                 </div>
 
-                <div class="glass-panel" onclick="window.setMediaTypeFilter('video')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid #f43f5e;">
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('video')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid #f43f5e; ${activeFilter === 'video' ? 'box-shadow:0 0 0 1px #f43f5e;' : ''}">
                     <div style="width:44px; height:44px; border-radius:12px; background:rgba(244, 63, 94, 0.16); color:#fb7185; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="video"></i>
                     </div>
@@ -1435,117 +1510,315 @@ window.AppModules = {
                     </div>
                 </div>
 
-                <div class="glass-panel" onclick="window.setMediaTypeFilter('other')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-cyan);">
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('other')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-cyan); ${activeFilter === 'other' ? 'box-shadow:0 0 0 1px var(--accent-cyan);' : ''}">
                     <div style="width:44px; height:44px; border-radius:12px; background:rgba(6, 182, 212, 0.16); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="box"></i>
                     </div>
                     <div>
-                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">3D, CAD, CT-Scan & Altri</div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">3D, CAD, PDF, Ebook & Altri</div>
                         <div style="font-size:1.4rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${otherCount}</div>
-                        <div style="font-size:0.7rem; color:var(--text-muted);">OBJ • STL • GLB • DXF • PDF • DICOM</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">OBJ • STL • GLB • DXF • PDF • EPUB</div>
                     </div>
                 </div>
             </div>
 
             <!-- Universal Drag & Drop + Multi-Format Upload Banner -->
-            <div id="mediaPageDropzone" class="glass-panel" style="margin-bottom:1.4rem; background:linear-gradient(135deg, rgba(168, 85, 247, 0.11), rgba(59, 130, 246, 0.08)); border:1.5px dashed rgba(168, 85, 247, 0.55); padding:1.35rem 1.55rem; transition:all 0.2s;">
+            <div id="mediaPageDropzone" class="glass-panel" style="margin-bottom:1.25rem; background:linear-gradient(135deg, rgba(168, 85, 247, 0.11), rgba(59, 130, 246, 0.08)); border:1.5px dashed rgba(168, 85, 247, 0.55); padding:1.25rem 1.5rem; transition:all 0.2s;">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.1rem;">
                     <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:260px;">
-                        <div style="width:54px; height:54px; border-radius:14px; background:rgba(168, 85, 247, 0.22); border:1px solid #c084fc; color:#e9d5ff; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                            <i data-lucide="upload-cloud" style="width:28px; height:28px;"></i>
+                        <div style="width:52px; height:52px; border-radius:14px; background:rgba(168, 85, 247, 0.22); border:1px solid #c084fc; color:#e9d5ff; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="upload-cloud" style="width:26px; height:26px;"></i>
                         </div>
                         <div>
-                            <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.12rem; margin-bottom:0.2rem;">
+                            <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.08rem; margin-bottom:0.2rem;">
                                 Caricamento Universale File Media (Immagini, Audio, Video, 3D, CAD, Documenti)
                             </h3>
-                            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
-                                Trascina qui qualsiasi file multimediale o scegli una categoria qui a fianco: supporta <strong>tutti i formati di Immagini, Audio lossless/compressi, Video 4K/HD, Modelli 3D (.obj, .stl, .glb), CAD e Rilievi</strong> anche di grandi dimensioni.
+                            <p style="font-size:0.81rem; color:var(--text-secondary); margin:0;">
+                                Trascina qui qualsiasi file multimediale o scegli una categoria qui a fianco: supporta <strong>tutti i formati di Immagini, Audio lossless/compressi, Video 4K/HD, Modelli 3D (.obj, .stl, .glb), CAD e Rilievi</strong>.
                             </p>
                         </div>
                     </div>
 
                     <div style="display:flex; gap:0.55rem; flex-wrap:wrap; align-items:center;">
-                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem; background:linear-gradient(135deg, #10b981, #059669); border-color:#34d399; color:#fff;">
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.55rem 0.9rem; font-size:0.81rem; background:linear-gradient(135deg, #10b981, #059669); border-color:#34d399; color:#fff;">
                             <i data-lucide="image"></i> 📷 Immagini
                             <input type="file" accept="image/*,.heic,.heif,.raw,.cr2,.nef,.arw,.dng,.tiff,.tif,.bmp,.svg,.webp,.avif" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
                         </label>
-                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem;">
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.55rem 0.9rem; font-size:0.81rem;">
                             <i data-lucide="music"></i> 🎵 Audio
                             <input type="file" accept="audio/*,.mp3,.wav,.flac,.ogg,.aac,.m4a,.opus,.aiff,.aif,.wma,.alac,.mid,.midi" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
                         </label>
-                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem; background:linear-gradient(135deg, #e11d48, #be123c); border-color:#fb7185; color:#fff;">
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.55rem 0.9rem; font-size:0.81rem; background:linear-gradient(135deg, #e11d48, #be123c); border-color:#fb7185; color:#fff;">
                             <i data-lucide="video"></i> 🎬 Video
                             <input type="file" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.mpeg,.mpg,.3gp,.ogv" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
                         </label>
-                        <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.58rem 1rem; font-size:0.82rem; border-color:#c084fc; color:#fff; background:rgba(168, 85, 247, 0.18);">
+                        <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.55rem 0.95rem; font-size:0.81rem; border-color:#c084fc; color:#fff; background:rgba(168, 85, 247, 0.18);">
                             <i data-lucide="folder-up"></i> 📁 Tutti i File (3D, CAD, ecc.)
                             <input type="file" accept="*/*" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
                         </label>
                     </div>
                 </div>
+
+                <!-- Live Upload Progress Box on Page -->
+                <div id="mediaPageUploadProgressBox" style="display:none; margin-top:0.9rem; background:rgba(212, 163, 89, 0.14); border:1px solid var(--accent-gold); border-radius:10px; padding:0.7rem 1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; margin-bottom:0.35rem;">
+                        <span id="mediaPageUploadStatusText" style="color:#fff; font-weight:600;">Caricamento file in corso...</span>
+                        <strong id="mediaPageUploadPercentText" style="color:var(--accent-gold); font-family:var(--font-mono);">0%</strong>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="mediaPageUploadProgressBar" class="progress-bar-fill" style="width:0%; background:linear-gradient(90deg, var(--accent-gold), var(--accent-emerald));"></div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Main Media Library Panel -->
-            <div class="glass-panel">
-                <div class="panel-header" style="flex-wrap:wrap; gap:1rem;">
-                    <div class="panel-title">
-                        <i data-lucide="image" class="lucide-image" style="color: var(--accent-purple);"></i>
-                        Media Library & Archivio Acustico / Fotografico / Video (${filteredItems.length})
+            <!-- =================================================================== -->
+            <!-- SEZIONE DEDICATA: MOTORE DI RICERCA GLOBALE FRA TUTTI I FILE        -->
+            <!-- =================================================================== -->
+            <div class="glass-panel" style="margin-bottom:1.35rem; padding:1.3rem 1.5rem; border:1px solid rgba(212, 163, 89, 0.38); background:linear-gradient(135deg, rgba(16, 22, 34, 0.96), rgba(11, 15, 24, 0.98));">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem; margin-bottom:1rem;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div style="width:42px; height:42px; border-radius:11px; background:rgba(212, 163, 89, 0.18); border:1px solid rgba(212, 163, 89, 0.45); color:var(--accent-gold); display:flex; align-items:center; justify-content:center;">
+                            <i data-lucide="search" style="width:21px; height:21px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin:0; font-size:1.05rem; color:#fff; font-family:var(--font-heading);">
+                                Ricerca Globale & Esplorazione fra Tutti i File (${filteredItems.length} di ${scopeFiles.length} file)
+                            </h3>
+                            <p style="margin:0; font-size:0.77rem; color:var(--text-secondary);">
+                                Cerca istantaneamente per nome file, estensione (<code>.flac</code>, <code>.wav</code>, <code>.mp3</code>, <code>.mp4</code>, <code>.jpg</code>, <code>.obj</code>, <code>.pdf</code>), strumento, categoria o note tecniche in tutto il Gestionale.
+                            </p>
+                        </div>
                     </div>
-                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
-                        <button class="btn btn-primary" onclick="window.openAddModal('media')">
-                            <i data-lucide="upload" class="lucide-upload"></i> + Carica & Cataloga Media
-                        </button>
+
+                    <div style="display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap;">
+                        ${hasActiveSearchFilters ? `
+                            <button type="button" class="btn btn-secondary" style="padding:0.42rem 0.8rem; font-size:0.77rem; border-color:rgba(244,63,94,0.45); color:#fda4af;" onclick="window.resetAllMediaSearchFilters()">
+                                <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i> Azzera Filtri
+                            </button>
+                        ` : ""}
+                        <div style="display:flex; background:rgba(0,0,0,0.38); border:1px solid rgba(255,255,255,0.1); border-radius:9px; padding:2px;">
+                            <button type="button" class="btn ${activeViewMode === 'grid' ? 'btn-primary' : 'btn-secondary'}" style="padding:0.35rem 0.7rem; font-size:0.76rem; border:none; border-radius:7px;" onclick="window.setMediaViewMode('grid')" title="Vista Griglia Card">
+                                <i data-lucide="layout-grid" style="width:14px; height:14px;"></i> Griglia
+                            </button>
+                            <button type="button" class="btn ${activeViewMode === 'table' ? 'btn-primary' : 'btn-secondary'}" style="padding:0.35rem 0.7rem; font-size:0.76rem; border:none; border-radius:7px;" onclick="window.setMediaViewMode('table')" title="Vista Tabella / Elenco Dettagliato File">
+                                <i data-lucide="list" style="width:14px; height:14px;"></i> Elenco File
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Filter Bar (Type + Category + Search) -->
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1.35rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.07);">
-                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <!-- 1. Scelta Ambito di Ricerca (Tutti i File del Gestionale vs singolo modulo) -->
+                <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-bottom:0.95rem; padding-bottom:0.85rem; border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <span style="font-size:0.74rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; display:flex; align-items:center; margin-right:0.25rem;">
+                        Dove cercare:
+                    </span>
+                    ${[
+                        { id: "all_atelier", label: `🌐 Tutti i File dell'Atelier (${countBySource.all_atelier})` },
+                        { id: "media_only", label: `🎬 Galleria Media (${countBySource.media_only})` },
+                        { id: "biblioteca", label: `📚 Biblioteca PDF/Ebook (${countBySource.biblioteca})` },
+                        { id: "certificati", label: `🏅 Foto Certificati (${countBySource.certificati})` },
+                        { id: "social", label: `📱 Social Studio (${countBySource.social})` },
+                        { id: "3d_models", label: `🎻 Modelli 3D .OBJ (${countBySource["3d_models"]})` }
+                    ].map(sc => `
+                        <button type="button" class="btn ${activeScope === sc.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.32rem 0.75rem; font-size:0.76rem; border-radius:18px;" onclick="window.setMediaScopeFilter('${sc.id}')">
+                            ${sc.label}
+                        </button>
+                    `).join("")}
+                </div>
+
+                <!-- 2. Barra di Ricerca Principale + Filtri Formato / Categoria / Ordinamento -->
+                <div style="display:grid; grid-template-columns:minmax(260px, 2fr) repeat(auto-fit, minmax(175px, 1fr)); gap:0.75rem; align-items:center; margin-bottom:0.85rem;">
+                    <!-- Input di ricerca grande -->
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <i data-lucide="search" style="position:absolute; left:12px; width:17px; height:17px; color:var(--accent-gold); pointer-events:none;"></i>
+                        <input
+                            type="text"
+                            id="mediaSearchInput"
+                            class="form-control"
+                            placeholder="Cerca fra tutti i file per nome, titolo, estensione (.mp3, .flac, .mp4, .jpg, .obj, .pdf), strumento..."
+                            value="${(window.mediaSearchQuery || '').replace(/"/g, '&quot;')}"
+                            oninput="window.setMediaSearchQuery(this.value)"
+                            style="width:100%; padding:0.6rem 2.2rem 0.6rem 2.35rem; font-size:0.86rem; border-radius:10px; border-color:rgba(212, 163, 89, 0.45); background:rgba(0,0,0,0.42); color:#fff;"
+                        >
+                        ${window.mediaSearchQuery ? `
+                            <button type="button" onclick="window.setMediaSearchQuery('')" title="Cancella testo" style="position:absolute; right:8px; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem; padding:2px 6px;">&times;</button>
+                        ` : ""}
+                    </div>
+
+                    <!-- Filtro per Estensione / Famiglia Formato -->
+                    <select class="form-control" style="padding:0.56rem 0.75rem; font-size:0.82rem; border-radius:10px;" onchange="window.setMediaExtGroupFilter(this.value)">
+                        <option value="all" ${activeExtGroup === "all" ? "selected" : ""}>📂 Tutti i Formati & Estensioni</option>
+                        <option value="img_std" ${activeExtGroup === "img_std" ? "selected" : ""}>📷 Immagini (JPG, PNG, WEBP, AVIF)</option>
+                        <option value="img_raw" ${activeExtGroup === "img_raw" ? "selected" : ""}>🎞️ RAW, TIFF & Vettoriali (RAW, TIFF, SVG)</option>
+                        <option value="aud_lossless" ${activeExtGroup === "aud_lossless" ? "selected" : ""}>🎵 Audio Lossless (FLAC, WAV, AIFF)</option>
+                        <option value="aud_comp" ${activeExtGroup === "aud_comp" ? "selected" : ""}>🎧 Audio (MP3, M4A, AAC, OGG)</option>
+                        <option value="vid_all" ${activeExtGroup === "vid_all" ? "selected" : ""}>🎬 Video 4K / HD (MP4, MOV, WEBM, MKV)</option>
+                        <option value="3d_cad" ${activeExtGroup === "3d_cad" ? "selected" : ""}>🧊 3D, CAD & CT-Scan (OBJ, STL, GLB, DXF)</option>
+                        <option value="doc_ebook" ${activeExtGroup === "doc_ebook" ? "selected" : ""}>📄 PDF & Ebook (PDF, EPUB, MOBI, DOCX)</option>
+                    </select>
+
+                    <!-- Filtro per Categoria -->
+                    <select class="form-control" style="padding:0.56rem 0.75rem; font-size:0.82rem; border-radius:10px;" onchange="window.setMediaCategoryFilter(this.value)">
+                        <option value="all" ${activeCatFilter === "all" ? "selected" : ""}>🏷️ Tutte le Categorie</option>
+                        ${categories.map(c => `<option value="${c}" ${activeCatFilter === c ? "selected" : ""}>${c}</option>`).join("")}
+                    </select>
+
+                    <!-- Ordinamento -->
+                    <select class="form-control" style="padding:0.56rem 0.75rem; font-size:0.82rem; border-radius:10px;" onchange="window.setMediaSortBy(this.value)">
+                        <option value="recent" ${activeSortBy === "recent" ? "selected" : ""}>🕒 Ordina: Più recenti</option>
+                        <option value="name_asc" ${activeSortBy === "name_asc" ? "selected" : ""}>🔤 Nome / Titolo (A → Z)</option>
+                        <option value="name_desc" ${activeSortBy === "name_desc" ? "selected" : ""}>🔤 Nome / Titolo (Z → A)</option>
+                        <option value="size_desc" ${activeSortBy === "size_desc" ? "selected" : ""}>💾 Dimensione (dal più grande)</option>
+                        <option value="size_asc" ${activeSortBy === "size_asc" ? "selected" : ""}>💾 Dimensione (dal più piccolo)</option>
+                        <option value="format" ${activeSortBy === "format" ? "selected" : ""}>📄 Formato / Estensione</option>
+                    </select>
+                </div>
+
+                <!-- 3. Tag Rapidi & Filtri Tipo -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+                    <div style="display:flex; gap:0.38rem; flex-wrap:wrap;">
                         ${[
-                            { id: "all", label: `Tutti (${allItems.length})`, icon: "layers" },
+                            { id: "all", label: `Tutti (${scopeFiles.length})`, icon: "layers" },
                             { id: "image", label: `Immagini (${imgCount})`, icon: "image" },
                             { id: "audio", label: `Audio (${audioCount})`, icon: "music" },
                             { id: "video", label: `Video (${videoCount})`, icon: "video" },
-                            { id: "other", label: `3D / CAD / Altri (${otherCount})`, icon: "box" }
+                            { id: "other", label: `3D / PDF / Altri (${otherCount})`, icon: "box" }
                         ].map(t => `
-                            <button type="button" class="btn ${activeFilter === t.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.38rem 0.82rem; font-size:0.78rem; border-radius:20px;" onclick="window.setMediaTypeFilter('${t.id}')">
-                                <i data-lucide="${t.icon}"></i> ${t.label}
+                            <button type="button" class="btn ${activeFilter === t.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.32rem 0.72rem; font-size:0.75rem; border-radius:18px;" onclick="window.setMediaTypeFilter('${t.id}')">
+                                <i data-lucide="${t.icon}" style="width:13px; height:13px;"></i> ${t.label}
                             </button>
                         `).join("")}
                     </div>
 
-                    <div style="display:flex; gap:0.55rem; align-items:center; flex-wrap:wrap;">
-                        <input type="text" id="mediaSearchInput" class="form-control" placeholder="Cerca titolo, formato, note..." value="${(window.mediaSearchQuery || '').replace(/"/g, '&quot;')}" oninput="window.setMediaSearchQuery(this.value)" style="width:210px; padding:0.36rem 0.75rem; font-size:0.8rem; border-radius:20px;">
-                        <select class="form-control" style="width:auto; padding:0.36rem 0.75rem; font-size:0.8rem;" onchange="window.setMediaCategoryFilter(this.value)">
-                            <option value="all" ${activeCatFilter === "all" ? "selected" : ""}>Tutte le Categorie</option>
-                            ${categories.map(c => `<option value="${c}" ${activeCatFilter === c ? "selected" : ""}>${c}</option>`).join("")}
-                        </select>
+                    <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+                        <span style="font-size:0.72rem; color:var(--text-muted);">Ricerche rapide:</span>
+                        ${["FLAC", "WAV", "MP3", "MP4", "4K", "JPG", "OBJ", "PDF", "Violino", "Viola", "Violoncello", "Stradivari"].map(tag => {
+                            const isTagActive = searchQ === tag.toLowerCase();
+                            return `
+                                <button type="button" onclick="window.applyMediaQuickSearchTag('${isTagActive ? '' : tag}')" style="background:${isTagActive ? 'var(--accent-gold)' : 'rgba(255,255,255,0.05)'}; color:${isTagActive ? '#090d16' : 'var(--text-secondary)'}; border:1px solid ${isTagActive ? 'var(--accent-gold)' : 'rgba(255,255,255,0.1)'}; border-radius:14px; padding:2px 9px; font-size:0.71rem; font-weight:600; cursor:pointer; transition:all 0.15s;">
+                                    #${tag}
+                                </button>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Media Library & Search Results Panel -->
+            <div class="glass-panel">
+                <div class="panel-header" style="flex-wrap:wrap; gap:1rem;">
+                    <div class="panel-title">
+                        <i data-lucide="folder-search" style="color: var(--accent-gold);"></i>
+                        Risultati Archivio File (${filteredItems.length} ${filteredItems.length === 1 ? 'file trovato' : 'file trovati'})
+                    </div>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="window.openAddModal('media')">
+                            <i data-lucide="upload" class="lucide-upload"></i> + Carica & Cataloga Nuovo Media
+                        </button>
                     </div>
                 </div>
 
                 ${filteredItems.length === 0 ? `
                     <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
-                        <i data-lucide="folder-open" style="width:46px; height:46px; color:var(--accent-purple); margin-bottom:0.7rem;"></i>
-                        <h4 style="color:#fff; margin-bottom:0.35rem;">Nessun file multimediale trovato con i filtri selezionati</h4>
-                        <p style="font-size:0.84rem; margin-bottom:1.1rem;">Carica foto, registrazioni audio, video o modelli 3D utilizzando i pulsanti qui sopra.</p>
-                        <button class="btn btn-primary" onclick="window.setMediaTypeFilter('all'); window.setMediaCategoryFilter('all'); window.openAddModal('media');">
-                            <i data-lucide="upload"></i> Carica Nuovo File Media
-                        </button>
+                        <i data-lucide="file-search" style="width:46px; height:46px; color:var(--accent-gold); margin-bottom:0.7rem;"></i>
+                        <h4 style="color:#fff; margin-bottom:0.35rem;">Nessun file corrisponde ai criteri di ricerca</h4>
+                        <p style="font-size:0.84rem; margin-bottom:1.1rem;">Prova a cercare in <strong>Tutti i File dell'Atelier</strong> o ad azzerare i filtri attivi.</p>
+                        <div style="display:flex; justify-content:center; gap:0.6rem; flex-wrap:wrap;">
+                            <button class="btn btn-secondary" onclick="window.resetAllMediaSearchFilters()">
+                                <i data-lucide="rotate-ccw"></i> Mostra Tutti i File (${allGlobalFiles.length})
+                            </button>
+                            <button class="btn btn-primary" onclick="window.openAddModal('media')">
+                                <i data-lucide="upload"></i> Carica Nuovo File Media
+                            </button>
+                        </div>
+                    </div>
+                ` : activeViewMode === "table" ? `
+                    <!-- VISTA TABELLA / ESPLORATORE FILE DETTAGLIATO -->
+                    <div class="table-container" style="overflow-x:auto;">
+                        <table class="data-table" style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="width:64px;">Tipo</th>
+                                    <th>Nome File & Titolo</th>
+                                    <th>Modulo Origine</th>
+                                    <th>Formato / Estensione</th>
+                                    <th>Categoria</th>
+                                    <th>Dimensione / Durata</th>
+                                    <th style="text-align:right;">Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredItems.map(item => {
+                                    const kind = detectKind(item);
+                                    const extBadge = (item.fileExt || item.formato || kind).toString().replace(".", "").toUpperCase().slice(0, 10);
+                                    const safeTitle = (item.titolo || "Media").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                                    const isMediaNative = item.sourceApp === "media";
+                                    return `
+                                        <tr style="cursor:pointer;" onclick="window.openUnifiedFileItem('${item.uid}')">
+                                            <td>
+                                                <div style="width:44px; height:36px; border-radius:8px; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; color:var(--accent-gold); overflow:hidden;">
+                                                    ${kind === "image" && (item.thumbnailDataUrl || item.url) ? `
+                                                        <img ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} src="${item.thumbnailDataUrl || item.url}" onerror="this.style.display='none'" style="width:100%; height:100%; object-fit:cover;">
+                                                    ` : kind === "audio" ? "🎵 AUD" : kind === "video" ? "🎬 VID" : extBadge.slice(0, 5)}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:700; color:#fff; font-size:0.88rem;">${item.titolo}</div>
+                                                <div style="font-size:0.74rem; color:var(--text-muted); font-family:var(--font-mono);">
+                                                    ${item.fileName ? `📄 ${item.fileName} • ` : ""}${(item.descrizione || "").slice(0, 80)}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge ${item.sourceBadgeClass || 'badge-info'}" style="font-size:0.7rem;">
+                                                    ${item.sourceLabel || 'Media'}
+                                                </span>
+                                            </td>
+                                            <td style="font-family:var(--font-mono); font-size:0.78rem; color:#e2e8f0;">
+                                                ${item.formato || extBadge}
+                                            </td>
+                                            <td style="font-size:0.8rem; color:var(--text-secondary);">
+                                                ${item.categoria || "-"}
+                                            </td>
+                                            <td style="font-family:var(--font-mono); font-size:0.79rem; color:var(--accent-gold);">
+                                                ${item.dimensione || "-"}${item.duration ? ` • ${item.duration}` : ""}
+                                            </td>
+                                            <td style="text-align:right; white-space:nowrap;" onclick="event.stopPropagation();">
+                                                <button class="btn btn-primary" style="padding:0.28rem 0.6rem; font-size:0.73rem;" onclick="window.openUnifiedFileItem('${item.uid}')">
+                                                    <i data-lucide="${kind === 'audio' || kind === 'video' ? 'play' : 'eye'}"></i> Apri
+                                                </button>
+                                                <button class="btn btn-secondary" style="padding:0.28rem 0.52rem; font-size:0.73rem;" onclick="window.downloadUnifiedFileItem('${item.uid}')" title="Scarica file">
+                                                    <i data-lucide="download"></i>
+                                                </button>
+                                                ${isMediaNative ? `
+                                                    <button class="btn btn-secondary" style="padding:0.28rem 0.52rem; font-size:0.73rem;" onclick="window.openEditMediaModal('${item.rawId}')" title="Modifica">
+                                                        <i data-lucide="edit-3"></i>
+                                                    </button>
+                                                    <button class="btn btn-secondary" style="padding:0.28rem 0.52rem; font-size:0.73rem; color:#ef4444;" onclick="window.deleteMediaItem('${item.rawId}', '${safeTitle}')" title="Elimina">
+                                                        <i data-lucide="trash-2"></i>
+                                                    </button>
+                                                ` : ""}
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join("")}
+                            </tbody>
+                        </table>
                     </div>
                 ` : `
+                    <!-- VISTA GRIGLIA MULTIMEDIALE -->
                     <div class="cards-subgrid">
                         ${filteredItems.map(item => {
                             const kind = detectKind(item);
                             const extBadge = (item.fileExt || item.formato || kind).toString().replace(".", "").toUpperCase().slice(0, 12);
                             const safeTitle = (item.titolo || "Media").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                             const mediaUrl = item.thumbnailDataUrl || item.url || "";
+                            const isMediaNative = item.sourceApp === "media";
 
                             return `
                                 <div class="info-card" style="display:flex; flex-direction:column; justify-content:space-between;">
                                     <div>
                                         <!-- Media Preview Box -->
-                                        <div onclick="window.openMediaViewerModal('${item.id}')" style="height:175px; background:linear-gradient(135deg, #0d1119, #182032); border-radius:10px; margin-bottom:0.85rem; overflow:hidden; position:relative; cursor:pointer; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.07);">
+                                        <div onclick="window.openUnifiedFileItem('${item.uid}')" style="height:175px; background:linear-gradient(135deg, #0d1119, #182032); border-radius:10px; margin-bottom:0.85rem; overflow:hidden; position:relative; cursor:pointer; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.07);">
                                             ${kind === "image" ? `
                                                 <img ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} src="${mediaUrl || './assets/lutherie_banner.png'}" alt="${safeTitle}" onerror="this.src='./assets/lutherie_banner.png'" style="width:100%; height:100%; object-fit:cover; transition:transform 0.3s ease;">
                                             ` : kind === "video" ? `
@@ -1561,33 +1834,35 @@ window.AppModules = {
                                                 </div>
                                             ` : kind === "audio" ? `
                                                 <div style="width:100%; height:100%; padding:1rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.55rem; background:radial-gradient(circle at center, rgba(245, 158, 11, 0.16), rgba(13, 17, 25, 0.95));" onclick="event.stopPropagation();">
-                                                    <div onclick="window.openMediaViewerModal('${item.id}')" style="display:flex; align-items:center; gap:0.55rem; color:var(--accent-gold); cursor:pointer;">
+                                                    <div onclick="window.openUnifiedFileItem('${item.uid}')" style="display:flex; align-items:center; gap:0.55rem; color:var(--accent-gold); cursor:pointer;">
                                                         <i data-lucide="headphones" style="width:28px; height:28px;"></i>
                                                         <span style="font-size:0.8rem; font-weight:700; color:#fff;">Traccia Audio ${item.duration ? `(${item.duration})` : ""}</span>
                                                     </div>
                                                     <audio ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} ${item.url ? `src="${item.url}"` : ""} controls preload="metadata" style="width:92%; height:36px;"></audio>
                                                 </div>
                                             ` : `
-                                                <div style="text-align:center; padding:1rem;">
-                                                    <div style="width:54px; height:54px; border-radius:14px; background:rgba(6, 182, 212, 0.16); border:1px solid rgba(6, 182, 212, 0.4); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto; font-weight:800; font-size:0.85rem;">
+                                                ${item.thumbnailDataUrl ? `
+                                                    <img src="${item.thumbnailDataUrl}" alt="${safeTitle}" style="width:100%; height:100%; object-fit:cover; opacity:0.45; position:absolute; inset:0;">
+                                                ` : ""}
+                                                <div style="text-align:center; padding:1rem; position:relative; z-index:1;">
+                                                    <div style="width:54px; height:54px; border-radius:14px; background:rgba(6, 182, 212, 0.22); border:1px solid rgba(6, 182, 212, 0.55); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto; font-weight:800; font-size:0.85rem; backdrop-filter:blur(4px);">
                                                         ${extBadge.slice(0, 5)}
                                                     </div>
-                                                    <div style="font-size:0.78rem; color:#e2e8f0; font-weight:600;">${item.fileName || item.formato || "File Tecnico / 3D"}</div>
+                                                    <div style="font-size:0.78rem; color:#fff; font-weight:700; text-shadow:0 1px 4px rgba(0,0,0,0.8);">${item.fileName || item.formato || "File Tecnico / 3D"}</div>
                                                 </div>
                                             `}
 
                                             <span class="badge ${kind === 'video' ? 'badge-danger' : kind === 'audio' ? 'badge-warning' : kind === 'image' ? 'badge-success' : 'badge-info'}" style="position:absolute; top:8px; right:8px; box-shadow:0 2px 8px rgba(0,0,0,0.5);">
                                                 ${item.tipo || extBadge}
                                             </span>
-                                            ${item.categoria ? `
-                                                <span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.72); color:#e2e8f0; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px;">
-                                                    ${item.categoria}
-                                                </span>
-                                            ` : ""}
+                                            <span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.78); color:#e2e8f0; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.12);">
+                                                ${item.sourceApp !== 'media' ? `📌 ${item.sourceLabel}` : (item.categoria || 'Galleria Media')}
+                                            </span>
                                         </div>
 
-                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.02rem; margin-bottom:0.35rem; line-height:1.35;">${item.titolo}</h4>
-                                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.75rem;">${item.descrizione || ""}</p>
+                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.01rem; margin-bottom:0.28rem; line-height:1.35;">${item.titolo}</h4>
+                                        ${item.fileName ? `<div style="font-size:0.72rem; color:var(--accent-cyan); font-family:var(--font-mono); margin-bottom:0.35rem; word-break:break-all;">📄 ${item.fileName}</div>` : ""}
+                                        <p style="font-size:0.79rem; color:var(--text-secondary); margin-bottom:0.75rem;">${item.descrizione || ""}</p>
                                     </div>
 
                                     <div>
@@ -1597,19 +1872,25 @@ window.AppModules = {
                                         </div>
                                         <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.65rem; gap:0.35rem; flex-wrap:wrap;">
                                             <div style="display:flex; gap:0.35rem;">
-                                                <button class="btn btn-primary" style="padding:0.28rem 0.65rem; font-size:0.74rem;" onclick="window.openMediaViewerModal('${item.id}')">
+                                                <button class="btn btn-primary" style="padding:0.28rem 0.65rem; font-size:0.74rem;" onclick="window.openUnifiedFileItem('${item.uid}')">
                                                     <i data-lucide="${kind === 'audio' || kind === 'video' ? 'play-circle' : 'maximize-2'}"></i> ${kind === 'audio' || kind === 'video' ? 'Player' : 'Apri'}
                                                 </button>
-                                                <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.openEditMediaModal('${item.id}')" title="Modifica scheda o sostituisci file">
-                                                    <i data-lucide="edit-3"></i>
-                                                </button>
-                                                <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.downloadMediaItem('${item.id}')" title="Scarica file originale">
+                                                ${isMediaNative ? `
+                                                    <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.openEditMediaModal('${item.rawId}')" title="Modifica scheda o sostituisci file">
+                                                        <i data-lucide="edit-3"></i>
+                                                    </button>
+                                                ` : ""}
+                                                <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.downloadUnifiedFileItem('${item.uid}')" title="Scarica file originale">
                                                     <i data-lucide="download"></i>
                                                 </button>
                                             </div>
-                                            <button class="btn btn-secondary" style="padding:0.28rem 0.5rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteMediaItem('${item.id}', '${safeTitle}')" title="Elimina media">
-                                                <i data-lucide="trash-2" class="lucide-trash-2"></i>
-                                            </button>
+                                            ${isMediaNative ? `
+                                                <button class="btn btn-secondary" style="padding:0.28rem 0.5rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteMediaItem('${item.rawId}', '${safeTitle}')" title="Elimina media">
+                                                    <i data-lucide="trash-2" class="lucide-trash-2"></i>
+                                                </button>
+                                            ` : `
+                                                <span style="font-size:0.69rem; color:var(--text-muted);">${item.sourceLabel}</span>
+                                            `}
                                         </div>
                                     </div>
                                 </div>

@@ -9474,6 +9474,10 @@ window.saveSenderToClienti = function(msgId) {
 window.mediaTypeFilter = "all";
 window.mediaCategoryFilter = "all";
 window.mediaSearchQuery = "";
+window.mediaScopeFilter = "all_atelier"; // 'all_atelier' (cerca in tutti i file del gestionale) | 'media_only' | 'biblioteca' | 'certificati' | 'social' | '3d_models'
+window.mediaExtGroupFilter = "all";      // 'all' | 'img_std' | 'img_raw' | 'aud_lossless' | 'aud_comp' | 'vid_all' | '3d_cad' | 'doc_ebook'
+window.mediaSortBy = "recent";           // 'recent' | 'name_asc' | 'name_desc' | 'size_desc' | 'size_asc' | 'format'
+window.mediaViewMode = "grid";           // 'grid' | 'table'
 window.mediaFileDraft = null;
 
 window.MEDIA_EXT_CATALOG = {
@@ -9577,6 +9581,346 @@ window.setMediaTypeFilter = function(typeId) {
 window.setMediaCategoryFilter = function(cat) {
     window.mediaCategoryFilter = cat || "all";
     window.refreshMediaModuleView();
+};
+
+window.setMediaScopeFilter = function(scope) {
+    window.mediaScopeFilter = scope || "all_atelier";
+    window.refreshMediaModuleView();
+};
+
+window.setMediaExtGroupFilter = function(extGroup) {
+    window.mediaExtGroupFilter = extGroup || "all";
+    window.refreshMediaModuleView();
+};
+
+window.setMediaSortBy = function(sortBy) {
+    window.mediaSortBy = sortBy || "recent";
+    window.refreshMediaModuleView();
+};
+
+window.setMediaViewMode = function(mode) {
+    window.mediaViewMode = mode || "grid";
+    window.refreshMediaModuleView();
+};
+
+window.applyMediaQuickSearchTag = function(tagText) {
+    window.mediaSearchQuery = tagText || "";
+    window.refreshMediaModuleView();
+};
+
+window.resetAllMediaSearchFilters = function() {
+    window.mediaTypeFilter = "all";
+    window.mediaCategoryFilter = "all";
+    window.mediaSearchQuery = "";
+    window.mediaScopeFilter = "all_atelier";
+    window.mediaExtGroupFilter = "all";
+    window.mediaSortBy = "recent";
+    window.refreshMediaModuleView();
+};
+
+window.parseEstimatedSizeBytes = function(sizeBytes, dimStr) {
+    if (sizeBytes && Number(sizeBytes) > 0) return Number(sizeBytes);
+    if (!dimStr) return 0;
+    const m = String(dimStr).replace(",", ".").match(/([\d.]+)\s*(gb|mb|kb|b)/i);
+    if (!m) return 0;
+    const val = parseFloat(m[1]) || 0;
+    const unit = m[2].toLowerCase();
+    if (unit === "gb") return val * 1024 * 1024 * 1024;
+    if (unit === "mb") return val * 1024 * 1024;
+    if (unit === "kb") return val * 1024;
+    return val;
+};
+
+window.collectAllSearchableAtelierFiles = function() {
+    const db = (window.atelierDB && window.atelierDB.data) ? window.atelierDB.data : {};
+    const unified = [];
+
+    // 1. File dalla Galleria Media
+    (db.media || []).forEach((it, idx) => {
+        const kind = window.detectMediaItemKind(it);
+        unified.push({
+            uid: `media::${it.id}`,
+            rawId: it.id,
+            sourceApp: "media",
+            sourceLabel: "Galleria Media",
+            sourceBadgeClass: "badge-gold",
+            titolo: it.titolo || "File Media",
+            fileName: it.fileName || it.url || "",
+            fileExt: (it.fileExt || "").toLowerCase(),
+            formato: it.formato || "Media",
+            tipo: it.tipo || "File Media",
+            categoria: it.categoria || "Archivio Media",
+            dimensione: it.dimensione || "-",
+            sizeBytes: window.parseEstimatedSizeBytes(it.sizeBytes, it.dimensione),
+            descrizione: it.descrizione || "",
+            url: it.url || "",
+            fileId: it.fileId || "",
+            thumbnailDataUrl: it.thumbnailDataUrl || "",
+            duration: it.duration || "",
+            dimensions: it.dimensions || "",
+            mediaKind: kind,
+            sortOrder: 5000 - idx,
+            originalItem: it
+        });
+    });
+
+    // 2. File Ebook & PDF dalla Biblioteca Digitale
+    (db.biblioteca || []).forEach((bk, idx) => {
+        const ext = (bk.fileExt || (bk.formato && bk.formato.toLowerCase().includes("epub") ? ".epub" : ".pdf")).toLowerCase();
+        unified.push({
+            uid: `bib::${bk.id}`,
+            rawId: bk.id,
+            sourceApp: "biblioteca",
+            sourceLabel: "Biblioteca Ebook/PDF",
+            sourceBadgeClass: "badge-info",
+            titolo: bk.titolo || "Volume Biblioteca",
+            fileName: bk.fileName || `${(bk.titolo || "documento").replace(/\s+/g, "_")}${ext}`,
+            fileExt: ext,
+            formato: bk.formato || "PDF / Ebook",
+            tipo: "Ebook / Trattato",
+            categoria: bk.categoria || "Biblioteca Tecnica",
+            dimensione: bk.fileSizeFormatted || (bk.pagine ? `${bk.pagine} pag.` : "PDF"),
+            sizeBytes: window.parseEstimatedSizeBytes(bk.fileSizeBytes, bk.fileSizeFormatted),
+            descrizione: `${bk.autore ? 'Autore: ' + bk.autore + ' — ' : ''}${bk.note || ''}`,
+            url: bk.fileUrl || "",
+            fileId: bk.fileId || "",
+            thumbnailDataUrl: "",
+            duration: "",
+            dimensions: bk.pagine ? `${bk.pagine} pagine` : "",
+            mediaKind: "other",
+            sortOrder: 4000 - idx,
+            originalItem: bk
+        });
+    });
+
+    // 3. Foto & Allegati dai Certificati d'Autenticità
+    (db.certificati || []).forEach((cert, idx) => {
+        const photos = Array.isArray(cert.foto) ? cert.foto : [];
+        photos.forEach((ph, pIdx) => {
+            unified.push({
+                uid: `cert::${cert.id}::${pIdx}`,
+                rawId: cert.id,
+                sourceApp: "certificati",
+                sourceLabel: "Certificati Autenticità",
+                sourceBadgeClass: "badge-success",
+                titolo: `${cert.strumento || 'Strumento'} (${cert.codice || ''}) — ${ph.label || ph.name || 'Foto Ufficiale'}`,
+                fileName: ph.name || `Certificato_${cert.codice}_${pIdx + 1}.jpg`,
+                fileExt: ".jpg",
+                formato: "Foto Certificato HD",
+                tipo: "Foto Ufficiale Certificato",
+                categoria: "Certificati & Foto Ufficiali",
+                dimensione: ph.sizeFormatted || "HD",
+                sizeBytes: ph.sizeBytes || 2500000,
+                descrizione: `Certificato ${cert.codice || ''} • Modello: ${cert.modello || ''} • Cliente: ${cert.cliente || ''}`,
+                url: ph.dataUrl || "",
+                fileId: "",
+                thumbnailDataUrl: ph.dataUrl || "",
+                duration: "",
+                dimensions: "",
+                mediaKind: "image",
+                sortOrder: 3000 - idx,
+                originalItem: cert
+            });
+        });
+    });
+
+    // 4. Foto & Video da Social Media Studio
+    (db.social || []).forEach((post, idx) => {
+        const mFiles = Array.isArray(post.mediaFiles) && post.mediaFiles.length > 0
+            ? post.mediaFiles
+            : [{
+                id: post.id,
+                name: `${(post.titolo || "post_social").replace(/\s+/g, "_")}.${(post.tipoMedia || "").toLowerCase().includes("video") ? "mp4" : "jpg"}`,
+                type: (post.tipoMedia || "").toLowerCase().includes("video") ? "video/mp4" : "image/jpeg",
+                sizeFormatted: post.dimensioneTotale || "HD",
+                sizeBytes: window.parseEstimatedSizeBytes(0, post.dimensioneTotale),
+                thumbnailDataUrl: ""
+            }];
+
+        mFiles.forEach((mf, mIdx) => {
+            const isVid = (mf.type || "").startsWith("video/") || (post.tipoMedia || "").toLowerCase().includes("video") || (post.tipoMedia || "").toLowerCase().includes("reel");
+            unified.push({
+                uid: `social::${post.id}::${mIdx}`,
+                rawId: post.id,
+                sourceApp: "social",
+                sourceLabel: "Social Media Studio",
+                sourceBadgeClass: "badge-warning",
+                titolo: `${post.titolo || 'Post Social'} (${post.piattaforma || 'Social'})`,
+                fileName: mf.name || post.titolo || "Media Social",
+                fileExt: isVid ? ".mp4" : ".jpg",
+                formato: post.formatoFile || (isVid ? "Video Social / Reel" : "Foto Social HD"),
+                tipo: post.tipoMedia || (isVid ? "Video 4K" : "Foto High-Res"),
+                categoria: "Lavorazione Atelier",
+                dimensione: mf.sizeFormatted || post.dimensioneTotale || "-",
+                sizeBytes: window.parseEstimatedSizeBytes(mf.sizeBytes, mf.sizeFormatted || post.dimensioneTotale),
+                descrizione: post.caption || `Contenuto multimediale per ${post.piattaforma || 'Social'}`,
+                url: mf.thumbnailDataUrl || "./assets/lutherie_banner.png",
+                fileId: mf.id || "",
+                thumbnailDataUrl: mf.thumbnailDataUrl || "",
+                duration: mf.duration || "",
+                dimensions: mf.dimensions || "",
+                mediaKind: isVid ? "video" : "image",
+                sortOrder: 2000 - idx,
+                originalItem: post
+            });
+        });
+    });
+
+    // 5. Modelli 3D (.OBJ) e Texture 2K del Laboratorio Liuteria Making
+    const builtin3D = [
+        {
+            id: "lm3d-violin",
+            titolo: "Modello 3D Scansione Museale Violino 4/4 (MT_E_3270_Skrzypce)",
+            fileName: "violin_real.obj",
+            fileExt: ".obj",
+            formato: "OBJ Mesh 3D + Texture 2K",
+            dimensione: "2.5 MB",
+            sizeBytes: 2560000,
+            url: "./assets/models/violin_real.obj",
+            thumbnailDataUrl: "./assets/models/textures/violin_diffuse.jpg",
+            descrizione: "Mesh 3D fotogrammetrica ad alta precisione (28.760 triangoli) con mappa colore 2K e Ambient Occlusion."
+        },
+        {
+            id: "lm3d-viola",
+            titolo: "Modello 3D Scansione Museale Viola d'Autore (v_Reduced)",
+            fileName: "viola_real.obj",
+            fileExt: ".obj",
+            formato: "OBJ Mesh 3D + Texture 2K",
+            dimensione: "3.0 MB",
+            sizeBytes: 3040000,
+            url: "./assets/models/viola_real.obj",
+            thumbnailDataUrl: "./assets/models/textures/viola_mat0.jpg",
+            descrizione: "Mesh 3D reale di Viola (30.000 triangoli) con texture fotografica 2K ad alta risoluzione."
+        },
+        {
+            id: "lm3d-cello",
+            titolo: "Modello 3D Multi-Materiale Violoncello 4/4 (Sketchfab Studio)",
+            fileName: "cello_real.obj",
+            fileExt: ".obj",
+            formato: "OBJ Mesh 3D + 5 Texture 2K",
+            dimensione: "1.9 MB",
+            sizeBytes: 1930000,
+            url: "./assets/models/cello_real.obj",
+            thumbnailDataUrl: "./assets/models/textures/cello_body.jpg",
+            descrizione: "Modello 3D completo di Violoncello con 8 slot materiali e texture dedicate per cassa, manico, ponticello, tastiera e cordiera."
+        }
+    ];
+    builtin3D.forEach((m3d, idx) => {
+        unified.push({
+            uid: `3d::${m3d.id}`,
+            rawId: m3d.id,
+            sourceApp: "3d_models",
+            sourceLabel: "Liuteria Making 3D",
+            sourceBadgeClass: "badge-info",
+            titolo: m3d.titolo,
+            fileName: m3d.fileName,
+            fileExt: m3d.fileExt,
+            formato: m3d.formato,
+            tipo: "Modello 3D / CAD",
+            categoria: "Modelli 3D & CAD",
+            dimensione: m3d.dimensione,
+            sizeBytes: m3d.sizeBytes,
+            descrizione: m3d.descrizione,
+            url: m3d.url,
+            fileId: "",
+            thumbnailDataUrl: m3d.thumbnailDataUrl,
+            duration: "",
+            dimensions: "Mesh 3D + 2K UV",
+            mediaKind: "other",
+            sortOrder: 1000 - idx,
+            originalItem: m3d
+        });
+    });
+
+    return unified;
+};
+
+window.matchesMediaExtGroup = function(item, extGroup) {
+    if (!extGroup || extGroup === "all") return true;
+    const combined = `${item.fileExt || ""} ${item.formato || ""} ${item.fileName || ""} ${item.tipo || ""}`.toLowerCase();
+    if (extGroup === "img_std") {
+        return /\b(jpg|jpeg|png|webp|avif|gif|bmp)\b/.test(combined) || (item.mediaKind === "image" && !/\b(raw|cr2|nef|dng|tif|tiff|svg)\b/.test(combined));
+    }
+    if (extGroup === "img_raw") {
+        return /\b(raw|cr2|nef|dng|tif|tiff|heic|svg)\b/.test(combined);
+    }
+    if (extGroup === "aud_lossless") {
+        return /\b(flac|wav|aiff|aif|pcm|lossless|24bit|96khz)\b/.test(combined);
+    }
+    if (extGroup === "aud_comp") {
+        return /\b(mp3|m4a|aac|ogg|opus|wma)\b/.test(combined);
+    }
+    if (extGroup === "vid_all") {
+        return item.mediaKind === "video" || /\b(mp4|mov|webm|mkv|avi|m4v|4k)\b/.test(combined);
+    }
+    if (extGroup === "3d_cad") {
+        return /\b(obj|stl|glb|gltf|fbx|dxf|dwg|cad|3d|ct-scan|dicom)\b/.test(combined);
+    }
+    if (extGroup === "doc_ebook") {
+        return /\b(pdf|epub|mobi|azw|azw3|djvu|fb2|docx|txt|ebook)\b/.test(combined);
+    }
+    return true;
+};
+
+window.openUnifiedFileItem = function(uid) {
+    if (!uid) return;
+    const parts = uid.split("::");
+    const app = parts[0];
+    const rawId = parts[1];
+    if (app === "media") {
+        window.openMediaViewerModal(rawId);
+    } else if (app === "bib") {
+        if (typeof window.openBibliotecaReader === "function") {
+            window.openBibliotecaReader(rawId);
+        } else {
+            window.appController.switchModule("biblioteca");
+        }
+    } else if (app === "cert") {
+        if (typeof window.previewCertificatoModal === "function") {
+            window.previewCertificatoModal(rawId);
+        } else {
+            window.appController.switchModule("certificati");
+        }
+    } else if (app === "social") {
+        if (typeof window.previewSocialPostModal === "function") {
+            window.previewSocialPostModal(rawId);
+        } else {
+            window.appController.switchModule("social");
+        }
+    } else if (app === "3d") {
+        window.appController.switchModule("liuteriaMaking");
+        setTimeout(() => {
+            if (rawId === "lm3d-violin" && typeof window.selectLMInstrument === "function") window.selectLMInstrument("violin");
+            if (rawId === "lm3d-viola" && typeof window.selectLMInstrument === "function") window.selectLMInstrument("viola");
+            if (rawId === "lm3d-cello" && typeof window.selectLMInstrument === "function") window.selectLMInstrument("cello");
+        }, 120);
+    }
+};
+
+window.downloadUnifiedFileItem = function(uid) {
+    if (!uid) return;
+    const parts = uid.split("::");
+    const app = parts[0];
+    const rawId = parts[1];
+    if (app === "media") {
+        window.downloadMediaItem(rawId);
+    } else if (app === "bib" && typeof window.downloadBibliotecaFile === "function") {
+        window.downloadBibliotecaFile(rawId);
+    } else {
+        const all = window.collectAllSearchableAtelierFiles();
+        const found = all.find(x => x.uid === uid);
+        if (found && (found.url || found.thumbnailDataUrl)) {
+            const a = document.createElement("a");
+            a.href = found.url || found.thumbnailDataUrl;
+            a.download = found.fileName || "file_atelier";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.showToast(`Download avviato: ${a.download}`);
+        } else {
+            window.openUnifiedFileItem(uid);
+        }
+    }
 };
 
 window.setMediaSearchQuery = function(q) {
