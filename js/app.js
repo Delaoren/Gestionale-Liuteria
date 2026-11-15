@@ -6435,19 +6435,20 @@ window.initLmWebGLContext = function(canvas) {
             float glossWeight = 1.0;
 
             if (u_instId == 0) {
-                // VIOLINO: Scansione 3D museale MT_E_3270_Skrzypce con Texture Fotografica 2K + Mappa AO 2K
+                // VIOLINO: Scansione 3D museale MT_E_3270_Skrzypce con Texture Fotografica 2K + Mappa AO 2K + Velatura Ambrata Cremonese
                 if (u_useTexture == 1) {
                     vec3 texCol = texture2D(u_tex0, v_uv).rgb;
-                    ao = mix(0.65, 1.0, texture2D(u_tex1, v_uv).r);
-                    // Esalta il calore della vernice cremonese
-                    albedo = pow(texCol, vec3(0.92)) * vec3(1.08, 1.01, 0.94);
+                    ao = mix(0.52, 1.0, texture2D(u_tex1, v_uv).r);
+                    vec3 contrastTex = pow(clamp(texCol, 0.0, 1.0), vec3(1.28));
+                    albedo = contrastTex * vec3(1.18, 0.78, 0.42);
                 } else {
                     albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
                 }
             } else if (u_instId == 1) {
                 // VIOLA: Scansione 3D v_Reduced.obj con Shader Maestro Liutaio Cremonese (Acero Marezzato + Abete + Ebano) o Texture Scanner
                 if (u_useTexture == 1) {
-                    albedo = texture2D(u_tex0, v_uv).rgb * vec3(1.06, 0.98, 0.90);
+                    vec3 vTex = pow(clamp(texture2D(u_tex0, v_uv).rgb, 0.0, 1.0), vec3(1.22));
+                    albedo = vTex * vec3(1.15, 0.78, 0.44);
                 } else {
                     albedo = proceduralCremoneseWood(v_rawPos, N, V, v_comp, v_texSlot);
                     if (abs(v_texSlot - 5.0) < 0.4 || abs(v_texSlot - 2.0) < 0.4) {
@@ -6458,13 +6459,13 @@ window.initLmWebGLContext = function(canvas) {
                 // VIOLONCELLO: Modello multi-materiale sketchfab.obj con 5 texture dedicate + Ebano + Corde metalliche
                 if (u_useTexture == 1) {
                     if (abs(v_texSlot - 0.0) < 0.4) {
-                        vec3 bodyTex = texture2D(u_tex0, v_uv).rgb;
+                        vec3 bodyTex = pow(clamp(texture2D(u_tex0, v_uv).rgb, 0.0, 1.0), vec3(1.25));
                         vec3 procFlame = proceduralCremoneseWood(v_rawPos * 0.55, N, V, v_comp, 0.0);
-                        albedo = mix(bodyTex * vec3(1.25, 1.05, 0.88), procFlame, 0.35);
+                        albedo = mix(bodyTex * vec3(1.16, 0.74, 0.36), procFlame, 0.38);
                     } else if (abs(v_texSlot - 1.0) < 0.4) {
-                        vec3 neckTex = texture2D(u_tex1, v_uv).rgb;
+                        vec3 neckTex = pow(clamp(texture2D(u_tex1, v_uv).rgb, 0.0, 1.0), vec3(1.20));
                         vec3 procNeck = proceduralCremoneseWood(v_rawPos * 0.55, N, V, 3.0, 1.0);
-                        albedo = mix(neckTex * vec3(1.15, 1.0, 0.88), procNeck, 0.35);
+                        albedo = mix(neckTex * vec3(1.14, 0.78, 0.44), procNeck, 0.35);
                     } else if (abs(v_texSlot - 2.0) < 0.4) {
                         albedo = texture2D(u_tex2, v_uv).rgb;
                         glossWeight = 0.2;
