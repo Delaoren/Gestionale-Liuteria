@@ -760,6 +760,179 @@ class SocialSchedulerThread(threading.Thread):
 
 
 # ==============================================================================
+# SENDINBLUE (BREVO) EMAIL REMINDER SERVICE PER APP CALENDARIO
+# ==============================================================================
+SENDINBLUE_STATE_FILE = os.path.join(DIRECTORY, "sendinblue_state.json")
+sendinblue_lock = threading.Lock()
+
+sendinblue_state = {
+    "config": {
+        "enabled": False,
+        "apiKey": os.environ.get("SENDINBLUE_API_KEY", ""),
+        "senderName": "Liuteria De Lorenzi - Cremona",
+        "senderEmail": "fabio.delorenzi@gmail.com",
+        "replyToEmail": "fabio.delorenzi@gmail.com",
+        "atelierAddress": "Bottega Liuteria De Lorenzi — Cremona",
+        "atelierPhone": "+39 0372 000000",
+        "lastTestStatus": "unconfigured",
+        "lastTestTime": "",
+        "lastTestMessage": ""
+    },
+    "history": []
+}
+
+def load_sendinblue_state():
+    global sendinblue_state
+    with sendinblue_lock:
+        if os.path.exists(SENDINBLUE_STATE_FILE):
+            try:
+                with open(SENDINBLUE_STATE_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        if "config" in loaded and isinstance(loaded["config"], dict):
+                            sendinblue_state["config"].update(loaded["config"])
+                        if "history" in loaded and isinstance(loaded["history"], list):
+                            sendinblue_state["history"] = loaded["history"][:40]
+            except Exception as e:
+                print(f"[Sendinblue] Errore caricamento sendinblue_state.json: {e}")
+
+def save_sendinblue_state():
+    with sendinblue_lock:
+        try:
+            with open(SENDINBLUE_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(sendinblue_state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[Sendinblue] Errore salvataggio sendinblue_state.json: {e}")
+
+load_sendinblue_state()
+
+def dispatch_sendinblue_reminder(req_payload, config_override=None):
+    """
+    Invia un'email transazionale di promemoria tramite Sendinblue (Brevo) API v3
+    Endpoint: https://api.brevo.com/v3/smtp/email (compatibile con chiavi xkeysib-...)
+    """
+    cfg = dict(sendinblue_state.get("config", {}))
+    if isinstance(config_override, dict):
+        cfg.update(config_override)
+
+    api_key = (cfg.get("apiKey") or os.environ.get("SENDINBLUE_API_KEY") or "").strip()
+    if not api_key:
+        return {
+            "success": False,
+            "code": "MISSING_API_KEY",
+            "error": "Chiave API Sendinblue non configurata. Clicca su 'Configura Sendinblue' e inserisci la tua API Key v3 (xkeysib-...)."
+        }
+
+    sender_name = (cfg.get("senderName") or "Liuteria De Lorenzi - Cremona").strip()
+    sender_email = (cfg.get("senderEmail") or "fabio.delorenzi@gmail.com").strip()
+    reply_to = (cfg.get("replyToEmail") or sender_email).strip()
+
+    to_email = (req_payload.get("toEmail") or "").strip()
+    to_name = (req_payload.get("toName") or "Gentile Cliente").strip()
+    subject = (req_payload.get("subject") or "Promemoria Appuntamento — Liuteria De Lorenzi").strip()
+    html_content = (req_payload.get("htmlContent") or "").strip()
+    text_content = (req_payload.get("textContent") or "").strip()
+
+    if not to_email or "@" not in to_email:
+        return {
+            "success": False,
+            "code": "INVALID_EMAIL",
+            "error": "Inserisci un indirizzo email destinatario valido per inviare il promemoria con Sendinblue."
+        }
+
+    if not html_content:
+        escaped_txt = text_content.replace("\n", "<br>")
+        html_content = f"<html><body><p>{escaped_txt}</p></body></html>"
+
+    sib_body = {
+        "sender": {
+            "name": sender_name,
+            "email": sender_email
+        },
+        "to": [
+            {
+                "email": to_email,
+                "name": to_name
+            }
+        ],
+        "replyTo": {
+            "email": reply_to,
+            "name": sender_name
+        },
+        "subject": subject,
+        "htmlContent": html_content
+    }
+    if text_content:
+        sib_body["textContent"] = text_content
+
+    body_bytes = json.dumps(sib_body, ensure_ascii=False).encode("utf-8")
+    endpoints = [
+        "https://api.brevo.com/v3/smtp/email",
+        "https://api.sendinblue.com/v3/smtp/email"
+    ]
+
+    last_err = ""
+    for ep_url in endpoints:
+        try:
+            req = urllib.request.Request(ep_url, data=body_bytes, method="POST")
+            req.add_header("Accept", "application/json")
+            req.add_header("Content-Type", "application/json; charset=utf-8")
+            req.add_header("api-key", api_key)
+            req.add_header("User-Agent", "AtelierLiuteria-SendinblueClient/1.0")
+
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                status_code = resp.getcode()
+                resp_raw = resp.read().decode("utf-8", errors="ignore").strip()
+                resp_json = {}
+                try:
+                    resp_json = json.loads(resp_raw) if resp_raw else {}
+                except Exception:
+                    pass
+
+                msg_id = resp_json.get("messageId") or f"sib-{int(time.time())}"
+                now_str = time.strftime("%d/%m/%Y %H:%M")
+
+                with sendinblue_lock:
+                    sendinblue_state.setdefault("history", []).insert(0, {
+                        "timestamp": now_str,
+                        "toEmail": to_email,
+                        "toName": to_name,
+                        "subject": subject,
+                        "messageId": msg_id,
+                        "status": f"Inviato (HTTP {status_code})"
+                    })
+                    sendinblue_state["history"] = sendinblue_state["history"][:40]
+                save_sendinblue_state()
+
+                print(f"[Sendinblue] Promemoria inviato con successo a {to_email} (MessageId: {msg_id})", flush=True)
+                return {
+                    "success": True,
+                    "httpStatus": status_code,
+                    "messageId": msg_id,
+                    "sentAt": now_str,
+                    "toEmail": to_email
+                }
+        except urllib.error.HTTPError as he:
+            err_body = ""
+            try:
+                err_body = he.read().decode("utf-8", errors="ignore").strip()
+                err_json = json.loads(err_body)
+                err_detail = err_json.get("message") or err_json.get("code") or err_body[:180]
+            except Exception:
+                err_detail = err_body[:180] or he.reason
+            last_err = f"Sendinblue API HTTP {he.code}: {err_detail}"
+            break
+        except Exception as ex:
+            last_err = f"Errore connessione Sendinblue: {str(ex)}"
+
+    return {
+        "success": False,
+        "code": "SENDINBLUE_API_ERROR",
+        "error": last_err or "Impossibile inviare il promemoria tramite Sendinblue."
+    }
+
+
+# ==============================================================================
 # AUTO-UPDATER DA GITHUB (BRANCH 'main') & OTA HTTP INSTANT UPDATE (ZERO SSH)
 # ==============================================================================
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "Delaoren/Gestionale-Liuteria")
@@ -769,6 +942,7 @@ LAST_COMMIT_FILE = os.path.join(DIRECTORY, ".last_github_commit")
 
 PROTECTED_REL_PATHS = {
     "social_state.json",
+    "sendinblue_state.json",
     ".last_github_commit",
     ".env"
 }
@@ -1206,6 +1380,15 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "success": True,
                 "update": update_state
             }, ensure_ascii=False).encode('utf-8'))
+        elif self.path.startswith('/api/sendinblue/status'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "config": sendinblue_state.get("config", {}),
+                "history": sendinblue_state.get("history", [])[:20]
+            }, ensure_ascii=False).encode('utf-8'))
         else:
             super().do_GET()
 
@@ -1226,12 +1409,70 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_social_publish()
         elif self.path.startswith('/api/biblioteca/upload-file'):
             self.handle_biblioteca_upload_file()
+        elif self.path.startswith('/api/sendinblue/config'):
+            self.handle_sendinblue_config()
+        elif self.path.startswith('/api/sendinblue/send-reminder'):
+            self.handle_sendinblue_send_reminder()
         elif self.path.startswith('/api/system/check-update'):
             self.handle_system_check_update()
         elif self.path.startswith('/api/system/ota-update'):
             self.handle_system_ota_update()
         else:
             self.send_error(404, "Endpoint non trovato")
+
+    def handle_sendinblue_config(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            if isinstance(req_data, dict):
+                sendinblue_state["config"].update(req_data)
+                sendinblue_state["config"]["enabled"] = bool((sendinblue_state["config"].get("apiKey") or "").strip())
+                save_sendinblue_state()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "config": sendinblue_state["config"]
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_sendinblue_send_reminder(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            req_data = json.loads(post_data.decode('utf-8'))
+            config_override = req_data.get("config") if isinstance(req_data.get("config"), dict) else None
+            if config_override:
+                sendinblue_state["config"].update(config_override)
+                sendinblue_state["config"]["enabled"] = bool((sendinblue_state["config"].get("apiKey") or "").strip())
+
+            res = dispatch_sendinblue_reminder(req_data, config_override=config_override)
+            if req_data.get("isTest"):
+                sendinblue_state["config"]["lastTestStatus"] = "connected" if res.get("success") else "error"
+                sendinblue_state["config"]["lastTestTime"] = time.strftime("%d/%m/%Y %H:%M")
+                sendinblue_state["config"]["lastTestMessage"] = (
+                    f"Email inviata con successo a {req_data.get('toEmail')}"
+                    if res.get("success")
+                    else res.get("error", "Errore invio")
+                )
+            save_sendinblue_state()
+            res["config"] = sendinblue_state["config"]
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
     def handle_biblioteca_upload_file(self):
         content_length = int(self.headers.get('Content-Length', 0))

@@ -35,7 +35,7 @@ apt-get install -y python3 python3-venv python3-pip rsync git || true
 echo "[2/5] Copia dei file dell'applicazione in ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 if [ "${SCRIPT_DIR}" != "${INSTALL_DIR}" ]; then
-    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='.git' --exclude='social_uploads' --exclude='biblioteca_uploads' --exclude='social_state.json' "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
+    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='.git' --exclude='social_uploads' --exclude='biblioteca_uploads' --exclude='social_state.json' --exclude='sendinblue_state.json' "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
 fi
 
 # Configura repository Git collegato al branch 'main' per Auto-Update automatico

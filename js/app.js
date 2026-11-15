@@ -386,12 +386,18 @@ window.openAddModal = function(collectionName) {
     } else if (collectionName === 'calendarioAppuntamenti') {
         formHTML = `
             <form onsubmit="window.saveNewRecord(event, 'calendarioAppuntamenti')">
-                <div class="form-group">
-                    <label>Cliente / Richiedente</label>
-                    <input type="text" id="f_app_cliente" list="app_clienti_list" class="form-control" required placeholder="Es. Maestro Marco Rossi (Primo Violino)">
-                    <datalist id="app_clienti_list">
-                        ${clientsList}
-                    </datalist>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1.2;">
+                        <label>Cliente / Richiedente</label>
+                        <input type="text" id="f_app_cliente" list="app_clienti_list" class="form-control" required placeholder="Es. Maestro Marco Rossi (Primo Violino)" oninput="window.autoFillAppointmentClientEmail && window.autoFillAppointmentClientEmail(this.value)">
+                        <datalist id="app_clienti_list">
+                            ${clientsList}
+                        </datalist>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Email Cliente (per Promemoria Sendinblue)</label>
+                        <input type="email" id="f_app_email" class="form-control" placeholder="es. cliente@orchestra.it">
+                    </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group" style="flex:1;">
@@ -1172,9 +1178,12 @@ window.saveNewRecord = function(e, collectionName) {
             window.atelierDB.addItem("biblioteca", item);
         }
     } else if (collectionName === 'calendarioAppuntamenti') {
+        const clienteVal = document.getElementById("f_app_cliente").value.trim();
+        const emailFieldVal = document.getElementById("f_app_email") ? document.getElementById("f_app_email").value.trim() : "";
         const item = {
             id: "app-" + Date.now(),
-            cliente: document.getElementById("f_app_cliente").value.trim(),
+            cliente: clienteVal,
+            emailCliente: emailFieldVal || (window.resolveClientEmailByName ? window.resolveClientEmailByName(clienteVal) : ""),
             data: document.getElementById("f_app_data").value || new Date().toISOString().split('T')[0],
             ora: document.getElementById("f_app_ora").value || "10:30",
             tipo: document.getElementById("f_app_tipo").value || "Incontro",
@@ -5205,6 +5214,619 @@ window.openBibliotecaReaderModal = async function(itemId) {
     }
 };
 
+// =========================================================================
+// SERVIZIO INVIO PROMEMORIA CALENDARIO TRAMITE SENDINBLUE (BREVO API v3)
+// =========================================================================
+
+window.getSendinblueConfig = function() {
+    if (!window.atelierDB || !window.atelierDB.data) return {};
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    if (!window.atelierDB.data.settings.sendinblue) {
+        window.atelierDB.data.settings.sendinblue = {
+            enabled: false,
+            apiKey: "",
+            senderName: "Liuteria De Lorenzi - Cremona",
+            senderEmail: "fabio.delorenzi@gmail.com",
+            replyToEmail: "fabio.delorenzi@gmail.com",
+            atelierAddress: "Bottega Liuteria De Lorenzi — Cremona",
+            atelierPhone: "+39 0372 000000",
+            lastTestStatus: "unconfigured",
+            lastTestTime: "",
+            lastTestMessage: ""
+        };
+    }
+    return window.atelierDB.data.settings.sendinblue;
+};
+
+window.initSendinblueService = async function() {
+    const localCfg = window.getSendinblueConfig();
+    try {
+        const res = await fetch("/api/sendinblue/status", { method: "GET" });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.config) {
+                const srvCfg = data.config;
+                if (srvCfg.apiKey && !localCfg.apiKey) {
+                    Object.assign(localCfg, srvCfg);
+                    window.atelierDB.saveData();
+                } else if (localCfg.apiKey && !srvCfg.apiKey) {
+                    await fetch("/api/sendinblue/config", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ config: localCfg })
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        // Modalità statica o offline: usa localStorage
+    }
+};
+
+window.resolveClientEmailByName = function(clientName) {
+    if (!clientName || !window.atelierDB || !window.atelierDB.data) return "";
+    const needle = String(clientName).toLowerCase().trim();
+    const clienti = window.atelierDB.data.clienti || [];
+    for (const c of clienti) {
+        if (!c || !c.nome || !c.email || c.email === "-") continue;
+        const cName = String(c.nome).toLowerCase().trim();
+        if (cName === needle || needle.includes(cName) || cName.includes(needle)) {
+            return c.email.trim();
+        }
+        // Controlla corrispondenza sul cognome
+        const parts = cName.split(/\s+/).filter(p => p.length > 3);
+        for (const p of parts) {
+            if (needle.includes(p)) {
+                return c.email.trim();
+            }
+        }
+    }
+    return "";
+};
+
+window.resolveClientEmailForCalendarItem = function(item) {
+    if (!item) return "";
+    if (item.emailCliente && String(item.emailCliente).includes("@")) {
+        return String(item.emailCliente).trim();
+    }
+    if (item.cliente) {
+        return window.resolveClientEmailByName(item.cliente);
+    }
+    const cfg = window.getSendinblueConfig();
+    return cfg.senderEmail || "";
+};
+
+window.autoFillAppointmentClientEmail = function(clientVal) {
+    const emailInput = document.getElementById("f_app_email");
+    if (!emailInput) return;
+    const found = window.resolveClientEmailByName(clientVal);
+    if (found) {
+        emailInput.value = found;
+    }
+};
+
+window.openSendinblueConfigModal = function() {
+    const cfg = window.getSendinblueConfig();
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    if (!modalOverlay || !modalTitle || !modalBody) return;
+
+    modalTitle.innerHTML = `<i data-lucide="mail-check" style="color:#38bdf8;"></i> Configurazione Sendinblue (Brevo) — Promemoria Calendario`;
+    modalBody.innerHTML = `
+        <form onsubmit="window.saveSendinblueConfigFromModal(event)">
+            <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.28); border-radius:10px; padding:0.9rem 1.05rem; margin-bottom:1.1rem; font-size:0.83rem; color:#e5e7eb; line-height:1.5;">
+                <strong style="color:#38bdf8; display:block; margin-bottom:0.25rem;">ℹ️ Come ottenere la API Key di Sendinblue (ora Brevo):</strong>
+                1. Accedi al tuo account su <strong>app.brevo.com</strong> (ex Sendinblue).<br>
+                2. Clicca sul tuo profilo in alto a destra → <strong>SMTP & API</strong> → scheda <strong>API Keys</strong>.<br>
+                3. Genera una nuova chiave API v3 (inizia con <code>xkeysib-...</code>) e incollala qui sotto. Assicurati che l'email mittente sia verificata in Sendinblue.
+            </div>
+
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                    <input type="checkbox" id="sib_enabled" ${cfg.enabled ? "checked" : ""} style="width:17px; height:17px; accent-color:#0284c7;">
+                    <strong>Abilita invio email promemoria con Sendinblue (Brevo API v3)</strong>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>Sendinblue / Brevo API Key v3 (<code>xkeysib-...</code>) *</label>
+                <input type="password" id="sib_api_key" class="form-control" required placeholder="xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx" value="${cfg.apiKey || ""}" autocomplete="off">
+                <small style="color:var(--text-muted); font-size:0.74rem; display:block; margin-top:0.25rem;">
+                    La chiave viene salvata in modo permanente sia nel browser che sul server Ubuntu (protetta negli aggiornamenti OTA).
+                </small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Nome Mittente Atelier *</label>
+                    <input type="text" id="sib_sender_name" class="form-control" required value="${cfg.senderName || "Liuteria De Lorenzi - Cremona"}">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Email Mittente Verificata su Sendinblue *</label>
+                    <input type="email" id="sib_sender_email" class="form-control" required value="${cfg.senderEmail || "fabio.delorenzi@gmail.com"}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Email per Risposte (Reply-To)</label>
+                    <input type="email" id="sib_reply_to" class="form-control" value="${cfg.replyToEmail || cfg.senderEmail || "fabio.delorenzi@gmail.com"}">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Telefono Contatto Bottega</label>
+                    <input type="text" id="sib_atelier_phone" class="form-control" value="${cfg.atelierPhone || "+39 0372 000000"}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Indirizzo / Firma Sede Atelier (mostrato a piè di pagina nell'email)</label>
+                <input type="text" id="sib_atelier_address" class="form-control" value="${cfg.atelierAddress || "Bottega Liuteria De Lorenzi — Cremona"}">
+            </div>
+
+            <div id="sibConfigTestFeedback" style="display:none; margin:0.8rem 0; padding:0.75rem 0.95rem; border-radius:8px; font-size:0.82rem;"></div>
+
+            <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap; margin-top:1.2rem;">
+                <button type="button" class="btn btn-secondary" onclick="window.sendTestSendinblueEmailFromConfig()">
+                    <i data-lucide="send"></i> 🧪 Invia Email di Prova al Mittente
+                </button>
+                <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg, #0284c7, #2563eb); border:none;">
+                    <i data-lucide="check-circle-2"></i> Salva Configurazione Sendinblue
+                </button>
+            </div>
+        </form>
+    `;
+
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.collectSendinblueFormValues = function() {
+    const apiKey = (document.getElementById("sib_api_key")?.value || "").trim();
+    const enabled = Boolean(document.getElementById("sib_enabled")?.checked || apiKey.length > 8);
+    return {
+        enabled,
+        apiKey,
+        senderName: (document.getElementById("sib_sender_name")?.value || "Liuteria De Lorenzi - Cremona").trim(),
+        senderEmail: (document.getElementById("sib_sender_email")?.value || "fabio.delorenzi@gmail.com").trim(),
+        replyToEmail: (document.getElementById("sib_reply_to")?.value || "fabio.delorenzi@gmail.com").trim(),
+        atelierPhone: (document.getElementById("sib_atelier_phone")?.value || "+39 0372 000000").trim(),
+        atelierAddress: (document.getElementById("sib_atelier_address")?.value || "Bottega Liuteria De Lorenzi — Cremona").trim()
+    };
+};
+
+window.saveSendinblueConfigFromModal = async function(e) {
+    if (e) e.preventDefault();
+    const values = window.collectSendinblueFormValues();
+    const cfg = window.getSendinblueConfig();
+    Object.assign(cfg, values);
+    window.atelierDB.saveData();
+
+    try {
+        await fetch("/api/sendinblue/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config: cfg })
+        });
+    } catch (err) {
+        // Ignora se server statico
+    }
+
+    window.closeModal();
+    window.showToast("Configurazione Sendinblue salvata con successo!");
+    if (window.appController && (window.appController.currentModule === "calendarioAppuntamenti" || window.appController.currentModule === "calendarioLavorazioni")) {
+        window.appController.loadModule(window.appController.currentModule);
+    }
+};
+
+window.dispatchSendinblueEmailPayload = async function(payload, configOverride) {
+    const cfg = Object.assign({}, window.getSendinblueConfig(), configOverride || {});
+    // 1. Tenta l'invio tramite il backend Python del server Gestionale (/api/sendinblue/send-reminder)
+    try {
+        const res = await fetch("/api/sendinblue/send-reminder", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                ...payload,
+                config: cfg
+            })
+        });
+        if (res.ok || res.status === 400 || res.status === 502) {
+            const data = await res.json();
+            if (typeof data.ok === "boolean") {
+                return data;
+            }
+        }
+    } catch (serverErr) {
+        // Fallback diretto al browser verso l'API REST v3 di Sendinblue/Brevo
+    }
+
+    // 2. Fallback diretto browser -> https://api.brevo.com/v3/smtp/email
+    if (!cfg.apiKey || String(cfg.apiKey).trim().length < 8) {
+        return {
+            ok: false,
+            error: "Chiave API Sendinblue (Brevo) mancante. Configura la tua chiave API (xkeysib-...) nelle impostazioni Sendinblue."
+        };
+    }
+
+    const brevoBody = {
+        sender: {
+            name: cfg.senderName || "Liuteria De Lorenzi - Cremona",
+            email: cfg.senderEmail || "fabio.delorenzi@gmail.com"
+        },
+        to: [
+            {
+                email: payload.recipientEmail,
+                name: payload.recipientName || payload.cliente || "Cliente"
+            }
+        ],
+        replyTo: {
+            email: cfg.replyToEmail || cfg.senderEmail || "fabio.delorenzi@gmail.com",
+            name: cfg.senderName || "Liuteria De Lorenzi - Cremona"
+        },
+        subject: payload.subject || `Promemoria Appuntamento del ${payload.data || ""} — Liuteria De Lorenzi`,
+        htmlContent: payload.htmlContent || `<p>${payload.customMessage || "Promemoria appuntamento presso Liuteria De Lorenzi."}</p>`,
+        textContent: payload.textContent || payload.customMessage || "Promemoria appuntamento presso Liuteria De Lorenzi."
+    };
+
+    try {
+        const directRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "api-key": String(cfg.apiKey).trim()
+            },
+            body: JSON.stringify(brevoBody)
+        });
+        const directData = await directRes.json().catch(() => ({}));
+        if (directRes.ok) {
+            return {
+                ok: true,
+                messageId: directData.messageId || "brevo-direct-ok",
+                message: `Promemoria inviato con successo a ${payload.recipientEmail} tramite Sendinblue!`
+            };
+        } else {
+            return {
+                ok: false,
+                error: directData.message || directData.code || `Errore Sendinblue HTTP ${directRes.status}`
+            };
+        }
+    } catch (directErr) {
+        return {
+            ok: false,
+            error: `Errore di rete durante la connessione a Sendinblue: ${directErr.message || directErr}`
+        };
+    }
+};
+
+window.sendTestSendinblueEmailFromConfig = async function() {
+    const feedbackEl = document.getElementById("sibConfigTestFeedback");
+    const values = window.collectSendinblueFormValues();
+    if (!values.apiKey) {
+        if (feedbackEl) {
+            feedbackEl.style.display = "block";
+            feedbackEl.style.background = "rgba(239,68,68,0.12)";
+            feedbackEl.style.border = "1px solid rgba(239,68,68,0.35)";
+            feedbackEl.style.color = "#fca5a5";
+            feedbackEl.textContent = "⚠️ Inserisci prima la chiave API Sendinblue (xkeysib-...).";
+        }
+        return;
+    }
+
+    if (feedbackEl) {
+        feedbackEl.style.display = "block";
+        feedbackEl.style.background = "rgba(56,189,248,0.12)";
+        feedbackEl.style.border = "1px solid rgba(56,189,248,0.35)";
+        feedbackEl.style.color = "#bae6fd";
+        feedbackEl.textContent = "⏳ Invio email di prova tramite Sendinblue in corso...";
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const result = await window.dispatchSendinblueEmailPayload({
+        appointmentId: "test-config",
+        recipientEmail: values.senderEmail,
+        recipientName: values.senderName,
+        cliente: "Test Configurazione Atelier",
+        data: todayStr,
+        ora: "10:30",
+        tipo: "Verifica Connessione Sendinblue",
+        strumento: "Violino d'Autore — Liuteria De Lorenzi",
+        note: "Questa è un'email di prova generata dal Gestionale Liuteria per verificare il corretto funzionamento dei promemoria Calendario tramite Sendinblue (Brevo).",
+        subject: `✅ Test Promemoria Sendinblue — ${values.senderName}`
+    }, values);
+
+    if (result && result.ok) {
+        const cfg = window.getSendinblueConfig();
+        Object.assign(cfg, values, {
+            lastTestStatus: "success",
+            lastTestTime: new Date().toLocaleString("it-IT"),
+            lastTestMessage: result.message || `Test inviato a ${values.senderEmail}`
+        });
+        window.atelierDB.saveData();
+        if (feedbackEl) {
+            feedbackEl.style.background = "rgba(16,185,129,0.14)";
+            feedbackEl.style.border = "1px solid rgba(16,185,129,0.4)";
+            feedbackEl.style.color = "#6ee7b7";
+            feedbackEl.innerHTML = `✅ <strong>${result.message}</strong> (ID: <code>${result.messageId || "OK"}</code>)`;
+        }
+    } else {
+        if (feedbackEl) {
+            feedbackEl.style.background = "rgba(239,68,68,0.14)";
+            feedbackEl.style.border = "1px solid rgba(239,68,68,0.4)";
+            feedbackEl.style.color = "#fca5a5";
+            feedbackEl.innerHTML = `❌ <strong>Invio non riuscito:</strong> ${result?.error || "Controlla la chiave API e che l'email mittente sia autorizzata su Sendinblue."}`;
+        }
+    }
+};
+
+window.openSendinblueReminderModal = function(collectionName, itemId) {
+    const col = collectionName || "calendarioAppuntamenti";
+    const item = window.atelierDB.getItem(col, itemId);
+    if (!item) {
+        window.showToast("Voce di calendario non trovata", "error");
+        return;
+    }
+
+    const cfg = window.getSendinblueConfig();
+    const isLavorazione = col === "calendarioLavorazioni";
+
+    const clienteLabel = isLavorazione ? (item.responsabile || "Maestro Liutaio") : (item.cliente || "Cliente Atelier");
+    const dataLabel = isLavorazione ? `${item.inizio || "-"} → ${item.fine || "-"}` : (item.data || "-");
+    const oraLabel = isLavorazione ? `Avanzamento ${item.progresso || 0}% (${item.priorita || "Normale"})` : (item.ora || "10:30");
+    const tipoLabel = isLavorazione ? (item.titolo || "Lavorazione in Bottega") : (item.tipo || "Appuntamento in Atelier");
+    const strumentoLabel = item.strumento || "-";
+    const noteLabel = isLavorazione ? `Fase attuale: ${item.fase || "-"}` : (item.note || "");
+
+    const defaultEmail = isLavorazione
+        ? (item.emailCliente || cfg.senderEmail || "fabio.delorenzi@gmail.com")
+        : (window.resolveClientEmailForCalendarItem(item) || "");
+
+    const defaultSubject = isLavorazione
+        ? `Promemoria Lavorazione: ${tipoLabel} (${strumentoLabel}) — ${cfg.senderName || "Liuteria De Lorenzi"}`
+        : `Promemoria Appuntamento del ${dataLabel} alle ${oraLabel} — ${cfg.senderName || "Liuteria De Lorenzi"}`;
+
+    const defaultCustomMsg = isLavorazione
+        ? `Gentile ${clienteLabel}, ti inviamo un promemoria relativo alla lavorazione "${tipoLabel}" sullo strumento ${strumentoLabel}, programmata con scadenza ${item.fine || dataLabel}.`
+        : `Gentile ${clienteLabel}, siamo lieti di ricordarLe il Suo prossimo appuntamento presso la nostra Bottega di Liuteria per "${tipoLabel}" in data ${dataLabel} alle ore ${oraLabel}.`;
+
+    const clientsWithEmails = (window.atelierDB.data.clienti || [])
+        .filter(c => c && c.email && c.email !== "-")
+        .map(c => `<option value="${c.email}">${c.nome} (${c.email})</option>`)
+        .join("");
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    if (!modalOverlay || !modalTitle || !modalBody) return;
+
+    modalTitle.innerHTML = `<i data-lucide="send" style="color:#38bdf8;"></i> Invia Promemoria con Sendinblue (Brevo)`;
+
+    modalBody.innerHTML = `
+        <form onsubmit="window.sendSendinblueReminderNow(event)">
+            <input type="hidden" id="sib_rem_collection" value="${col}">
+            <input type="hidden" id="sib_rem_id" value="${item.id}">
+
+            <!-- Riepilogo Appuntamento -->
+            <div style="background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.3); border-radius:10px; padding:0.9rem 1.1rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                <div>
+                    <div style="font-size:0.74rem; text-transform:uppercase; letter-spacing:1px; color:var(--accent-gold); font-weight:700;">
+                        ${isLavorazione ? "🛠️ Scadenza Lavorazione" : "📅 Dettagli Appuntamento"}
+                    </div>
+                    <div style="font-size:1rem; font-weight:700; color:#fff; margin-top:0.15rem;">
+                        ${clienteLabel} — <span style="color:var(--accent-gold);">${dataLabel}</span> (${oraLabel})
+                    </div>
+                    <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:0.15rem;">
+                        <strong>${tipoLabel}</strong> • Strumento: <em>${strumentoLabel}</em>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" style="font-size:0.75rem; padding:0.35rem 0.7rem;" onclick="window.openSendinblueConfigModal()">
+                    <i data-lucide="settings" style="width:13px; height:13px;"></i> API Key Sendinblue
+                </button>
+            </div>
+
+            ${(!cfg.apiKey || String(cfg.apiKey).trim().length < 8) ? `
+                <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); border-radius:9px; padding:0.85rem 1rem; margin-bottom:1rem;">
+                    <label style="color:#fbbf24; font-weight:700; font-size:0.82rem; display:block; margin-bottom:0.35rem;">
+                        🔑 Chiave API Sendinblue (Brevo) richiesta per il primo invio:
+                    </label>
+                    <input type="password" id="sib_rem_inline_apikey" class="form-control" placeholder="Incolla qui la tua API Key Sendinblue (xkeysib-...)" required autocomplete="off">
+                    <small style="color:#fde68a; font-size:0.73rem; display:block; margin-top:0.25rem;">
+                        Verrà salvata automaticamente anche per tutti i prossimi promemoria.
+                    </small>
+                </div>
+            ` : ""}
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1.2;">
+                    <label>Email Destinatario *</label>
+                    <input type="email" id="sib_rem_email" list="sib_client_emails_datalist" class="form-control" required placeholder="es. cliente@orchestra.it" value="${defaultEmail}">
+                    <datalist id="sib_client_emails_datalist">
+                        ${clientsWithEmails}
+                    </datalist>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Nome Destinatario</label>
+                    <input type="text" id="sib_rem_name" class="form-control" required value="${clienteLabel}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Oggetto Email</label>
+                <input type="text" id="sib_rem_subject" class="form-control" required value="${defaultSubject}">
+            </div>
+
+            <div class="form-group">
+                <label>Messaggio di Apertura Personalizzato</label>
+                <textarea id="sib_rem_message" class="form-control" rows="3" required>${defaultCustomMsg}</textarea>
+            </div>
+
+            <div id="sibReminderStatusBox" style="display:none; margin:0.85rem 0; padding:0.8rem 1rem; border-radius:8px; font-size:0.84rem;"></div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap; margin-top:1.15rem; padding-top:0.85rem; border-top:1px solid rgba(255,255,255,0.08);">
+                <span style="font-size:0.75rem; color:var(--text-muted);">
+                    Mittente: <strong>${cfg.senderName || "Liuteria De Lorenzi"}</strong> &lt;${cfg.senderEmail || "fabio.delorenzi@gmail.com"}&gt;
+                </span>
+                <div style="display:flex; gap:0.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="window.closeModal()">Annulla</button>
+                    <button type="submit" id="sibRemSubmitBtn" class="btn btn-primary" style="background:linear-gradient(135deg, #0284c7, #2563eb); border:none; padding:0.55rem 1.2rem;">
+                        <i data-lucide="send"></i> 🚀 Invia Ora con Sendinblue
+                    </button>
+                </div>
+            </div>
+        </form>
+    `;
+
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.sendSendinblueReminderNow = async function(e) {
+    if (e) e.preventDefault();
+    const col = document.getElementById("sib_rem_collection")?.value || "calendarioAppuntamenti";
+    const itemId = document.getElementById("sib_rem_id")?.value || "";
+    const item = window.atelierDB.getItem(col, itemId);
+    if (!item) return;
+
+    const inlineKeyEl = document.getElementById("sib_rem_inline_apikey");
+    const cfg = window.getSendinblueConfig();
+    if (inlineKeyEl && inlineKeyEl.value.trim()) {
+        cfg.apiKey = inlineKeyEl.value.trim();
+        cfg.enabled = true;
+        window.atelierDB.saveData();
+    }
+
+    const recipientEmail = (document.getElementById("sib_rem_email")?.value || "").trim();
+    const recipientName = (document.getElementById("sib_rem_name")?.value || "").trim();
+    const subject = (document.getElementById("sib_rem_subject")?.value || "").trim();
+    const customMessage = (document.getElementById("sib_rem_message")?.value || "").trim();
+
+    const statusBox = document.getElementById("sibReminderStatusBox");
+    const submitBtn = document.getElementById("sibRemSubmitBtn");
+    if (submitBtn) submitBtn.disabled = true;
+
+    if (statusBox) {
+        statusBox.style.display = "block";
+        statusBox.style.background = "rgba(56,189,248,0.12)";
+        statusBox.style.border = "1px solid rgba(56,189,248,0.35)";
+        statusBox.style.color = "#bae6fd";
+        statusBox.textContent = `⏳ Invio promemoria a ${recipientEmail} tramite Sendinblue in corso...`;
+    }
+
+    const isLavorazione = col === "calendarioLavorazioni";
+    const payload = {
+        appointmentId: item.id,
+        recipientEmail,
+        recipientName,
+        cliente: recipientName,
+        data: isLavorazione ? `${item.inizio || "-"} → ${item.fine || "-"}` : (item.data || "-"),
+        ora: isLavorazione ? `Avanzamento ${item.progresso || 0}%` : (item.ora || "10:30"),
+        tipo: isLavorazione ? (item.titolo || "Lavorazione") : (item.tipo || "Appuntamento"),
+        strumento: item.strumento || "-",
+        note: isLavorazione ? `Fase: ${item.fase || "-"}` : (item.note || ""),
+        subject,
+        customMessage
+    };
+
+    const result = await window.dispatchSendinblueEmailPayload(payload, cfg);
+    if (submitBtn) submitBtn.disabled = false;
+
+    if (result && result.ok) {
+        const nowStamp = new Date().toLocaleString("it-IT", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+        item.emailCliente = recipientEmail;
+        item.ultimoPromemoriaInviato = nowStamp;
+        cfg.lastTestStatus = "success";
+        cfg.lastTestTime = nowStamp;
+        cfg.lastTestMessage = `Inviato a ${recipientEmail} (${nowStamp})`;
+        window.atelierDB.updateItem(col, item.id, item);
+
+        window.showToast(`Promemoria Sendinblue inviato a ${recipientEmail}!`);
+        window.closeModal();
+        if (window.appController && window.appController.currentModule === col) {
+            window.appController.loadModule(col);
+        }
+    } else {
+        if (statusBox) {
+            statusBox.style.background = "rgba(239,68,68,0.14)";
+            statusBox.style.border = "1px solid rgba(239,68,68,0.4)";
+            statusBox.style.color = "#fca5a5";
+            statusBox.innerHTML = `❌ <strong>Errore Sendinblue:</strong> ${result?.error || "Impossibile inviare il promemoria. Verifica la API Key Sendinblue."}`;
+        }
+    }
+};
+
+window.sendBulkSendinblueReminders = async function() {
+    const cfg = window.getSendinblueConfig();
+    if (!cfg.apiKey || String(cfg.apiKey).trim().length < 8) {
+        window.showToast("Configura prima la tua API Key Sendinblue per l'invio multiplo", "info");
+        window.openSendinblueConfigModal();
+        return;
+    }
+
+    const items = (window.atelierDB.data.calendarioAppuntamenti || []).filter(a => a && a.stato !== "Completato");
+    const withEmail = items.filter(a => {
+        const em = window.resolveClientEmailForCalendarItem(a);
+        return em && em.includes("@");
+    });
+
+    if (withEmail.length === 0) {
+        window.showToast("Nessun appuntamento attivo con indirizzo email associato", "info");
+        return;
+    }
+
+    if (!confirm(`Vuoi inviare un promemoria email tramite Sendinblue a tutti i ${withEmail.length} appuntamenti attivi in calendario?`)) {
+        return;
+    }
+
+    let okCount = 0;
+    let errCount = 0;
+    for (const item of withEmail) {
+        const recipientEmail = window.resolveClientEmailForCalendarItem(item);
+        const res = await window.dispatchSendinblueEmailPayload({
+            appointmentId: item.id,
+            recipientEmail,
+            recipientName: item.cliente,
+            cliente: item.cliente,
+            data: item.data,
+            ora: item.ora,
+            tipo: item.tipo,
+            strumento: item.strumento,
+            note: item.note
+        }, cfg);
+
+        if (res && res.ok) {
+            okCount++;
+            item.emailCliente = recipientEmail;
+            item.ultimoPromemoriaInviato = new Date().toLocaleString("it-IT", {
+                day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+            });
+        } else {
+            errCount++;
+        }
+    }
+
+    window.atelierDB.saveData();
+    if (window.appController && window.appController.currentModule === "calendarioAppuntamenti") {
+        window.appController.loadModule("calendarioAppuntamenti");
+    }
+
+    if (errCount === 0) {
+        window.showToast(`Inviati ${okCount} promemoria tramite Sendinblue!`);
+    } else {
+        window.showToast(`Inviati ${okCount} promemoria (${errCount} errori).`, "info");
+    }
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     if (window.socialMediaDB) {
         window.socialMediaDB.init();
@@ -5214,4 +5836,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.haService.init();
     }
     window.startSocialScheduler();
+    if (window.initSendinblueService) {
+        window.initSendinblueService();
+    }
 });

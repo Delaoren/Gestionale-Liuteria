@@ -301,38 +301,91 @@ window.AppModules = {
     // 2. Calendario appuntamenti
     renderCalendarioAppuntamenti: function(container) {
         const items = window.atelierDB.data.calendarioAppuntamenti || [];
+        const sibCfg = (window.getSendinblueConfig && window.getSendinblueConfig()) || ((window.atelierDB.data.settings && window.atelierDB.data.settings.sendinblue) || {});
+        const isConfigured = Boolean(sibCfg.enabled && sibCfg.apiKey && String(sibCfg.apiKey).trim().length > 8);
+
         container.innerHTML = `
             <div class="glass-panel">
-                <div class="panel-header">
+                <div class="panel-header" style="flex-wrap:wrap; gap:0.8rem;">
                     <div class="panel-title">
                         <i data-lucide="calendar-days" class="lucide-calendar-days" style="color: var(--accent-violet);"></i>
                         Calendario Appuntamenti & Visite Cliente
                     </div>
-                    <button class="btn btn-primary" onclick="window.openAddModal('calendarioAppuntamenti')">
-                        <i data-lucide="plus" class="lucide-plus"></i> Nuovo Appuntamento
-                    </button>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                        <button class="btn btn-secondary" onclick="window.openSendinblueConfigModal()" title="Configura API Key e Mittente Sendinblue (Brevo)">
+                            <i data-lucide="mail-check" class="lucide-mail-check" style="color:${isConfigured ? '#10b981' : '#f59e0b'};"></i>
+                            ⚙️ Sendinblue ${isConfigured ? '<span style="color:#10b981; font-weight:700;">(Attivo)</span>' : '<span style="color:#f59e0b;">(Configura)</span>'}
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.sendBulkSendinblueReminders()" title="Invia promemoria via Sendinblue agli appuntamenti confermati/in attesa">
+                            <i data-lucide="send" class="lucide-send" style="color:#38bdf8;"></i> Promemoria Multiplo
+                        </button>
+                        <button class="btn btn-primary" onclick="window.openAddModal('calendarioAppuntamenti')">
+                            <i data-lucide="plus" class="lucide-plus"></i> Nuovo Appuntamento
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Banner Stato Servizio Promemoria Sendinblue (Brevo) -->
+                <div style="margin-bottom:1.1rem; padding:0.85rem 1.1rem; border-radius:10px; background:${isConfigured ? 'rgba(16,185,129,0.08)' : 'rgba(56,189,248,0.08)'}; border:1px solid ${isConfigured ? 'rgba(16,185,129,0.28)' : 'rgba(56,189,248,0.28)'}; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div style="width:38px; height:38px; border-radius:9px; background:${isConfigured ? 'rgba(16,185,129,0.18)' : 'rgba(56,189,248,0.18)'}; display:flex; align-items:center; justify-content:center; color:${isConfigured ? '#10b981' : '#38bdf8'}; font-size:1.15rem; font-weight:700;">
+                            ✉️
+                        </div>
+                        <div>
+                            <div style="font-size:0.86rem; font-weight:600; color:#fff; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                <span>Servizio Promemoria Email: <strong>Sendinblue (Brevo API v3)</strong></span>
+                                <span class="badge ${isConfigured ? 'badge-success' : 'badge-warning'}" style="font-size:0.68rem;">
+                                    ${isConfigured ? '✓ Connesso & Pronto' : 'Richiede API Key Sendinblue'}
+                                </span>
+                            </div>
+                            <div style="font-size:0.76rem; color:var(--text-secondary); margin-top:0.15rem;">
+                                ${isConfigured
+                                    ? `Mittente: <strong>${sibCfg.senderName || 'Liuteria De Lorenzi'}</strong> &lt;${sibCfg.senderEmail || 'fabio.delorenzi@gmail.com'}&gt; ${sibCfg.lastTestMessage ? `• Ultimo invio: <em>${sibCfg.lastTestMessage}</em>` : ''}`
+                                    : `Clicca su <strong>"⚙️ Sendinblue (Configura)"</strong> per inserire la tua chiave API Sendinblue (<code>xkeysib-...</code>) o premi direttamente <strong>"Invia Promemoria"</strong> su un appuntamento.`}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.45rem;">
+                        <button class="btn btn-secondary" style="font-size:0.75rem; padding:0.35rem 0.7rem;" onclick="window.openSendinblueConfigModal()">
+                            <i data-lucide="settings" style="width:13px; height:13px;"></i> Impostazioni Sendinblue
+                        </button>
+                    </div>
+                </div>
+
                 <div class="custom-table-container">
                     <table class="custom-table">
                         <thead>
                             <tr>
                                 <th>Data & Ora</th>
-                                <th>Cliente</th>
+                                <th>Cliente & Contatto Email</th>
                                 <th>Tipo Incontro</th>
                                 <th>Strumento Riferimento</th>
                                 <th>Stato</th>
                                 <th>Note Atelier</th>
-                                <th>Azione</th>
+                                <th>Azioni & Promemoria</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${items.map(item => `
+                            ${items.map(item => {
+                                const resolvedEmail = (window.resolveClientEmailForCalendarItem && window.resolveClientEmailForCalendarItem(item)) || item.emailCliente || '';
+                                const lastReminder = item.ultimoPromemoriaInviato || '';
+                                return `
                                 <tr>
                                     <td>
                                         <strong style="color:var(--accent-gold);">${item.data}</strong><br>
-                                        <small style="color:var(--text-muted);">${item.ora}</small>
+                                        <small style="color:var(--text-muted);">Ore ${item.ora}</small>
                                     </td>
-                                    <td><strong>${item.cliente}</strong></td>
+                                    <td>
+                                        <strong>${item.cliente}</strong>
+                                        ${resolvedEmail
+                                            ? `<div style="font-size:0.74rem; color:#38bdf8; margin-top:0.15rem;">✉️ ${resolvedEmail}</div>`
+                                            : `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.15rem;"><em>Email da inserire all'invio</em></div>`
+                                        }
+                                        ${lastReminder
+                                            ? `<div style="font-size:0.68rem; color:#10b981; margin-top:0.2rem;">✓ Promemoria inviato (${lastReminder})</div>`
+                                            : ''
+                                        }
+                                    </td>
                                     <td><span class="badge badge-purple">${item.tipo}</span></td>
                                     <td>${item.strumento}</td>
                                     <td>
@@ -340,17 +393,17 @@ window.AppModules = {
                                     </td>
                                     <td style="font-size:0.85rem; color:var(--text-secondary);">${item.note}</td>
                                     <td>
-                                        <div style="display:flex; gap:0.4rem;">
-                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Appuntamento confermato con sms/email a ${item.cliente}')" title="Notifica cliente">
-                                                <i data-lucide="bell" class="lucide-bell"></i>
+                                        <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                                            <button class="btn btn-primary" style="padding:0.35rem 0.7rem; font-size:0.75rem; background:linear-gradient(135deg, #0284c7, #2563eb); border:none; box-shadow:0 2px 8px rgba(2,132,199,0.35);" onclick="window.openSendinblueReminderModal('calendarioAppuntamenti', '${item.id}')" title="Invia promemoria email al cliente tramite Sendinblue">
+                                                <i data-lucide="send" class="lucide-send" style="width:13px; height:13px;"></i> Invia Promemoria
                                             </button>
-                                            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('calendarioAppuntamenti', '${item.id}', '${item.cliente}')" title="Elimina appuntamento">
+                                            <button class="btn btn-secondary" style="padding:0.35rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('calendarioAppuntamenti', '${item.id}', '${String(item.cliente || '').replace(/'/g, "\\'")}')" title="Elimina appuntamento">
                                                 <i data-lucide="trash-2" class="lucide-trash-2"></i>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
-                            `).join('')}
+                            `}).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -363,14 +416,19 @@ window.AppModules = {
         const items = window.atelierDB.data.calendarioLavorazioni || [];
         container.innerHTML = `
             <div class="glass-panel">
-                <div class="panel-header">
+                <div class="panel-header" style="flex-wrap:wrap; gap:0.8rem;">
                     <div class="panel-title">
                         <i data-lucide="clock" class="lucide-clock" style="color: #ec4899;"></i>
                         Calendario & Tempistiche Lavorazioni
                     </div>
-                    <button class="btn btn-primary" onclick="window.openAddModal('calendarioLavorazioni')">
-                        <i data-lucide="plus" class="lucide-plus"></i> Pianifica Lavorazione
-                    </button>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button class="btn btn-secondary" onclick="window.openSendinblueConfigModal()" title="Configura Sendinblue per invio promemoria">
+                            <i data-lucide="mail-check" class="lucide-mail-check" style="color:#38bdf8;"></i> ⚙️ Configura Sendinblue
+                        </button>
+                        <button class="btn btn-primary" onclick="window.openAddModal('calendarioLavorazioni')">
+                            <i data-lucide="plus" class="lucide-plus"></i> Pianifica Lavorazione
+                        </button>
+                    </div>
                 </div>
                 <div class="cards-subgrid">
                     ${items.map(item => `
@@ -381,7 +439,8 @@ window.AppModules = {
                             </div>
                             <h4 style="font-family:var(--font-heading); color:#fff; margin-bottom:0.4rem;">${item.titolo}</h4>
                             <p style="font-size:0.85rem; color:var(--accent-gold); margin-bottom:0.4rem;"><i data-lucide="disc" class="lucide-disc"></i> ${item.strumento}</p>
-                            <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:1rem;">Fase: <strong>${item.fase}</strong> | Resp: ${item.responsabile}</p>
+                            <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.6rem;">Fase: <strong>${item.fase}</strong> | Resp: ${item.responsabile}</p>
+                            ${item.ultimoPromemoriaInviato ? `<div style="font-size:0.7rem; color:#10b981; margin-bottom:0.6rem;">✓ Promemoria Sendinblue inviato (${item.ultimoPromemoriaInviato})</div>` : ''}
                             
                             <div style="margin-bottom:0.5rem; display:flex; justify-content:space-between; font-size:0.8rem;">
                                 <span>Avanzamento Stage</span>
@@ -391,12 +450,17 @@ window.AppModules = {
                                 <div class="progress-bar-fill" style="width: ${item.progresso}%;"></div>
                             </div>
 
-                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
-                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="window.quickUpdateProgress('calendarioLavorazioni', '${item.id}', 10, '${item.titolo}')" title="Avanza progresso +10%">
-                                    <i data-lucide="trending-up" class="lucide-trending-up"></i> +10% Progresso
-                                </button>
-                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('calendarioLavorazioni', '${item.id}', '${item.titolo}')" title="Elimina lavorazione">
-                                    <i data-lucide="trash-2" class="lucide-trash-2"></i> Elimina
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
+                                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                    <button class="btn btn-secondary" style="padding:0.25rem 0.55rem; font-size:0.74rem;" onclick="window.quickUpdateProgress('calendarioLavorazioni', '${item.id}', 10, '${String(item.titolo || '').replace(/'/g, "\\'")}')" title="Avanza progresso +10%">
+                                        <i data-lucide="trending-up" class="lucide-trending-up"></i> +10%
+                                    </button>
+                                    <button class="btn btn-primary" style="padding:0.25rem 0.6rem; font-size:0.74rem; background:linear-gradient(135deg, #0284c7, #2563eb); border:none;" onclick="window.openSendinblueReminderModal('calendarioLavorazioni', '${item.id}')" title="Invia promemoria scadenza/stato lavorazione con Sendinblue">
+                                        <i data-lucide="send" class="lucide-send" style="width:12px; height:12px;"></i> Promemoria
+                                    </button>
+                                </div>
+                                <button class="btn btn-secondary" style="padding:0.25rem 0.55rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteRecord('calendarioLavorazioni', '${item.id}', '${String(item.titolo || '').replace(/'/g, "\\'")}')" title="Elimina lavorazione">
+                                    <i data-lucide="trash-2" class="lucide-trash-2"></i>
                                 </button>
                             </div>
                         </div>

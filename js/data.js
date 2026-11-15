@@ -56,6 +56,18 @@ const defaultData = {
             lastTestStatus: "unconfigured",
             lastTestTime: "",
             lastTestMessage: ""
+        },
+        sendinblue: {
+            enabled: false,
+            apiKey: "",
+            senderName: "Liuteria De Lorenzi - Cremona",
+            senderEmail: "fabio.delorenzi@gmail.com",
+            replyToEmail: "fabio.delorenzi@gmail.com",
+            atelierAddress: "Bottega Liuteria De Lorenzi — Cremona",
+            atelierPhone: "+39 0372 000000",
+            lastTestStatus: "unconfigured",
+            lastTestTime: "",
+            lastTestMessage: ""
         }
     },
     // 1. Biblioteca (Library)
@@ -110,6 +122,7 @@ const defaultData = {
         {
             id: "app-1",
             cliente: "Maestro Marco Rossi (Primo Violino)",
+            emailCliente: "m.rossi.violin@orchestra.it",
             data: _getTodayIso(),
             ora: "10:30",
             tipo: "Messa a punto suoni",
@@ -120,6 +133,7 @@ const defaultData = {
         {
             id: "app-2",
             cliente: "Quartetto d'Archi di Milano",
+            emailCliente: "amministrazione@fiorentina-orchestra.it",
             data: "2026-10-02",
             ora: "15:00",
             tipo: "Consulenza e Valutazione",
@@ -130,6 +144,7 @@ const defaultData = {
         {
             id: "app-3",
             cliente: "Conservatorio G. Verdi - Prof.ssa Bianchi",
+            emailCliente: "elena.moretti@cello.edu",
             data: "2026-10-05",
             ora: "11:00",
             tipo: "Consegna Strumento",
@@ -679,6 +694,9 @@ class DataStore {
                     }
                     if (!parsed.settings.socialIntegration) {
                         parsed.settings.socialIntegration = JSON.parse(JSON.stringify(defaultData.settings.socialIntegration));
+                    }
+                    if (!parsed.settings.sendinblue) {
+                        parsed.settings.sendinblue = JSON.parse(JSON.stringify(defaultData.settings.sendinblue));
                     }
                     if (parsed.settings.atelierName === "Atelier Liuteria Master" || !parsed.settings.atelierName) {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";
