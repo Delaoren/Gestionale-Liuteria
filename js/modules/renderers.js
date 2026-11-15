@@ -1350,50 +1350,282 @@ window.AppModules = {
         `;
     },
 
-    // 10. Media
+    // 10. Media (Archivio Universale Foto, Audio, Video, 3D, CAD & Documenti)
     renderMedia: function(container) {
-        const items = window.atelierDB.data.media || [];
+        const allItems = window.atelierDB.data.media || [];
+        const activeFilter = window.mediaTypeFilter || "all";
+        const activeCatFilter = window.mediaCategoryFilter || "all";
+        const searchQ = (window.mediaSearchQuery || "").trim().toLowerCase();
+
+        const detectKind = window.detectMediaItemKind || function(item) {
+            if (item.mediaKind) return item.mediaKind;
+            const mime = (item.fileMime || "").toLowerCase();
+            const url = (item.url || item.fileName || "").toLowerCase();
+            const tipo = (item.tipo || "").toLowerCase();
+            const fmt = (item.formato || "").toLowerCase();
+            if (mime.startsWith("image/") || /\.(jpg|jpeg|png|webp|gif|svg|bmp|tiff|tif|avif|heic|ico)$/.test(url) || tipo.includes("foto") || tipo.includes("immagin")) return "image";
+            if (mime.startsWith("audio/") || /\.(mp3|wav|flac|ogg|aac|m4a|opus|aiff|wma|mid|midi)$/.test(url) || tipo.includes("audio") || fmt.includes("flac") || fmt.includes("wav") || fmt.includes("mp3")) return "audio";
+            if (mime.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v|mpeg|mpg|3gp|ogv)$/.test(url) || tipo.includes("video") || fmt.includes("mp4") || fmt.includes("mov")) return "video";
+            return "other";
+        };
+
+        let imgCount = 0, audioCount = 0, videoCount = 0, otherCount = 0;
+        allItems.forEach(it => {
+            const k = detectKind(it);
+            if (k === "image") imgCount++;
+            else if (k === "audio") audioCount++;
+            else if (k === "video") videoCount++;
+            else otherCount++;
+        });
+
+        const filteredItems = allItems.filter(item => {
+            const k = detectKind(item);
+            if (activeFilter !== "all" && k !== activeFilter) return false;
+            if (activeCatFilter !== "all" && (item.categoria || "") !== activeCatFilter) return false;
+            if (searchQ) {
+                const hay = `${item.titolo || ""} ${item.descrizione || ""} ${item.tipo || ""} ${item.formato || ""} ${item.categoria || ""} ${item.fileName || ""}`.toLowerCase();
+                if (!hay.includes(searchQ)) return false;
+            }
+            return true;
+        });
+
+        const categories = Array.from(new Set([
+            "Finitura & Dettagli",
+            "Test Acustici",
+            "Lavorazione Atelier",
+            "Certificati & Foto Ufficiali",
+            "Modelli 3D & Rilievi CAD",
+            "Video & Documentari",
+            ...allItems.map(i => i.categoria).filter(Boolean)
+        ]));
+
         container.innerHTML = `
-            <div class="glass-panel">
-                <div class="panel-header">
-                    <div class="panel-title">
-                        <i data-lucide="image" class="lucide-image" style="color: var(--accent-purple);"></i>
-                        Media Library & Archivio Acustico / Fotografico (${items.length})
+            <!-- Top KPI Summary Cards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:1rem; margin-bottom:1.25rem;">
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('image')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-emerald);">
+                    <div style="width:44px; height:44px; border-radius:12px; background:rgba(16, 185, 129, 0.16); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="image"></i>
                     </div>
-                    <button class="btn btn-primary" onclick="window.openAddModal('media')">
-                        <i data-lucide="upload" class="lucide-upload"></i> Carica Media
-                    </button>
+                    <div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">Immagini & Foto HD</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${imgCount}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">JPG • PNG • WEBP • RAW • SVG • TIFF</div>
+                    </div>
                 </div>
-                <div class="cards-subgrid">
-                    ${items.map(item => `
-                        <div class="info-card">
-                            <div style="height:140px; background:rgba(0,0,0,0.5); border-radius:8px; margin-bottom:0.8rem; overflow:hidden; position:relative; display:flex; align-items:center; justify-content:center;">
-                                ${item.url && (item.url.endsWith('.png') || item.url.endsWith('.jpg') || item.url.startsWith('data:image')) ? `
-                                     <img src="${item.url}" style="width:100%; height:100%; object-fit:cover;">
-                                ` : `
-                                     <i data-lucide="music" class="lucide-music" style="font-size:3rem; color:var(--accent-gold);"></i>
-                                `}
-                                <span class="badge badge-purple" style="position:absolute; top:8px; right:8px;">${item.tipo}</span>
-                            </div>
-                            <h4 style="font-family:var(--font-heading); color:#fff; font-size:1rem; margin-bottom:0.3rem;">${item.titolo}</h4>
-                            <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.8rem;">${item.descrizione}</p>
-                            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-bottom:0.6rem;">
-                                <span>Formato: ${item.formato}</span>
-                                <span>Dim: ${item.dimensione}</span>
-                            </div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.6rem;">
-                                <button class="btn btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.75rem;" onclick="window.showToast('Apertura file multimediale: ${item.titolo}')">
-                                    <i data-lucide="external-link" class="lucide-external-link"></i> Apri
-                                </button>
-                                <button class="btn btn-secondary" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteRecord('media', '${item.id}', '${item.titolo}')" title="Elimina media">
-                                    <i data-lucide="trash-2" class="lucide-trash-2"></i> Elimina
-                                </button>
-                            </div>
-                        </div>
-                    `).join('')}
+
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('audio')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-gold);">
+                    <div style="width:44px; height:44px; border-radius:12px; background:rgba(245, 158, 11, 0.16); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="music"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">Audio & Test Acustici</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${audioCount}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">FLAC • WAV • MP3 • M4A • OGG • AIFF</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('video')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid #f43f5e;">
+                    <div style="width:44px; height:44px; border-radius:12px; background:rgba(244, 63, 94, 0.16); color:#fb7185; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="video"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">Video 4K / FullHD</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${videoCount}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">MP4 • MOV • WEBM • MKV • AVI</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" onclick="window.setMediaTypeFilter('other')" style="padding:1.1rem 1.3rem; cursor:pointer; display:flex; align-items:center; gap:0.9rem; border-left:3px solid var(--accent-cyan);">
+                    <div style="width:44px; height:44px; border-radius:12px; background:rgba(6, 182, 212, 0.16); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="box"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.73rem; color:var(--text-secondary); text-transform:uppercase;">3D, CAD, CT-Scan & Altri</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:#fff; font-family:var(--font-heading);">${otherCount}</div>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">OBJ • STL • GLB • DXF • PDF • DICOM</div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Universal Drag & Drop + Multi-Format Upload Banner -->
+            <div id="mediaPageDropzone" class="glass-panel" style="margin-bottom:1.4rem; background:linear-gradient(135deg, rgba(168, 85, 247, 0.11), rgba(59, 130, 246, 0.08)); border:1.5px dashed rgba(168, 85, 247, 0.55); padding:1.35rem 1.55rem; transition:all 0.2s;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.1rem;">
+                    <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:260px;">
+                        <div style="width:54px; height:54px; border-radius:14px; background:rgba(168, 85, 247, 0.22); border:1px solid #c084fc; color:#e9d5ff; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="upload-cloud" style="width:28px; height:28px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.12rem; margin-bottom:0.2rem;">
+                                Caricamento Universale File Media (Immagini, Audio, Video, 3D, CAD, Documenti)
+                            </h3>
+                            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                                Trascina qui qualsiasi file multimediale o scegli una categoria qui a fianco: supporta <strong>tutti i formati di Immagini, Audio lossless/compressi, Video 4K/HD, Modelli 3D (.obj, .stl, .glb), CAD e Rilievi</strong> anche di grandi dimensioni.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:0.55rem; flex-wrap:wrap; align-items:center;">
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem; background:linear-gradient(135deg, #10b981, #059669); border-color:#34d399; color:#fff;">
+                            <i data-lucide="image"></i> 📷 Immagini
+                            <input type="file" accept="image/*,.heic,.heif,.raw,.cr2,.nef,.arw,.dng,.tiff,.tif,.bmp,.svg,.webp,.avif" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
+                        </label>
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem;">
+                            <i data-lucide="music"></i> 🎵 Audio
+                            <input type="file" accept="audio/*,.mp3,.wav,.flac,.ogg,.aac,.m4a,.opus,.aiff,.aif,.wma,.alac,.mid,.midi" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
+                        </label>
+                        <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.58rem 0.95rem; font-size:0.82rem; background:linear-gradient(135deg, #e11d48, #be123c); border-color:#fb7185; color:#fff;">
+                            <i data-lucide="video"></i> 🎬 Video
+                            <input type="file" accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v,.mpeg,.mpg,.3gp,.ogv" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
+                        </label>
+                        <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.58rem 1rem; font-size:0.82rem; border-color:#c084fc; color:#fff; background:rgba(168, 85, 247, 0.18);">
+                            <i data-lucide="folder-up"></i> 📁 Tutti i File (3D, CAD, ecc.)
+                            <input type="file" accept="*/*" multiple onchange="window.handleDirectMediaPageUpload(event)" style="display:none;">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Media Library Panel -->
+            <div class="glass-panel">
+                <div class="panel-header" style="flex-wrap:wrap; gap:1rem;">
+                    <div class="panel-title">
+                        <i data-lucide="image" class="lucide-image" style="color: var(--accent-purple);"></i>
+                        Media Library & Archivio Acustico / Fotografico / Video (${filteredItems.length})
+                    </div>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="window.openAddModal('media')">
+                            <i data-lucide="upload" class="lucide-upload"></i> + Carica & Cataloga Media
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Bar (Type + Category + Search) -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1.35rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.07);">
+                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                        ${[
+                            { id: "all", label: `Tutti (${allItems.length})`, icon: "layers" },
+                            { id: "image", label: `Immagini (${imgCount})`, icon: "image" },
+                            { id: "audio", label: `Audio (${audioCount})`, icon: "music" },
+                            { id: "video", label: `Video (${videoCount})`, icon: "video" },
+                            { id: "other", label: `3D / CAD / Altri (${otherCount})`, icon: "box" }
+                        ].map(t => `
+                            <button type="button" class="btn ${activeFilter === t.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.38rem 0.82rem; font-size:0.78rem; border-radius:20px;" onclick="window.setMediaTypeFilter('${t.id}')">
+                                <i data-lucide="${t.icon}"></i> ${t.label}
+                            </button>
+                        `).join("")}
+                    </div>
+
+                    <div style="display:flex; gap:0.55rem; align-items:center; flex-wrap:wrap;">
+                        <input type="text" id="mediaSearchInput" class="form-control" placeholder="Cerca titolo, formato, note..." value="${(window.mediaSearchQuery || '').replace(/"/g, '&quot;')}" oninput="window.setMediaSearchQuery(this.value)" style="width:210px; padding:0.36rem 0.75rem; font-size:0.8rem; border-radius:20px;">
+                        <select class="form-control" style="width:auto; padding:0.36rem 0.75rem; font-size:0.8rem;" onchange="window.setMediaCategoryFilter(this.value)">
+                            <option value="all" ${activeCatFilter === "all" ? "selected" : ""}>Tutte le Categorie</option>
+                            ${categories.map(c => `<option value="${c}" ${activeCatFilter === c ? "selected" : ""}>${c}</option>`).join("")}
+                        </select>
+                    </div>
+                </div>
+
+                ${filteredItems.length === 0 ? `
+                    <div style="text-align:center; padding:3rem 1rem; color:var(--text-muted);">
+                        <i data-lucide="folder-open" style="width:46px; height:46px; color:var(--accent-purple); margin-bottom:0.7rem;"></i>
+                        <h4 style="color:#fff; margin-bottom:0.35rem;">Nessun file multimediale trovato con i filtri selezionati</h4>
+                        <p style="font-size:0.84rem; margin-bottom:1.1rem;">Carica foto, registrazioni audio, video o modelli 3D utilizzando i pulsanti qui sopra.</p>
+                        <button class="btn btn-primary" onclick="window.setMediaTypeFilter('all'); window.setMediaCategoryFilter('all'); window.openAddModal('media');">
+                            <i data-lucide="upload"></i> Carica Nuovo File Media
+                        </button>
+                    </div>
+                ` : `
+                    <div class="cards-subgrid">
+                        ${filteredItems.map(item => {
+                            const kind = detectKind(item);
+                            const extBadge = (item.fileExt || item.formato || kind).toString().replace(".", "").toUpperCase().slice(0, 12);
+                            const safeTitle = (item.titolo || "Media").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            const mediaUrl = item.thumbnailDataUrl || item.url || "";
+
+                            return `
+                                <div class="info-card" style="display:flex; flex-direction:column; justify-content:space-between;">
+                                    <div>
+                                        <!-- Media Preview Box -->
+                                        <div onclick="window.openMediaViewerModal('${item.id}')" style="height:175px; background:linear-gradient(135deg, #0d1119, #182032); border-radius:10px; margin-bottom:0.85rem; overflow:hidden; position:relative; cursor:pointer; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.07);">
+                                            ${kind === "image" ? `
+                                                <img ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} src="${mediaUrl || './assets/lutherie_banner.png'}" alt="${safeTitle}" onerror="this.src='./assets/lutherie_banner.png'" style="width:100%; height:100%; object-fit:cover; transition:transform 0.3s ease;">
+                                            ` : kind === "video" ? `
+                                                ${item.thumbnailDataUrl ? `<img src="${item.thumbnailDataUrl}" style="width:100%; height:100%; object-fit:cover; opacity:0.82;">` : ""}
+                                                <video ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} ${item.url ? `src="${item.url}"` : ""} muted playsinline preload="metadata" style="width:100%; height:100%; object-fit:cover; position:absolute; inset:0;"></video>
+                                                <div style="position:absolute; inset:0; background:radial-gradient(circle, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.65) 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.35rem;">
+                                                    <div style="width:48px; height:48px; border-radius:50%; background:rgba(244, 63, 94, 0.92); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 0 20px rgba(244, 63, 94, 0.6);">
+                                                        <i data-lucide="play" style="width:22px; height:22px; margin-left:2px;"></i>
+                                                    </div>
+                                                    <span style="font-size:0.72rem; font-weight:700; color:#fff; background:rgba(0,0,0,0.68); padding:2px 8px; border-radius:12px;">
+                                                        🎬 Riproduci Video ${item.duration ? `(${item.duration})` : ""}
+                                                    </span>
+                                                </div>
+                                            ` : kind === "audio" ? `
+                                                <div style="width:100%; height:100%; padding:1rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.55rem; background:radial-gradient(circle at center, rgba(245, 158, 11, 0.16), rgba(13, 17, 25, 0.95));" onclick="event.stopPropagation();">
+                                                    <div onclick="window.openMediaViewerModal('${item.id}')" style="display:flex; align-items:center; gap:0.55rem; color:var(--accent-gold); cursor:pointer;">
+                                                        <i data-lucide="headphones" style="width:28px; height:28px;"></i>
+                                                        <span style="font-size:0.8rem; font-weight:700; color:#fff;">Traccia Audio ${item.duration ? `(${item.duration})` : ""}</span>
+                                                    </div>
+                                                    <audio ${item.fileId ? `data-social-media-id="${item.fileId}"` : ""} ${item.url ? `src="${item.url}"` : ""} controls preload="metadata" style="width:92%; height:36px;"></audio>
+                                                </div>
+                                            ` : `
+                                                <div style="text-align:center; padding:1rem;">
+                                                    <div style="width:54px; height:54px; border-radius:14px; background:rgba(6, 182, 212, 0.16); border:1px solid rgba(6, 182, 212, 0.4); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto; font-weight:800; font-size:0.85rem;">
+                                                        ${extBadge.slice(0, 5)}
+                                                    </div>
+                                                    <div style="font-size:0.78rem; color:#e2e8f0; font-weight:600;">${item.fileName || item.formato || "File Tecnico / 3D"}</div>
+                                                </div>
+                                            `}
+
+                                            <span class="badge ${kind === 'video' ? 'badge-danger' : kind === 'audio' ? 'badge-warning' : kind === 'image' ? 'badge-success' : 'badge-info'}" style="position:absolute; top:8px; right:8px; box-shadow:0 2px 8px rgba(0,0,0,0.5);">
+                                                ${item.tipo || extBadge}
+                                            </span>
+                                            ${item.categoria ? `
+                                                <span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.72); color:#e2e8f0; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px;">
+                                                    ${item.categoria}
+                                                </span>
+                                            ` : ""}
+                                        </div>
+
+                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.02rem; margin-bottom:0.35rem; line-height:1.35;">${item.titolo}</h4>
+                                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.75rem;">${item.descrizione || ""}</p>
+                                    </div>
+
+                                    <div>
+                                        <div style="display:flex; justify-content:space-between; font-size:0.74rem; color:var(--text-muted); margin-bottom:0.65rem; background:rgba(0,0,0,0.28); padding:0.38rem 0.65rem; border-radius:6px;">
+                                            <span>Formato: <strong style="color:#e2e8f0;">${item.formato || extBadge}</strong></span>
+                                            <span>Dim: <strong style="color:var(--accent-gold); font-family:var(--font-mono);">${item.dimensione || "-"}</strong></span>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.65rem; gap:0.35rem; flex-wrap:wrap;">
+                                            <div style="display:flex; gap:0.35rem;">
+                                                <button class="btn btn-primary" style="padding:0.28rem 0.65rem; font-size:0.74rem;" onclick="window.openMediaViewerModal('${item.id}')">
+                                                    <i data-lucide="${kind === 'audio' || kind === 'video' ? 'play-circle' : 'maximize-2'}"></i> ${kind === 'audio' || kind === 'video' ? 'Player' : 'Apri'}
+                                                </button>
+                                                <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.openEditMediaModal('${item.id}')" title="Modifica scheda o sostituisci file">
+                                                    <i data-lucide="edit-3"></i>
+                                                </button>
+                                                <button class="btn btn-secondary" style="padding:0.28rem 0.55rem; font-size:0.74rem;" onclick="window.downloadMediaItem('${item.id}')" title="Scarica file originale">
+                                                    <i data-lucide="download"></i>
+                                                </button>
+                                            </div>
+                                            <button class="btn btn-secondary" style="padding:0.28rem 0.5rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteMediaItem('${item.id}', '${safeTitle}')" title="Elimina media">
+                                                <i data-lucide="trash-2" class="lucide-trash-2"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `}
+            </div>
         `;
+
+        if (typeof window.setupMediaPageDropzone === "function") {
+            setTimeout(() => window.setupMediaPageDropzone(), 20);
+        }
+        if (window.socialMediaDB && typeof window.socialMediaDB.hydrateDOMMedia === "function") {
+            setTimeout(() => window.socialMediaDB.hydrateDOMMedia(container), 40);
+        }
     },
 
     // 11. Report

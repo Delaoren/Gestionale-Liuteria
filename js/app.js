@@ -967,56 +967,7 @@ window.openAddModal = function(collectionName) {
             </form>
         `;
     } else if (collectionName === 'media') {
-        formHTML = `
-            <form onsubmit="window.saveNewRecord(event, 'media')">
-                <div class="form-group">
-                    <label>Titolo File / Registrazione Acustica</label>
-                    <input type="text" id="f_med_titolo" class="form-control" required placeholder="Es. Macro Scultura Riccio e Filetto Violino Opus 42">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Tipologia Media</label>
-                        <select id="f_med_tipo" class="form-control">
-                            <option value="Foto High-Res">Foto High-Res</option>
-                            <option value="Audio Lossless">Audio Lossless (Test Acustico)</option>
-                            <option value="Video 4K">Video 4K (Lavorazione)</option>
-                            <option value="Rilievo CT-Scan">Rilievo CT-Scan</option>
-                            <option value="Disegno Vettoriale">Disegno Vettoriale Blueprint</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Categoria</label>
-                        <select id="f_med_categoria" class="form-control">
-                            <option value="Finitura & Dettagli">Finitura & Dettagli</option>
-                            <option value="Test Acustici">Test Acustici</option>
-                            <option value="Lavorazione Atelier">Lavorazione Atelier</option>
-                            <option value="Certificati & Foto Ufficiali">Certificati & Foto Ufficiali</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Formato File</label>
-                        <input type="text" id="f_med_formato" class="form-control" value="JPG / 4K" placeholder="Es. JPG / 4K, FLAC 24bit/96kHz, MP4">
-                    </div>
-                    <div class="form-group">
-                        <label>Dimensione File</label>
-                        <input type="text" id="f_med_dimensione" class="form-control" value="15 MB" placeholder="Es. 15 MB, 88 MB">
-                    </div>
-                    <div class="form-group">
-                        <label>URL / Percorso Immagine</label>
-                        <input type="text" id="f_med_url" class="form-control" value="./assets/lutherie_banner.png" placeholder="Es. ./assets/...">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Descrizione Tecnica & Note Scatto/Audio</label>
-                    <textarea id="f_med_descrizione" class="form-control" placeholder="Dettagli sulle condizioni di ripresa o registrazione, microfoni usati, macro ottica..."></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">
-                    <i data-lucide="upload" class="lucide-upload"></i> Carica Media nell'Archivio
-                </button>
-            </form>
-        `;
+        formHTML = window.buildMediaModalForm(null);
     } else if (collectionName === 'report') {
         formHTML = `
             <form onsubmit="window.saveNewRecord(event, 'report')">
@@ -1138,7 +1089,7 @@ window.openAddModal = function(collectionName) {
 
     const modalContainer = modalOverlay.querySelector('.modal-container');
     if (modalContainer) {
-        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca') {
+        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca' || collectionName === 'media') {
             modalContainer.style.maxWidth = '820px';
         } else {
             modalContainer.style.maxWidth = '';
@@ -1155,6 +1106,9 @@ window.openAddModal = function(collectionName) {
     } else if (collectionName === 'biblioteca') {
         window.renderBibliotecaFileDraft();
         window.setupBibliotecaModalDropzone();
+    } else if (collectionName === 'media') {
+        window.renderMediaFileDraft();
+        window.setupMediaModalDropzone();
     }
     if (window.appController && window.appController.setupLucideIcons) {
         window.appController.setupLucideIcons();
@@ -1313,17 +1267,43 @@ window.saveNewRecord = function(e, collectionName) {
         };
         window.atelierDB.addItem("magazzinoStrumenti", item);
     } else if (collectionName === 'media') {
+        const editingId = document.getElementById("f_med_edit_id") ? document.getElementById("f_med_edit_id").value.trim() : "";
+        const existing = editingId ? window.atelierDB.getItem("media", editingId) : null;
+        const draft = window.mediaFileDraft || null;
+
         const item = {
-            id: "med-" + Date.now(),
+            id: editingId || ("med-" + Date.now()),
             titolo: document.getElementById("f_med_titolo").value.trim(),
             tipo: document.getElementById("f_med_tipo").value,
-            formato: document.getElementById("f_med_formato").value.trim() || "JPG / 4K",
-            dimensione: document.getElementById("f_med_dimensione").value.trim() || "15 MB",
+            formato: document.getElementById("f_med_formato").value.trim() || (draft ? draft.formatoLabel : "JPG / 4K"),
+            dimensione: document.getElementById("f_med_dimensione").value.trim() || (draft ? draft.sizeFormatted : "15 MB"),
             categoria: document.getElementById("f_med_categoria").value,
-            url: document.getElementById("f_med_url").value.trim() || "./assets/lutherie_banner.png",
-            descrizione: document.getElementById("f_med_descrizione").value.trim()
+            url: document.getElementById("f_med_url").value.trim() || (draft && draft.url ? draft.url : (existing ? existing.url : "")),
+            descrizione: document.getElementById("f_med_descrizione").value.trim(),
+            fileId: draft ? draft.id : (existing ? existing.fileId || "" : ""),
+            fileName: draft ? draft.name : (existing ? existing.fileName || "" : ""),
+            fileExt: draft ? draft.ext : (existing ? existing.fileExt || "" : ""),
+            fileMime: draft ? draft.mimeType : (existing ? existing.fileMime || "" : ""),
+            sizeBytes: draft ? draft.sizeBytes : (existing ? existing.sizeBytes || 0 : 0),
+            duration: draft && draft.duration ? draft.duration : (existing ? existing.duration || "" : ""),
+            dimensions: draft && draft.dimensions ? draft.dimensions : (existing ? existing.dimensions || "" : ""),
+            mediaKind: draft && draft.mediaKind ? draft.mediaKind : (existing ? existing.mediaKind || "" : ""),
+            thumbnailDataUrl: draft && draft.thumbnailDataUrl ? draft.thumbnailDataUrl : (existing ? existing.thumbnailDataUrl || "" : ""),
+            isIndexedDB: draft ? Boolean(draft.isIndexedDB) : (existing ? Boolean(existing.isIndexedDB) : false),
+            createdAt: existing && existing.createdAt ? existing.createdAt : new Date().toISOString()
         };
-        window.atelierDB.addItem("media", item);
+
+        if (editingId && existing) {
+            window.atelierDB.updateItem("media", editingId, item);
+            window.mediaFileDraft = null;
+            window.closeModal();
+            window.appController.renderActiveModule();
+            window.showToast(`File multimediale "${item.titolo}" aggiornato!`);
+            return;
+        } else {
+            window.atelierDB.addItem("media", item);
+            window.mediaFileDraft = null;
+        }
     } else if (collectionName === 'report') {
         const item = {
             id: "rep-" + Date.now(),
@@ -2724,7 +2704,7 @@ class SocialMediaStorageEngine {
             if (!mediaId) continue;
             const objUrl = await this.getObjectUrl(mediaId);
             if (objUrl) {
-                if (el.tagName === "VIDEO") {
+                if (el.tagName === "VIDEO" || el.tagName === "AUDIO") {
                     if (el.src !== objUrl) {
                         el.src = objUrl;
                     }
@@ -9485,6 +9465,976 @@ window.saveSenderToClienti = function(msgId) {
     };
     window.atelierDB.addItem("clienti", newClient);
     window.showToast(`"${newClient.nome}" salvato nell'anagrafica Clienti!`);
+};
+
+// ==========================================================================
+// GALLERIA MULTIMEDIALE & AUDIO-VIDEO STUDIO (TUTTI I FORMATI MEDIA)
+// ==========================================================================
+
+window.mediaTypeFilter = "all";
+window.mediaCategoryFilter = "all";
+window.mediaSearchQuery = "";
+window.mediaFileDraft = null;
+
+window.MEDIA_EXT_CATALOG = {
+    // Immagini
+    ".jpg":  { kind: "image", tipo: "Foto High-Res", formato: "JPEG High-Res", cat: "Finitura & Dettagli", mime: "image/jpeg" },
+    ".jpeg": { kind: "image", tipo: "Foto High-Res", formato: "JPEG High-Res", cat: "Finitura & Dettagli", mime: "image/jpeg" },
+    ".png":  { kind: "image", tipo: "Foto High-Res", formato: "PNG Lossless", cat: "Certificati & Foto Ufficiali", mime: "image/png" },
+    ".webp": { kind: "image", tipo: "Foto High-Res", formato: "WEBP HD", cat: "Finitura & Dettagli", mime: "image/webp" },
+    ".avif": { kind: "image", tipo: "Foto High-Res", formato: "AVIF HDR", cat: "Finitura & Dettagli", mime: "image/avif" },
+    ".gif":  { kind: "image", tipo: "Foto High-Res", formato: "GIF Animata", cat: "Lavorazione Atelier", mime: "image/gif" },
+    ".svg":  { kind: "image", tipo: "Disegno Vettoriale", formato: "SVG Vettoriale", cat: "Modelli 3D & CAD", mime: "image/svg+xml" },
+    ".bmp":  { kind: "image", tipo: "Foto High-Res", formato: "BMP Non Compresso", cat: "Finitura & Dettagli", mime: "image/bmp" },
+    ".tif":  { kind: "image", tipo: "Foto High-Res", formato: "TIFF Master", cat: "Certificati & Foto Ufficiali", mime: "image/tiff" },
+    ".tiff": { kind: "image", tipo: "Foto High-Res", formato: "TIFF Master", cat: "Certificati & Foto Ufficiali", mime: "image/tiff" },
+    ".heic": { kind: "image", tipo: "Foto High-Res", formato: "HEIC Apple RAW", cat: "Finitura & Dettagli", mime: "image/heic" },
+    ".raw":  { kind: "image", tipo: "Foto High-Res", formato: "Camera RAW", cat: "Certificati & Foto Ufficiali", mime: "image/x-raw" },
+    ".cr2":  { kind: "image", tipo: "Foto High-Res", formato: "Canon RAW CR2", cat: "Certificati & Foto Ufficiali", mime: "image/x-canon-cr2" },
+    ".nef":  { kind: "image", tipo: "Foto High-Res", formato: "Nikon RAW NEF", cat: "Certificati & Foto Ufficiali", mime: "image/x-nikon-nef" },
+    ".dng":  { kind: "image", tipo: "Foto High-Res", formato: "Adobe DNG RAW", cat: "Certificati & Foto Ufficiali", mime: "image/x-adobe-dng" },
+
+    // Audio
+    ".mp3":  { kind: "audio", tipo: "Audio Lossless", formato: "MP3 320kbps", cat: "Test Acustici", mime: "audio/mpeg" },
+    ".wav":  { kind: "audio", tipo: "Audio Lossless", formato: "WAV PCM 24bit/96kHz", cat: "Test Acustici", mime: "audio/wav" },
+    ".flac": { kind: "audio", tipo: "Audio Lossless", formato: "FLAC Studio Lossless", cat: "Test Acustici", mime: "audio/flac" },
+    ".aac":  { kind: "audio", tipo: "Audio Lossless", formato: "AAC Audio", cat: "Test Acustici", mime: "audio/aac" },
+    ".m4a":  { kind: "audio", tipo: "Audio Lossless", formato: "M4A Apple Lossless", cat: "Test Acustici", mime: "audio/mp4" },
+    ".ogg":  { kind: "audio", tipo: "Audio Lossless", formato: "OGG Vorbis", cat: "Test Acustici", mime: "audio/ogg" },
+    ".opus": { kind: "audio", tipo: "Audio Lossless", formato: "OPUS Master", cat: "Test Acustici", mime: "audio/opus" },
+    ".aiff": { kind: "audio", tipo: "Audio Lossless", formato: "AIFF Studio PCM", cat: "Test Acustici", mime: "audio/aiff" },
+    ".aif":  { kind: "audio", tipo: "Audio Lossless", formato: "AIFF Studio PCM", cat: "Test Acustici", mime: "audio/aiff" },
+    ".wma":  { kind: "audio", tipo: "Audio Lossless", formato: "WMA Audio", cat: "Test Acustici", mime: "audio/x-ms-wma" },
+
+    // Video
+    ".mp4":  { kind: "video", tipo: "Video 4K", formato: "MP4 H.264 / 4K", cat: "Lavorazione Atelier", mime: "video/mp4" },
+    ".webm": { kind: "video", tipo: "Video 4K", formato: "WEBM VP9 HD", cat: "Lavorazione Atelier", mime: "video/webm" },
+    ".mov":  { kind: "video", tipo: "Video 4K", formato: "QuickTime MOV ProRes", cat: "Lavorazione Atelier", mime: "video/quicktime" },
+    ".mkv":  { kind: "video", tipo: "Video 4K", formato: "MKV Matroska 4K", cat: "Lavorazione Atelier", mime: "video/x-matroska" },
+    ".avi":  { kind: "video", tipo: "Video 4K", formato: "AVI Video", cat: "Lavorazione Atelier", mime: "video/x-msvideo" },
+    ".m4v":  { kind: "video", tipo: "Video 4K", formato: "M4V Video HD", cat: "Lavorazione Atelier", mime: "video/x-m4v" },
+    ".ogv":  { kind: "video", tipo: "Video 4K", formato: "OGV Video", cat: "Lavorazione Atelier", mime: "video/ogg" },
+
+    // 3D / CAD / Rilievi / Documenti
+    ".obj":  { kind: "other", tipo: "Modello 3D / CAD", formato: "OBJ Mesh 3D", cat: "Modelli 3D & CAD", mime: "model/obj" },
+    ".stl":  { kind: "other", tipo: "Modello 3D / CAD", formato: "STL Mesh CNC/3D", cat: "Modelli 3D & CAD", mime: "model/stl" },
+    ".glb":  { kind: "other", tipo: "Modello 3D / CAD", formato: "GLB 3D Binary", cat: "Modelli 3D & CAD", mime: "model/gltf-binary" },
+    ".gltf": { kind: "other", tipo: "Modello 3D / CAD", formato: "GLTF 3D Scene", cat: "Modelli 3D & CAD", mime: "model/gltf+json" },
+    ".fbx":  { kind: "other", tipo: "Modello 3D / CAD", formato: "FBX 3D Model", cat: "Modelli 3D & CAD", mime: "application/octet-stream" },
+    ".dxf":  { kind: "other", tipo: "Disegno Vettoriale", formato: "DXF CAD Calibro/Forma", cat: "Modelli 3D & CAD", mime: "application/dxf" },
+    ".dwg":  { kind: "other", tipo: "Disegno Vettoriale", formato: "DWG AutoCAD", cat: "Modelli 3D & CAD", mime: "application/acad" },
+    ".dicom":{ kind: "other", tipo: "Rilievo CT-Scan", formato: "DICOM Tomografia", cat: "Modelli 3D & CAD", mime: "application/dicom" },
+    ".dcm":  { kind: "other", tipo: "Rilievo CT-Scan", formato: "DICOM Tomografia", cat: "Modelli 3D & CAD", mime: "application/dicom" },
+    ".pdf":  { kind: "other", tipo: "Disegno Vettoriale", formato: "PDF Tavola Tecnica", cat: "Certificati & Foto Ufficiali", mime: "application/pdf" },
+    ".zip":  { kind: "other", tipo: "Archivio Tecnico", formato: "ZIP Pacchetto Dati", cat: "Modelli 3D & CAD", mime: "application/zip" }
+};
+
+window.detectMediaItemKind = function(item) {
+    if (!item) return "image";
+    if (item.mediaKind && ["image", "audio", "video", "other"].includes(item.mediaKind)) {
+        return item.mediaKind;
+    }
+    const mime = (item.fileMime || "").toLowerCase();
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("audio/")) return "audio";
+    if (mime.startsWith("video/")) return "video";
+
+    const ext = (item.fileExt || "").toLowerCase();
+    if (ext && window.MEDIA_EXT_CATALOG[ext]) {
+        return window.MEDIA_EXT_CATALOG[ext].kind;
+    }
+
+    const combined = `${item.tipo || ""} ${item.formato || ""} ${item.url || ""}`.toLowerCase();
+    if (combined.includes("audio") || combined.includes("flac") || combined.includes("wav") || combined.includes("mp3") || combined.includes("ogg") || combined.includes("m4a") || combined.includes("acustic")) {
+        return "audio";
+    }
+    if (combined.includes("video") || combined.includes("mp4") || combined.includes("mov") || combined.includes("webm") || combined.includes("mkv") || combined.includes("4k")) {
+        if (!combined.includes("jpg") && !combined.includes("png") && !combined.includes("foto")) {
+            return "video";
+        }
+    }
+    if (combined.includes("ct-scan") || combined.includes("3d") || combined.includes("cad") || combined.includes(".obj") || combined.includes(".stl") || combined.includes(".dxf") || combined.includes("vettoriale") || combined.includes("dicom")) {
+        return "other";
+    }
+    return "image";
+};
+
+window.refreshMediaModuleView = function() {
+    if (window.appController && window.appController.activeModuleId === "media") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderMedia) {
+            window.AppModules.renderMedia(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.setMediaTypeFilter = function(typeId) {
+    window.mediaTypeFilter = typeId || "all";
+    window.refreshMediaModuleView();
+};
+
+window.setMediaCategoryFilter = function(cat) {
+    window.mediaCategoryFilter = cat || "all";
+    window.refreshMediaModuleView();
+};
+
+window.setMediaSearchQuery = function(q) {
+    window.mediaSearchQuery = q || "";
+    const activeEl = document.activeElement;
+    const wasInput = activeEl && activeEl.id === "mediaSearchInput";
+    const cursorPos = wasInput ? activeEl.selectionStart : null;
+    window.refreshMediaModuleView();
+    if (wasInput) {
+        const nextInput = document.getElementById("mediaSearchInput");
+        if (nextInput) {
+            nextInput.focus();
+            if (cursorPos !== null) {
+                try { nextInput.setSelectionRange(cursorPos, cursorPos); } catch (e) {}
+            }
+        }
+    }
+};
+
+window.formatDurationSeconds = function(sec) {
+    if (!sec || !isFinite(sec) || sec <= 0) return "";
+    const total = Math.round(sec);
+    const hrs = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hrs > 0) {
+        return `${hrs}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+};
+
+window.buildMediaModalForm = function(existingItem = null) {
+    const m = existingItem || {
+        id: "",
+        titolo: "",
+        tipo: "Foto High-Res",
+        categoria: "Finitura & Dettagli",
+        formato: "JPG / 4K",
+        dimensione: "",
+        url: "",
+        descrizione: "",
+        fileId: "",
+        fileName: "",
+        fileExt: "",
+        fileMime: "",
+        sizeBytes: 0,
+        duration: "",
+        dimensions: "",
+        mediaKind: "image",
+        thumbnailDataUrl: "",
+        isIndexedDB: false
+    };
+
+    window.mediaFileDraft = (m.fileId || m.fileName || m.url) ? {
+        id: m.fileId || ("medfile-" + Date.now()),
+        name: m.fileName || (m.titolo ? m.titolo : "File multimediale"),
+        ext: m.fileExt || "",
+        mimeType: m.fileMime || "",
+        sizeBytes: m.sizeBytes || 0,
+        sizeFormatted: m.dimensione || window.formatSocialBytes(m.sizeBytes || 0),
+        formatoLabel: m.formato || "File Media",
+        url: m.url || "",
+        duration: m.duration || "",
+        dimensions: m.dimensions || "",
+        mediaKind: window.detectMediaItemKind(m),
+        thumbnailDataUrl: m.thumbnailDataUrl || "",
+        isIndexedDB: Boolean(m.isIndexedDB)
+    } : null;
+
+    const tipoOptions = [
+        "Foto High-Res",
+        "Audio Lossless",
+        "Video 4K",
+        "Modello 3D / CAD",
+        "Rilievo CT-Scan",
+        "Disegno Vettoriale",
+        "Archivio Tecnico"
+    ];
+    if (m.tipo && !tipoOptions.includes(m.tipo)) {
+        tipoOptions.unshift(m.tipo);
+    }
+
+    const catOptions = [
+        "Finitura & Dettagli",
+        "Test Acustici",
+        "Lavorazione Atelier",
+        "Certificati & Foto Ufficiali",
+        "Modelli 3D & CAD",
+        "Restauri & Diagnostica"
+    ];
+    if (m.categoria && !catOptions.includes(m.categoria)) {
+        catOptions.unshift(m.categoria);
+    }
+
+    return `
+        <form onsubmit="window.saveNewRecord(event, 'media')">
+            <input type="hidden" id="f_med_edit_id" value="${m.id || ''}">
+
+            <!-- 1. DROPZONE UNIVERSALE MULTI-FORMATO -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">1. Seleziona o Trascina Qualsiasi File Multimediale</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Supporta <strong>Immagini</strong> (JPG, PNG, WEBP, TIFF, RAW), <strong>Audio</strong> (MP3, WAV, FLAC, M4A, OGG), <strong>Video</strong> (MP4, MOV, WEBM, MKV) e <strong>3D/CAD/CT-Scan</strong> (OBJ, STL, GLB, DXF, PDF).</span>
+                </div>
+                <span class="badge badge-gold" style="font-size:0.7rem;">
+                    <i data-lucide="sparkles"></i> Rilevamento Metadati Automatico
+                </span>
+            </div>
+
+            <div id="mediaModalDropzone" style="background:linear-gradient(135deg, rgba(212, 163, 89, 0.09), rgba(59, 130, 246, 0.07), rgba(16, 185, 129, 0.06)); border:2px dashed rgba(212, 163, 89, 0.5); border-radius:12px; padding:1.2rem; text-align:center; margin-bottom:1rem; transition:all 0.25s ease;">
+                <h4 style="color:#fff; font-size:0.95rem; margin-bottom:0.25rem;">Trascina qui uno o più file (Foto, Audio, Video, 3D, CAD...)</h4>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.85rem;">
+                    Risoluzione, durata audio/video, anteprima e formato vengono estratti automaticamente dal file selezionato.
+                </p>
+                <div style="display:flex; justify-content:center; gap:0.5rem; flex-wrap:wrap;">
+                    <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.48rem 0.85rem; font-size:0.79rem; border-color:rgba(212,163,89,0.45); color:var(--accent-gold);">
+                        <i data-lucide="camera" style="width:15px; height:15px;"></i> + Immagini
+                        <input type="file" multiple accept="image/*,.raw,.cr2,.nef,.dng,.tif,.tiff,.heic" onchange="window.handleMediaFileInput(event)" style="display:none;">
+                    </label>
+                    <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.48rem 0.85rem; font-size:0.79rem; border-color:rgba(16,185,129,0.45); color:#6ee7b7;">
+                        <i data-lucide="music" style="width:15px; height:15px;"></i> + Audio
+                        <input type="file" multiple accept="audio/*,.flac,.wav,.mp3,.m4a,.aac,.ogg,.opus,.aiff,.wma" onchange="window.handleMediaFileInput(event)" style="display:none;">
+                    </label>
+                    <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.48rem 0.85rem; font-size:0.79rem; border-color:rgba(59,130,246,0.45); color:#93c5fd;">
+                        <i data-lucide="video" style="width:15px; height:15px;"></i> + Video
+                        <input type="file" multiple accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v" onchange="window.handleMediaFileInput(event)" style="display:none;">
+                    </label>
+                    <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.48rem 0.95rem; font-size:0.79rem;">
+                        <i data-lucide="folder-up" style="width:15px; height:15px;"></i> + Qualsiasi File (3D, CAD, Tutti)
+                        <input type="file" multiple accept="*/*" onchange="window.handleMediaFileInput(event)" style="display:none;">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Live Upload Progress Box -->
+            <div id="mediaUploadProgressBox" style="display:none; background:rgba(212, 163, 89, 0.12); border:1px solid var(--accent-gold); border-radius:10px; padding:0.75rem 1rem; margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; margin-bottom:0.35rem;">
+                    <span id="mediaUploadStatusText" style="color:#fff; font-weight:600;">Caricamento e analisi file multimediale in corso...</span>
+                    <strong id="mediaUploadPercentText" style="color:var(--accent-gold); font-family:var(--font-mono);">0%</strong>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="mediaUploadProgressBar" class="progress-bar-fill" style="width:0%; background:linear-gradient(90deg, var(--accent-gold), var(--accent-emerald));"></div>
+                </div>
+            </div>
+
+            <!-- Preview del file caricato -->
+            <div id="mediaFileDraftContainer" style="margin-bottom:1.1rem;"></div>
+
+            <!-- 2. METADATI & CATALOGAZIONE -->
+            <div style="border-left:3px solid var(--accent-cyan); padding-left:0.75rem; margin-bottom:0.75rem;">
+                <strong style="color:var(--accent-cyan); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">2. Informazioni Tecniche & Catalogazione Archivio</strong>
+            </div>
+
+            <div class="form-group">
+                <label>Titolo File / Scatto / Registrazione Acustica / Video *</label>
+                <input type="text" id="f_med_titolo" class="form-control" required value="${(m.titolo || '').replace(/"/g, '&quot;')}" placeholder="Es. Test Acustico Violino Guarneri 'Il Cannone' — Scala Sol Maggiore">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tipologia Media</label>
+                    <select id="f_med_tipo" class="form-control">
+                        ${tipoOptions.map(t => `<option value="${t}" ${m.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Categoria Archivio</label>
+                    <select id="f_med_categoria" class="form-control">
+                        ${catOptions.map(c => `<option value="${c}" ${m.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Formato & Codec / Risoluzione</label>
+                    <input type="text" id="f_med_formato" class="form-control" value="${(m.formato || 'JPG / 4K').replace(/"/g, '&quot;')}" placeholder="Es. FLAC 24bit/96kHz, MP4 4K, JPG High-Res, OBJ 3D">
+                </div>
+                <div class="form-group">
+                    <label>Dimensione File</label>
+                    <input type="text" id="f_med_dimensione" class="form-control" value="${(m.dimensione || '').replace(/"/g, '&quot;')}" placeholder="Rilevata automaticamente (es. 24.5 MB)">
+                </div>
+                <div class="form-group">
+                    <label>URL / Percorso Server (automatico)</label>
+                    <input type="text" id="f_med_url" class="form-control" value="${(m.url || '').replace(/"/g, '&quot;')}" placeholder="/media_uploads/... o ./assets/...">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Descrizione Tecnica & Note (Microfoni, Ottica, Setup Acustico, Strumento)</label>
+                <textarea id="f_med_descrizione" class="form-control" rows="3" placeholder="Dettagli sulle condizioni di ripresa, microfono Neumann KM184, illuminazione, spessori...">${m.descrizione || ''}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.85rem; font-size:0.94rem; margin-top:0.5rem;">
+                <i data-lucide="upload" class="lucide-upload"></i> ${existingItem ? 'Salva Modifiche File Multimediale' : 'Salva File Multimediale in Galleria'}
+            </button>
+        </form>
+    `;
+};
+
+window.renderMediaFileDraft = function() {
+    const container = document.getElementById("mediaFileDraftContainer");
+    if (!container) return;
+    const d = window.mediaFileDraft;
+    if (!d) {
+        container.innerHTML = `
+            <div style="font-size:0.79rem; color:var(--text-muted); text-align:center; padding:0.65rem; background:rgba(0,0,0,0.25); border-radius:8px; border:1px solid rgba(255,255,255,0.05);">
+                Nessun file selezionato. Scegli o trascina un'immagine, un file audio, un video o un modello 3D/CAD qui sopra.
+            </div>
+        `;
+        return;
+    }
+
+    const extLabel = ((d.ext || "").replace(".", "") || d.formatoLabel || "MEDIA").toUpperCase().slice(0, 8);
+    let previewThumbHTML = `
+        <div style="width:68px; height:52px; border-radius:8px; background:rgba(212,163,89,0.18); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.75rem; flex-shrink:0;">
+            ${extLabel}
+        </div>
+    `;
+
+    const previewSrc = d.thumbnailDataUrl || d.objectUrl || d.url || "";
+    if (d.mediaKind === "image" && previewSrc) {
+        previewThumbHTML = `<img src="${previewSrc}" alt="Preview" style="width:68px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,255,255,0.15); flex-shrink:0;">`;
+    } else if (d.mediaKind === "video" && previewSrc) {
+        if (d.thumbnailDataUrl) {
+            previewThumbHTML = `<img src="${d.thumbnailDataUrl}" alt="Video frame" style="width:68px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(59,130,246,0.45); flex-shrink:0;">`;
+        } else {
+            previewThumbHTML = `
+                <div style="width:68px; height:52px; border-radius:8px; background:rgba(59,130,246,0.2); color:#60a5fa; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.75rem; flex-shrink:0;">
+                    🎬 ${extLabel}
+                </div>
+            `;
+        }
+    } else if (d.mediaKind === "audio") {
+        previewThumbHTML = `
+            <div style="width:68px; height:52px; border-radius:8px; background:rgba(16,185,129,0.2); color:#34d399; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.75rem; flex-shrink:0;">
+                🎵 ${extLabel}
+            </div>
+        `;
+    }
+
+    container.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.8rem; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.4); border-radius:10px; padding:0.65rem 0.9rem;">
+            <div style="display:flex; align-items:center; gap:0.75rem; min-width:0; flex:1;">
+                ${previewThumbHTML}
+                <div style="min-width:0; flex:1;">
+                    <div style="color:#fff; font-weight:700; font-size:0.86rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${d.name}
+                    </div>
+                    <div style="font-size:0.74rem; color:var(--text-secondary); display:flex; flex-wrap:wrap; gap:0.45rem; margin-top:2px;">
+                        <span>Formato: <strong style="color:var(--accent-emerald);">${d.formatoLabel || extLabel}</strong></span>
+                        <span>• Dimensione: <strong style="color:var(--accent-gold); font-family:var(--font-mono);">${d.sizeFormatted}</strong></span>
+                        ${d.dimensions ? `<span>• Risoluzione: <strong style="color:#93c5fd;">${d.dimensions}</strong></span>` : ''}
+                        ${d.duration ? `<span>• Durata: <strong style="color:#c084fc;">${d.duration}</strong></span>` : ''}
+                        <span style="color:#6ee7b7;">• ✓ File caricato e pronto</span>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.6rem; color:#ef4444;" onclick="window.removeMediaFileDraft()" title="Rimuovi file allegato">
+                &times;
+            </button>
+        </div>
+    `;
+};
+
+window.removeMediaFileDraft = function() {
+    if (window.mediaFileDraft && window.mediaFileDraft.id && window.socialMediaDB) {
+        window.socialMediaDB.deleteBlob(window.mediaFileDraft.id);
+    }
+    window.mediaFileDraft = null;
+    window.renderMediaFileDraft();
+};
+
+window.setupMediaModalDropzone = function() {
+    const dz = document.getElementById("mediaModalDropzone");
+    if (!dz) return;
+    dz.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "var(--accent-emerald)";
+        dz.style.background = "rgba(16, 185, 129, 0.14)";
+    });
+    dz.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(212, 163, 89, 0.5)";
+        dz.style.background = "linear-gradient(135deg, rgba(212, 163, 89, 0.09), rgba(59, 130, 246, 0.07), rgba(16, 185, 129, 0.06))";
+    });
+    dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(212, 163, 89, 0.5)";
+        dz.style.background = "linear-gradient(135deg, rgba(212, 163, 89, 0.09), rgba(59, 130, 246, 0.07), rgba(16, 185, 129, 0.06))";
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            window.processMediaUploadFiles(Array.from(e.dataTransfer.files), false);
+        }
+    });
+};
+
+window.setupMediaPageDropzone = function() {
+    const dz = document.getElementById("mediaPageDropzone");
+    if (!dz || dz.dataset.boundDrop === "1") return;
+    dz.dataset.boundDrop = "1";
+    dz.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "var(--accent-emerald)";
+        dz.style.transform = "scale(1.005)";
+    });
+    dz.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(212, 163, 89, 0.45)";
+        dz.style.transform = "";
+    });
+    dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(212, 163, 89, 0.45)";
+        dz.style.transform = "";
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            window.processMediaUploadFiles(Array.from(e.dataTransfer.files), true);
+        }
+    });
+};
+
+window.handleMediaFileInput = function(event) {
+    const files = event.target && event.target.files ? Array.from(event.target.files) : [];
+    if (!files.length) return;
+    window.processMediaUploadFiles(files, false);
+    event.target.value = "";
+};
+
+window.handleDirectMediaPageUpload = function(event) {
+    const files = event.target && event.target.files ? Array.from(event.target.files) : [];
+    if (!files.length) return;
+    window.processMediaUploadFiles(files, true);
+    event.target.value = "";
+};
+
+window.extractMediaFileMetadata = function(file, kind) {
+    return new Promise((resolve) => {
+        const result = { dimensions: "", duration: "", thumbnailDataUrl: "" };
+        const objUrl = URL.createObjectURL(file);
+        const timeout = setTimeout(() => {
+            resolve(result);
+        }, 3500);
+
+        if (kind === "image") {
+            const img = new Image();
+            img.onload = () => {
+                clearTimeout(timeout);
+                result.dimensions = `${img.naturalWidth}×${img.naturalHeight}`;
+                try {
+                    const maxDim = 420;
+                    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+                    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+                    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0, w, h);
+                    result.thumbnailDataUrl = canvas.toDataURL("image/jpeg", 0.78);
+                } catch (e) {}
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            img.onerror = () => {
+                clearTimeout(timeout);
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            img.src = objUrl;
+        } else if (kind === "video") {
+            const video = document.createElement("video");
+            video.preload = "metadata";
+            video.muted = true;
+            video.playsInline = true;
+            video.onloadedmetadata = () => {
+                if (video.videoWidth && video.videoHeight) {
+                    result.dimensions = `${video.videoWidth}×${video.videoHeight}`;
+                }
+                if (video.duration && isFinite(video.duration)) {
+                    result.duration = window.formatDurationSeconds(video.duration);
+                }
+                try {
+                    video.currentTime = Math.min(1.0, (video.duration || 0) * 0.15);
+                } catch (e) {
+                    clearTimeout(timeout);
+                    URL.revokeObjectURL(objUrl);
+                    resolve(result);
+                }
+            };
+            video.onseeked = () => {
+                clearTimeout(timeout);
+                try {
+                    const maxDim = 420;
+                    const vw = video.videoWidth || 320;
+                    const vh = video.videoHeight || 180;
+                    const scale = Math.min(1, maxDim / Math.max(vw, vh));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = Math.max(1, Math.round(vw * scale));
+                    canvas.height = Math.max(1, Math.round(vh * scale));
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    result.thumbnailDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+                } catch (e) {}
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            video.onerror = () => {
+                clearTimeout(timeout);
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            video.src = objUrl;
+        } else if (kind === "audio") {
+            const audio = document.createElement("audio");
+            audio.preload = "metadata";
+            audio.onloadedmetadata = () => {
+                clearTimeout(timeout);
+                if (audio.duration && isFinite(audio.duration)) {
+                    result.duration = window.formatDurationSeconds(audio.duration);
+                }
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            audio.onerror = () => {
+                clearTimeout(timeout);
+                URL.revokeObjectURL(objUrl);
+                resolve(result);
+            };
+            audio.src = objUrl;
+        } else {
+            clearTimeout(timeout);
+            URL.revokeObjectURL(objUrl);
+            resolve(result);
+        }
+    });
+};
+
+window.uploadSingleMediaBinary = async function(file, mediaId, ext, mimeType) {
+    let serverUrl = "";
+    // 1. Salva sempre in IndexedDB per riproduzione locale immediata anche per file >200MB
+    if (window.socialMediaDB) {
+        await window.socialMediaDB.saveBlob(mediaId, file, {
+            name: file.name,
+            mimeType: mimeType,
+            sizeBytes: file.size
+        });
+    }
+    // 2. Invia anche al server Python (/api/media/upload-file) per persistenza su disco in /media_uploads/
+    try {
+        const res = await fetch("/api/media/upload-file", {
+            method: "POST",
+            headers: {
+                "Content-Type": mimeType || "application/octet-stream",
+                "X-Media-Id": mediaId,
+                "X-Media-Name": encodeURIComponent(file.name || ("media" + ext)),
+                "X-Media-Mime": mimeType || "application/octet-stream"
+            },
+            body: file
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && data.url) {
+                serverUrl = data.url;
+            }
+        }
+    } catch (e) {
+        // Fallback silenzioso a IndexedDB se offline
+    }
+    return serverUrl;
+};
+
+window.processMediaUploadFiles = async function(files, autoSaveAll = false) {
+    if (!files || !files.length) return;
+
+    const pBox = document.getElementById("mediaUploadProgressBox") || document.getElementById("mediaPageUploadProgressBox");
+    const pBar = document.getElementById("mediaUploadProgressBar") || document.getElementById("mediaPageUploadProgressBar");
+    const pStatus = document.getElementById("mediaUploadStatusText") || document.getElementById("mediaPageUploadStatusText");
+    const pPct = document.getElementById("mediaUploadPercentText") || document.getElementById("mediaPageUploadPercentText");
+
+    if (pBox) pBox.style.display = "block";
+
+    let savedCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const rawName = file.name || `Media_${Date.now()}`;
+        const dotIdx = rawName.lastIndexOf(".");
+        const ext = dotIdx >= 0 ? rawName.slice(dotIdx).toLowerCase() : "";
+        const baseTitle = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName)
+            .replace(/[_-]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const extSpec = window.MEDIA_EXT_CATALOG[ext] || null;
+        let mimeType = file.type || (extSpec ? extSpec.mime : "application/octet-stream");
+        let mediaKind = extSpec ? extSpec.kind : "other";
+        if (mimeType.startsWith("image/")) mediaKind = "image";
+        else if (mimeType.startsWith("audio/")) mediaKind = "audio";
+        else if (mimeType.startsWith("video/")) mediaKind = "video";
+
+        const pctStart = Math.round((i / files.length) * 100);
+        if (pBar) pBar.style.width = `${ Math.max(12, pctStart) }%`;
+        if (pPct) pPct.textContent = `${ Math.max(12, pctStart) }%`;
+        if (pStatus) pStatus.textContent = `Analisi e caricamento (${i + 1}/${files.length}): ${rawName}...`;
+
+        const meta = await window.extractMediaFileMetadata(file, mediaKind);
+        const mediaId = `medfile-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const sizeFormatted = window.formatSocialBytes(file.size);
+
+        const serverUrl = await window.uploadSingleMediaBinary(file, mediaId, ext, mimeType);
+        const extUpper = (ext.replace(".", "") || "FILE").toUpperCase();
+
+        let tipoLabel = extSpec ? extSpec.tipo : "Archivio Tecnico";
+        if (!extSpec) {
+            if (mediaKind === "image") tipoLabel = "Foto High-Res";
+            else if (mediaKind === "audio") tipoLabel = "Audio Lossless";
+            else if (mediaKind === "video") tipoLabel = "Video 4K";
+            else tipoLabel = "Modello 3D / CAD";
+        }
+
+        let catLabel = extSpec ? extSpec.cat : "Finitura & Dettagli";
+        if (!extSpec) {
+            if (mediaKind === "audio") catLabel = "Test Acustici";
+            else if (mediaKind === "video") catLabel = "Lavorazione Atelier";
+            else if (mediaKind === "other") catLabel = "Modelli 3D & CAD";
+        }
+
+        let formatoLabel = extSpec ? extSpec.formato : `${extUpper} (${mimeType.split("/")[1] || "File"})`;
+        if (meta.dimensions && mediaKind === "image") {
+            formatoLabel = `${extUpper} (${meta.dimensions})`;
+        } else if (meta.dimensions && mediaKind === "video") {
+            formatoLabel = `${extUpper} ${meta.dimensions}${meta.duration ? ' • ' + meta.duration : ''}`;
+        } else if (meta.duration && mediaKind === "audio") {
+            formatoLabel = `${extUpper} Audio (${meta.duration})`;
+        }
+
+        const draftObj = {
+            id: mediaId,
+            name: rawName,
+            ext: ext,
+            mimeType: mimeType,
+            sizeBytes: file.size,
+            sizeFormatted: sizeFormatted,
+            formatoLabel: formatoLabel,
+            url: serverUrl || "",
+            duration: meta.duration || "",
+            dimensions: meta.dimensions || "",
+            mediaKind: mediaKind,
+            thumbnailDataUrl: meta.thumbnailDataUrl || "",
+            isIndexedDB: true
+        };
+
+        // Se siamo nel modale e questo è il primo file selezionato (autoSaveAll === false), popola il form del modale
+        if (!autoSaveAll && i === 0 && document.getElementById("f_med_titolo")) {
+            window.mediaFileDraft = draftObj;
+            window.renderMediaFileDraft();
+
+            const titleInput = document.getElementById("f_med_titolo");
+            if (titleInput && !titleInput.value.trim()) {
+                titleInput.value = baseTitle;
+            }
+            const tipoSelect = document.getElementById("f_med_tipo");
+            if (tipoSelect) tipoSelect.value = tipoLabel;
+
+            const catSelect = document.getElementById("f_med_categoria");
+            if (catSelect) catSelect.value = catLabel;
+
+            const fmtInput = document.getElementById("f_med_formato");
+            if (fmtInput) fmtInput.value = formatoLabel;
+
+            const dimInput = document.getElementById("f_med_dimensione");
+            if (dimInput) dimInput.value = sizeFormatted;
+
+            const urlInput = document.getElementById("f_med_url");
+            if (urlInput && serverUrl) urlInput.value = serverUrl;
+
+            const descInput = document.getElementById("f_med_descrizione");
+            if (descInput && !descInput.value.trim()) {
+                const details = [
+                    `File originale: ${rawName} (${sizeFormatted})`,
+                    meta.dimensions ? `Risoluzione: ${meta.dimensions}` : "",
+                    meta.duration ? `Durata: ${meta.duration}` : ""
+                ].filter(Boolean).join(" • ");
+                descInput.value = details;
+            }
+        } else {
+            // Salva direttamente nell'archivio Media
+            const newMediaRecord = {
+                id: "med-" + Date.now() + "-" + i,
+                titolo: baseTitle || rawName,
+                tipo: tipoLabel,
+                formato: formatoLabel,
+                dimensione: sizeFormatted,
+                categoria: catLabel,
+                url: serverUrl || (mediaKind === "image" && meta.thumbnailDataUrl ? meta.thumbnailDataUrl : ""),
+                descrizione: [
+                    `File multimediale caricato: ${rawName} (${sizeFormatted})`,
+                    meta.dimensions ? `Risoluzione: ${meta.dimensions}` : "",
+                    meta.duration ? `Durata: ${meta.duration}` : ""
+                ].filter(Boolean).join(" • "),
+                fileId: mediaId,
+                fileName: rawName,
+                fileExt: ext,
+                fileMime: mimeType,
+                sizeBytes: file.size,
+                duration: meta.duration || "",
+                dimensions: meta.dimensions || "",
+                mediaKind: mediaKind,
+                thumbnailDataUrl: meta.thumbnailDataUrl || "",
+                isIndexedDB: true,
+                createdAt: new Date().toISOString()
+            };
+            window.atelierDB.addItem("media", newMediaRecord);
+            savedCount++;
+        }
+    }
+
+    if (pBar) pBar.style.width = "100%";
+    if (pPct) pPct.textContent = "100%";
+    if (pStatus) pStatus.textContent = "✓ Caricamento completato con successo!";
+
+    setTimeout(() => {
+        if (pBox) pBox.style.display = "none";
+    }, 1100);
+
+    if (savedCount > 0) {
+        window.refreshMediaModuleView();
+        window.showToast(`${savedCount} file multimedial${savedCount > 1 ? 'i caricati' : 'e caricato'} in Galleria Media!`);
+    } else {
+        window.showToast("File pronto nel modulo: verifica i metadati e clicca 'Salva File Multimediale'.");
+    }
+};
+
+window.openEditMediaModal = function(itemId) {
+    const item = window.atelierDB.getItem("media", itemId);
+    if (!item) return;
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    if (!modalOverlay || !modalTitle || !modalBody) return;
+
+    modalTitle.textContent = `Modifica Media: ${item.titolo}`;
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) {
+        modalContainer.style.maxWidth = "820px";
+    }
+
+    modalBody.innerHTML = window.buildMediaModalForm(item);
+    modalOverlay.classList.add("active");
+    window.renderMediaFileDraft();
+    window.setupMediaModalDropzone();
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.resolveMediaPlayableUrl = async function(item) {
+    if (!item) return "";
+    if (item.fileId && window.socialMediaDB) {
+        const blobUrl = await window.socialMediaDB.getObjectUrl(item.fileId);
+        if (blobUrl) return blobUrl;
+    }
+    if (item.url) return item.url;
+    if (item.thumbnailDataUrl) return item.thumbnailDataUrl;
+    return "";
+};
+
+window.openMediaViewerModal = async function(itemId) {
+    const item = window.atelierDB.getItem("media", itemId);
+    if (!item) return;
+
+    const kind = window.detectMediaItemKind(item);
+    const playUrl = await window.resolveMediaPlayableUrl(item);
+
+    let modal = document.getElementById("mediaViewerPopupModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "mediaViewerPopupModal";
+        modal.className = "modal-overlay";
+        document.body.appendChild(modal);
+    }
+
+    const extLabel = ((item.fileExt || "").replace(".", "") || item.formato || "FILE").toUpperCase();
+    let stageContentHTML = "";
+
+    if (kind === "image") {
+        const imgSrc = playUrl || item.thumbnailDataUrl || "./assets/lutherie_banner.png";
+        stageContentHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; gap:0.85rem; width:100%;">
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:center;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.78rem;" onclick="const im=document.getElementById('mediaPopupZoomImg'); if(im){im.style.maxHeight='68vh'; im.style.width='auto'; im.style.transform='scale(1)';}">Adatta allo Schermo</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.78rem;" onclick="const im=document.getElementById('mediaPopupZoomImg'); if(im){im.style.transform='scale(1.35)';}">🔍 Zoom 135%</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.78rem;" onclick="const im=document.getElementById('mediaPopupZoomImg'); if(im){im.style.transform='scale(1.85)';}">🔍 Zoom 185%</button>
+                </div>
+                <div style="width:100%; max-height:70vh; overflow:auto; display:flex; align-items:center; justify-content:center; background:#070a10; border-radius:12px; padding:1rem; border:1px solid rgba(255,255,255,0.08);">
+                    <img id="mediaPopupZoomImg" src="${imgSrc}" alt="${(item.titolo || '').replace(/"/g, '&quot;')}" style="max-width:100%; max-height:66vh; object-fit:contain; border-radius:8px; transition:transform 0.25s ease; transform-origin:center center;">
+                </div>
+            </div>
+        `;
+    } else if (kind === "video") {
+        if (playUrl && !playUrl.endsWith(".png") && !playUrl.endsWith(".jpg")) {
+            stageContentHTML = `
+                <div style="width:100%; background:#05070c; border-radius:12px; overflow:hidden; border:1px solid rgba(59,130,246,0.35); display:flex; align-items:center; justify-content:center;">
+                    <video src="${playUrl}" ${item.thumbnailDataUrl ? `poster="${item.thumbnailDataUrl}"` : ''} controls autoplay playsinline style="width:100%; max-height:68vh; outline:none; background:#000;"></video>
+                </div>
+            `;
+        } else {
+            stageContentHTML = `
+                <div style="width:100%; padding:2.5rem 1.5rem; text-align:center; background:#090d16; border-radius:12px; border:1px solid rgba(59,130,246,0.35);">
+                    <div style="font-size:3rem; margin-bottom:0.75rem;">🎬</div>
+                    <h4 style="color:#fff; margin-bottom:0.4rem;">${item.titolo}</h4>
+                    <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:1rem;">Voce di catalogo video di esempio (${item.formato || 'Video 4K'}). Carica un file video reale (.mp4, .mov, .webm) cliccando su <strong>Modifica</strong> per riprodurlo nel player.</p>
+                    <button type="button" class="btn btn-primary" onclick="document.getElementById('mediaViewerPopupModal').classList.remove('active'); window.openEditMediaModal('${item.id}');">
+                        <i data-lucide="upload"></i> Allega File Video a questa Scheda
+                    </button>
+                </div>
+            `;
+        }
+    } else if (kind === "audio") {
+        const hasAudioBlob = Boolean(playUrl && !playUrl.endsWith(".png") && !playUrl.endsWith(".jpg"));
+        stageContentHTML = `
+            <div style="width:100%; padding:2rem 1.5rem; background:radial-gradient(circle at center, rgba(16, 185, 129, 0.18), rgba(9, 13, 22, 0.96)); border-radius:14px; border:1px solid rgba(16, 185, 129, 0.4); text-align:center;">
+                <div style="width:74px; height:74px; border-radius:50%; margin:0 auto 1rem auto; background:rgba(16, 185, 129, 0.2); border:2px solid var(--accent-emerald); display:flex; align-items:center; justify-content:center; color:var(--accent-emerald); box-shadow:0 0 28px rgba(16, 185, 129, 0.3);">
+                    <i data-lucide="headphones" style="width:36px; height:36px;"></i>
+                </div>
+                <h3 style="color:#fff; font-family:var(--font-serif); font-size:1.25rem; margin-bottom:0.35rem;">${item.titolo}</h3>
+                <div style="font-size:0.82rem; color:#6ee7b7; font-family:var(--font-mono); margin-bottom:1.25rem;">
+                    ${item.formato || 'Audio Studio'} • ${item.dimensione || ''}${item.duration ? ' • Durata: ' + item.duration : ''}
+                </div>
+                ${hasAudioBlob ? `
+                    <div style="max-width:560px; margin:0 auto;">
+                        <audio src="${playUrl}" controls autoplay style="width:100%; height:44px;"></audio>
+                    </div>
+                ` : `
+                    <div style="max-width:520px; margin:0 auto; padding:1rem; background:rgba(0,0,0,0.35); border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+                        <p style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:0.75rem;">Questa voce è un record storico senza file binario allegato. Puoi allegare ora un file audio (WAV, FLAC, MP3, M4A, OGG) per ascoltarlo in tempo reale.</p>
+                        <button type="button" class="btn btn-primary" onclick="document.getElementById('mediaViewerPopupModal').classList.remove('active'); window.openEditMediaModal('${item.id}');">
+                            <i data-lucide="music"></i> Carica File Audio per questa Registrazione
+                        </button>
+                    </div>
+                `}
+            </div>
+        `;
+    } else {
+        const isPdf = (item.fileExt || "").toLowerCase() === ".pdf" || (item.fileMime || "").includes("pdf") || (playUrl || "").toLowerCase().endsWith(".pdf");
+        const is3dModuleLinkable = [".obj", ".stl", ".glb", ".gltf"].includes((item.fileExt || "").toLowerCase());
+        if (isPdf && playUrl) {
+            stageContentHTML = `
+                <iframe src="${playUrl}" style="width:100%; height:68vh; border:1px solid rgba(255,255,255,0.12); border-radius:10px; background:#fff;"></iframe>
+            `;
+        } else {
+            stageContentHTML = `
+                <div style="width:100%; padding:2.2rem 1.5rem; background:radial-gradient(circle at center, rgba(168, 85, 247, 0.18), rgba(10, 14, 24, 0.96)); border-radius:14px; border:1px solid rgba(168, 85, 247, 0.45); text-align:center;">
+                    <div style="width:74px; height:74px; border-radius:16px; margin:0 auto 1rem auto; background:rgba(168, 85, 247, 0.2); border:2px solid #c084fc; display:flex; align-items:center; justify-content:center; color:#c084fc; font-weight:800; font-size:1rem;">
+                        ${extLabel.slice(0, 6)}
+                    </div>
+                    <h3 style="color:#fff; font-family:var(--font-serif); font-size:1.25rem; margin-bottom:0.4rem;">${item.titolo}</h3>
+                    <p style="font-size:0.84rem; color:var(--text-secondary); max-width:560px; margin:0 auto 1.25rem auto;">
+                        ${item.descrizione || 'File tecnico speciale archiviato nella Galleria Media dell\'Atelier.'}
+                    </p>
+                    <div style="display:flex; justify-content:center; gap:0.75rem; flex-wrap:wrap;">
+                        ${playUrl ? `
+                            <button type="button" class="btn btn-primary" onclick="window.downloadMediaItem('${item.id}')">
+                                <i data-lucide="download"></i> Scarica File Originale (${item.dimensione || extLabel})
+                            </button>
+                        ` : ''}
+                        ${is3dModuleLinkable ? `
+                            <button type="button" class="btn btn-secondary" style="border-color:rgba(212,163,89,0.5); color:var(--accent-gold);" onclick="document.getElementById('mediaViewerPopupModal').classList.remove('active'); window.appController.switchModule('liuteriaMaking');">
+                                <i data-lucide="box"></i> Apri Laboratorio 3D Liuteria Making
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    modal.innerHTML = `
+        <div class="modal-container" style="max-width:960px; width:95%; max-height:92vh; display:flex; flex-direction:column; padding:0; overflow:hidden; border:1px solid rgba(212, 163, 89, 0.45);">
+            <div class="modal-header" style="padding:1rem 1.35rem; background:linear-gradient(135deg, rgba(20, 26, 38, 0.98), rgba(12, 16, 24, 0.98)); border-bottom:1px solid var(--border-subtle);">
+                <div style="min-width:0; flex:1; padding-right:1rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.25rem;">
+                        <span class="badge badge-gold">${item.tipo || 'Media'}</span>
+                        <span class="badge badge-info">${item.categoria || 'Archivio'}</span>
+                        <span style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-mono);">${item.formato || ''} • ${item.dimensione || ''}</span>
+                    </div>
+                    <h3 style="margin:0; font-size:1.12rem; color:#fff; font-family:var(--font-serif);">${item.titolo}</h3>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.45rem;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.4rem 0.75rem; font-size:0.78rem;" onclick="window.downloadMediaItem('${item.id}')">
+                        <i data-lucide="download" style="width:14px; height:14px;"></i> Scarica
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.4rem 0.75rem; font-size:0.78rem;" onclick="document.getElementById('mediaViewerPopupModal').classList.remove('active'); window.openEditMediaModal('${item.id}');">
+                        <i data-lucide="edit-2" style="width:14px; height:14px;"></i> Modifica
+                    </button>
+                    <button type="button" class="modal-close-btn" onclick="const m=document.getElementById('mediaViewerPopupModal'); m.querySelectorAll('video,audio').forEach(el=>el.pause()); m.classList.remove('active');">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:1.25rem; overflow-y:auto; flex:1; background:#0b0f17;">
+                ${stageContentHTML}
+                <div style="margin-top:1rem; padding:0.9rem 1.1rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                    <div style="font-size:0.83rem; color:var(--text-secondary); flex:1; min-width:240px;">
+                        <strong style="color:var(--accent-gold);">Note Tecniche:</strong> ${item.descrizione || 'Nessuna nota aggiuntiva.'}
+                    </div>
+                    ${item.fileName ? `<div style="font-size:0.75rem; font-family:var(--font-mono); color:var(--text-muted);">File: ${item.fileName}</div>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    modal.onclick = (ev) => {
+        if (ev.target === modal) {
+            modal.querySelectorAll("video,audio").forEach(el => el.pause());
+            modal.classList.remove("active");
+        }
+    };
+
+    modal.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.downloadMediaItem = async function(itemId) {
+    const item = window.atelierDB.getItem("media", itemId);
+    if (!item) return;
+
+    const url = await window.resolveMediaPlayableUrl(item);
+    if (!url) {
+        window.showToast("Nessun file scaricabile associato a questa scheda.");
+        return;
+    }
+
+    const a = document.createElement("a");
+    a.href = url;
+    const fallbackExt = item.fileExt || (url.includes(".") ? url.slice(url.lastIndexOf(".")) : ".jpg");
+    a.download = item.fileName || `${(item.titolo || "media_atelier").replace(/[^a-zA-Z0-9_-]+/g, "_")}${fallbackExt}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.showToast(`Download avviato: ${a.download}`);
+};
+
+window.deleteMediaItem = function(itemId, title) {
+    const item = window.atelierDB.getItem("media", itemId);
+    if (!item) return;
+    if (item.fileId && window.socialMediaDB) {
+        window.socialMediaDB.deleteBlob(item.fileId);
+    }
+    window.atelierDB.deleteItem("media", itemId);
+    window.refreshMediaModuleView();
+    window.showToast(`Media "${title || item.titolo}" rimosso dall'archivio.`);
 };
 
 document.addEventListener("DOMContentLoaded", () => {

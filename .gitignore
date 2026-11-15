@@ -18,6 +18,7 @@ Desktop.ini
 *.log
 social_uploads/
 biblioteca_uploads/
+media_uploads/
 social_state.json
 sendinblue_state.json
 mail_state.json

@@ -345,11 +345,13 @@ mqtt_bridge_instance = None
 # ==============================================================================
 SOCIAL_UPLOADS_DIR = os.path.join(DIRECTORY, "social_uploads")
 BIBLIOTECA_UPLOADS_DIR = os.path.join(DIRECTORY, "biblioteca_uploads")
+MEDIA_UPLOADS_DIR = os.path.join(DIRECTORY, "media_uploads")
 SOCIAL_STATE_FILE = os.path.join(DIRECTORY, "social_state.json")
 os.makedirs(SOCIAL_UPLOADS_DIR, exist_ok=True)
 os.makedirs(BIBLIOTECA_UPLOADS_DIR, exist_ok=True)
+os.makedirs(MEDIA_UPLOADS_DIR, exist_ok=True)
 
-# Registra MIME types per i formati Ebook più comuni
+# Registra MIME types per i formati Ebook e Media (Audio, Video, Immagini, 3D, CAD)
 mimetypes.add_type("application/pdf", ".pdf")
 mimetypes.add_type("application/epub+zip", ".epub")
 mimetypes.add_type("application/x-mobipocket-ebook", ".mobi")
@@ -360,6 +362,23 @@ mimetypes.add_type("image/vnd.djvu", ".djv")
 mimetypes.add_type("application/x-fictionbook+xml", ".fb2")
 mimetypes.add_type("application/vnd.comicbook+zip", ".cbz")
 mimetypes.add_type("application/vnd.comicbook-rar", ".cbr")
+mimetypes.add_type("audio/flac", ".flac")
+mimetypes.add_type("audio/wav", ".wav")
+mimetypes.add_type("audio/mp4", ".m4a")
+mimetypes.add_type("audio/ogg", ".ogg")
+mimetypes.add_type("audio/opus", ".opus")
+mimetypes.add_type("audio/aac", ".aac")
+mimetypes.add_type("audio/aiff", ".aiff")
+mimetypes.add_type("video/mp4", ".mp4")
+mimetypes.add_type("video/webm", ".webm")
+mimetypes.add_type("video/quicktime", ".mov")
+mimetypes.add_type("video/x-matroska", ".mkv")
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/avif", ".avif")
+mimetypes.add_type("model/gltf-binary", ".glb")
+mimetypes.add_type("model/gltf+json", ".gltf")
+mimetypes.add_type("model/obj", ".obj")
+mimetypes.add_type("model/stl", ".stl")
 
 social_lock = threading.Lock()
 
@@ -1582,6 +1601,7 @@ def get_sanitized_mail_accounts():
 PROTECTED_DIRS = {
     "social_uploads",
     "biblioteca_uploads",
+    "media_uploads",
     ".venv",
     "venv",
     "env",
@@ -2052,6 +2072,8 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_social_publish()
         elif self.path.startswith('/api/biblioteca/upload-file'):
             self.handle_biblioteca_upload_file()
+        elif self.path.startswith('/api/media/upload-file'):
+            self.handle_media_upload_file()
         elif self.path.startswith('/api/sendinblue/config'):
             self.handle_sendinblue_config()
         elif self.path.startswith('/api/sendinblue/send-reminder'):
@@ -2288,6 +2310,38 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "success": True,
                 "fileId": book_id,
                 "url": "/" + rel_path,
+                "sizeBytes": len(file_bytes)
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_media_upload_file(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        media_id = (self.headers.get('X-Media-Id') or f"medf-{int(time.time()*1000)}").strip()
+        raw_name = urllib.parse.unquote(self.headers.get('X-Media-Name') or "file_media.bin")
+        mime_type = (self.headers.get('X-Media-Mime') or mimetypes.guess_type(raw_name)[0] or "application/octet-stream").strip()
+
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)
+        stored_filename = f"{media_id}_{safe_name}"
+        disk_path = os.path.join(MEDIA_UPLOADS_DIR, stored_filename)
+        rel_path = f"media_uploads/{stored_filename}"
+
+        try:
+            file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
+            with open(disk_path, "wb") as f:
+                f.write(file_bytes)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "fileId": media_id,
+                "url": "/" + rel_path,
+                "mimeType": mime_type,
                 "sizeBytes": len(file_bytes)
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
