@@ -23,3 +23,5 @@ social_state.json
 sendinblue_state.json
 mail_state.json
 .last_github_commit
+
+auth_state.json
