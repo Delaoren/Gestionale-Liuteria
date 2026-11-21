@@ -54,6 +54,8 @@ def main():
         ("biblioteca", os.path.join(base_dir, "biblioteca_uploads")),
         ("media", os.path.join(base_dir, "media_uploads")),
         ("social", os.path.join(base_dir, "social_uploads")),
+        ("certificati", os.path.join(base_dir, "certificati_uploads")),
+        ("costi", os.path.join(base_dir, "costi_uploads")),
     ]
     uploaded_count = 0
     for prefix, folder in upload_dirs:

@@ -55,6 +55,16 @@ const APPS = [
         renderer: window.AppModules.renderClienti
     },
     {
+        id: "costiLaboratorio",
+        name: "Costi Laboratorio",
+        tag: "Spese & Ricevute PDF",
+        icon: "wallet",
+        color: "linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(217, 119, 6, 0.4))",
+        borderColor: "#f43f5e",
+        desc: "Registro spese sostenute in laboratorio: tipo di spesa, prezzo, note e caricamento documenti PDF.",
+        renderer: window.AppModules.renderCostiLaboratorio
+    },
+    {
         id: "costruzione",
         name: "Costruzione",
         tag: "Nuovi Strumenti",
@@ -1074,6 +1084,8 @@ window.openAddModal = function(collectionName) {
         formHTML = window.buildSocialModalForm(null);
     } else if (collectionName === 'certificati') {
         formHTML = window.buildCertificatoModalForm(null);
+    } else if (collectionName === 'costiLaboratorio') {
+        formHTML = window.buildCostiLaboratorioModalForm(null);
     } else {
         // Generic fallback form
         formHTML = `
@@ -1093,7 +1105,7 @@ window.openAddModal = function(collectionName) {
 
     const modalContainer = modalOverlay.querySelector('.modal-container');
     if (modalContainer) {
-        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca' || collectionName === 'media') {
+        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca' || collectionName === 'media' || collectionName === 'costiLaboratorio') {
             modalContainer.style.maxWidth = '820px';
         } else {
             modalContainer.style.maxWidth = '';
@@ -1113,6 +1125,9 @@ window.openAddModal = function(collectionName) {
     } else if (collectionName === 'media') {
         window.renderMediaFileDraft();
         window.setupMediaModalDropzone();
+    } else if (collectionName === 'costiLaboratorio') {
+        window.renderCostoPdfDraft();
+        window.setupCostoModalDropzone();
     }
     if (window.appController && window.appController.setupLucideIcons) {
         window.appController.setupLucideIcons();
@@ -1418,6 +1433,65 @@ window.saveNewRecord = function(e, collectionName) {
             window.atelierDB.addItem("certificati", certObj);
             window.selectedCertificateId = certObj.id;
         }
+    } else if (collectionName === 'costiLaboratorio') {
+        const editingId = document.getElementById("f_costo_edit_id") ? document.getElementById("f_costo_edit_id").value.trim() : "";
+        const existing = editingId ? window.atelierDB.getItem("costiLaboratorio", editingId) : null;
+        const draftPdf = window.costoPdfDraft;
+
+        let fileId = "";
+        let fileName = "";
+        let fileMime = "";
+        let fileSizeBytes = 0;
+        let fileSizeFormatted = "";
+        let fileUrl = "";
+        let isIndexedDB = false;
+
+        if (draftPdf) {
+            fileId = draftPdf.id || "";
+            fileName = draftPdf.name || "";
+            fileMime = draftPdf.mimeType || "application/pdf";
+            fileSizeBytes = draftPdf.sizeBytes || 0;
+            fileSizeFormatted = draftPdf.sizeFormatted || "";
+            fileUrl = draftPdf.url || "";
+            isIndexedDB = Boolean(draftPdf.isIndexedDB);
+        } else if (existing && !window._costoPdfRemoved) {
+            fileId = existing.fileId || "";
+            fileName = existing.fileName || "";
+            fileMime = existing.fileMime || "";
+            fileSizeBytes = existing.fileSizeBytes || 0;
+            fileSizeFormatted = existing.fileSizeFormatted || "";
+            fileUrl = existing.fileUrl || "";
+            isIndexedDB = Boolean(existing.isIndexedDB);
+        }
+
+        const rawPrezzo = parseFloat((document.getElementById("f_costo_prezzo")?.value || "0").replace(",", "."));
+        const prezzoVal = isNaN(rawPrezzo) ? 0 : Math.round(rawPrezzo * 100) / 100;
+
+        const costoObj = {
+            id: editingId || ("cst-" + Date.now()),
+            tipoSpesa: (document.getElementById("f_costo_tipo")?.value || "").trim() || "Spesa Laboratorio",
+            categoria: document.getElementById("f_costo_categoria") ? document.getElementById("f_costo_categoria").value : "Materiali & Consumabili",
+            fornitore: document.getElementById("f_costo_fornitore") ? document.getElementById("f_costo_fornitore").value.trim() : "",
+            prezzo: prezzoVal,
+            data: document.getElementById("f_costo_data")?.value || new Date().toISOString().split('T')[0],
+            metodoPagamento: document.getElementById("f_costo_metodo") ? document.getElementById("f_costo_metodo").value : "Bonifico / Carta",
+            note: (document.getElementById("f_costo_note")?.value || "").trim(),
+            fileId,
+            fileName,
+            fileMime,
+            fileSizeBytes,
+            fileSizeFormatted,
+            fileUrl,
+            isIndexedDB
+        };
+
+        if (editingId) {
+            window.atelierDB.updateItem("costiLaboratorio", editingId, costoObj);
+        } else {
+            window.atelierDB.addItem("costiLaboratorio", costoObj);
+        }
+        window.costoPdfDraft = null;
+        window._costoPdfRemoved = false;
     }
 
     window.closeModal();
@@ -9931,6 +10005,526 @@ window.deleteMediaItem = function(itemId, title) {
     window.atelierDB.deleteItem("media", itemId);
     window.refreshMediaModuleView();
     window.showToast(`Media "${title || item.titolo}" rimosso dall'archivio.`);
+};
+
+// ============================================================================
+// MODULO COSTI LABORATORIO: SPESE SOSTENUTE, PREZZO, NOTE E UPLOAD / VIEW PDF
+// ============================================================================
+
+window.costoPdfDraft = null;
+window._costoPdfRemoved = false;
+window.costiCategoryFilter = "all";
+window.costiSearchQuery = "";
+
+window.COSTI_LABORATORIO_CATEGORIE = [
+    "Legnami da Risonanza (Abete, Acero, Ebano)",
+    "Vernici, Resine, Oli & Pigmenti",
+    "Utensili, Sgorbie, Pialletti & Attrezzatura",
+    "Accessori & Montature (Piroli, Cordiere, Corde, Ponticelli)",
+    "Colle, Abrasivi & Materiali di Consumo",
+    "Utenze, Affitto & Manutenzione Bottega",
+    "Spedizioni, Imballaggi & Trasporti",
+    "Fiere, Mostre, Certificazioni & Formazione",
+    "Consulenze, Servizi & Altro"
+];
+
+window.setCostiCategoryFilter = function(cat) {
+    window.costiCategoryFilter = cat || "all";
+    if (window.appController && window.appController.activeModuleId === "costiLaboratorio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderCostiLaboratorio) {
+            window.AppModules.renderCostiLaboratorio(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.handleCostiSearchInput = function(val) {
+    window.costiSearchQuery = val || "";
+    if (window.appController && window.appController.activeModuleId === "costiLaboratorio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderCostiLaboratorio) {
+            window.AppModules.renderCostiLaboratorio(container);
+            window.appController.setupLucideIcons();
+            const inp = document.getElementById("costiSearchInput");
+            if (inp) {
+                inp.focus();
+                inp.setSelectionRange(inp.value.length, inp.value.length);
+            }
+        }
+    }
+};
+
+window.buildCostiLaboratorioModalForm = function(existingCosto = null) {
+    const todayIso = new Date().toISOString().split("T")[0];
+    const c = existingCosto || {
+        id: "",
+        tipoSpesa: "",
+        categoria: "Legnami da Risonanza (Abete, Acero, Ebano)",
+        fornitore: "",
+        prezzo: "",
+        data: todayIso,
+        metodoPagamento: "Bonifico Bancario",
+        note: "",
+        fileId: "",
+        fileName: "",
+        fileMime: "",
+        fileSizeBytes: 0,
+        fileSizeFormatted: "",
+        fileUrl: "",
+        isIndexedDB: false
+    };
+
+    window._costoPdfRemoved = false;
+    window.costoPdfDraft = (c.fileId || c.fileName || c.fileUrl) ? {
+        id: c.fileId || ("cstpdf-" + Date.now()),
+        name: c.fileName || "Documento_Spesa.pdf",
+        mimeType: c.fileMime || "application/pdf",
+        sizeBytes: c.fileSizeBytes || 0,
+        sizeFormatted: c.fileSizeFormatted || (window.formatSocialBytes ? window.formatSocialBytes(c.fileSizeBytes || 0) : ""),
+        url: c.fileUrl || "",
+        isIndexedDB: Boolean(c.isIndexedDB)
+    } : null;
+
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    const cats = [...window.COSTI_LABORATORIO_CATEGORIE];
+    if (c.categoria && !cats.includes(c.categoria)) {
+        cats.unshift(c.categoria);
+    }
+
+    return `
+        <form onsubmit="window.saveNewRecord(event, 'costiLaboratorio')">
+            <input type="hidden" id="f_costo_edit_id" value="${esc(c.id || '')}">
+
+            <div style="border-left:3px solid #f43f5e; padding-left:0.75rem; margin-bottom:0.85rem;">
+                <strong style="color:#fda4af; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">1. Dettagli Spesa Sostenuta & Importo</strong>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1.6;">
+                    <label>Tipo di Spesa Sostenuta *</label>
+                    <input type="text" id="f_costo_tipo" list="costi_tipi_suggeriti" class="form-control" required value="${esc(c.tipoSpesa || '')}" placeholder="Es. Acquisto Tavole Abete Val di Fiemme / Resina Mastice di Chios / Affilatura Sgorbie...">
+                    <datalist id="costi_tipi_suggeriti">
+                        <option value="Acquisto Legname da Risonanza (Abete / Acero)">
+                        <option value="Resine, Pigmenti e Olio per Verniciatura">
+                        <option value="Utensili e Sgorbie da Intaglio">
+                        <option value="Corde, Piroli, Ponticelli e Montature">
+                        <option value="Colla di Pelle / Carte Abrasive / Consumabili">
+                        <option value="Fornitura Elettrica e Climatizzazione Laboratorio">
+                        <option value="Spedizione e Imballaggio Strumenti">
+                    </datalist>
+                </div>
+                <div class="form-group" style="flex:0.9;">
+                    <label>Prezzo / Importo (€) *</label>
+                    <input type="number" id="f_costo_prezzo" class="form-control" step="0.01" min="0" required value="${c.prezzo !== '' && c.prezzo !== undefined ? c.prezzo : ''}" placeholder="Es. 350.00">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1.2;">
+                    <label>Categoria di Costo</label>
+                    <select id="f_costo_categoria" class="form-control">
+                        ${cats.map(cat => `<option value="${esc(cat)}" ${c.categoria === cat ? 'selected' : ''}>${esc(cat)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Fornitore / Esercente (Opzionale)</label>
+                    <input type="text" id="f_costo_fornitore" class="form-control" value="${esc(c.fornitore || '')}" placeholder="Es. Kremer Pigmente / Val di Fiemme Tonewoods...">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Data Spesa</label>
+                    <input type="date" id="f_costo_data" class="form-control" required value="${esc(c.data || todayIso)}">
+                </div>
+                <div class="form-group">
+                    <label>Metodo di Pagamento</label>
+                    <select id="f_costo_metodo" class="form-control">
+                        ${["Bonifico Bancario", "Carta di Credito / Debito", "PayPal", "Contanti", "RIBA / Addebito Diretto"].map(m =>
+                            `<option value="${m}" ${c.metodoPagamento === m ? 'selected' : ''}>${m}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Note & Dettagli Spesa</label>
+                <textarea id="f_costo_note" class="form-control" rows="3" placeholder="Annotazioni sulla spesa, numero fattura/scontrino, lotto legname o strumento a cui è destinato il materiale...">${esc(c.note || '')}</textarea>
+            </div>
+
+            <!-- 2. CARICAMENTO PDF FATTURA / RICEVUTA -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.75rem 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">2. Documento PDF Allegato (Fattura / Ricevuta / Bolla)</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Carica il file PDF relativo alla spesa per archiviarlo e consultarlo in qualsiasi momento.</span>
+                </div>
+            </div>
+
+            <div id="costoModalDropzone" style="background:linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(245, 158, 11, 0.06)); border:2px dashed rgba(244, 63, 94, 0.45); border-radius:12px; padding:1.15rem; text-align:center; margin-bottom:0.9rem; transition:all 0.25s ease;">
+                <div style="width:42px; height:42px; border-radius:10px; background:rgba(244, 63, 94, 0.16); color:#fda4af; display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
+                    <i data-lucide="file-text" style="width:22px; height:22px;"></i>
+                </div>
+                <h4 style="color:#fff; font-size:0.92rem; margin-bottom:0.25rem;">Trascina qui il PDF della fattura/ricevuta oppure selezionalo dal computer</h4>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:0.75rem;">
+                    Supporta file <strong>.PDF</strong> (fatture elettroniche/cortesia, ricevute, DDT, preventivi).
+                </p>
+                <label class="btn btn-primary" style="cursor:pointer; margin:0; padding:0.5rem 1.1rem; font-size:0.83rem;">
+                    <i data-lucide="upload-cloud"></i> 📄 Scegli File PDF da Caricare
+                    <input type="file" accept=".pdf,application/pdf" onchange="window.handleCostoPdfFileInput(event)" style="display:none;">
+                </label>
+            </div>
+
+            <div id="costoUploadProgressBox" style="display:none; background:rgba(244, 63, 94, 0.12); border:1px solid rgba(244, 63, 94, 0.4); border-radius:10px; padding:0.7rem 1rem; margin-bottom:0.9rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; margin-bottom:0.3rem;">
+                    <span id="costoUploadStatusText" style="color:#fff; font-weight:600;">Caricamento PDF in corso...</span>
+                    <strong id="costoUploadPercentText" style="color:var(--accent-gold); font-family:var(--font-mono);">0%</strong>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="costoUploadProgressBar" class="progress-bar-fill" style="width:0%; background:linear-gradient(90deg, #f43f5e, var(--accent-gold));"></div>
+                </div>
+            </div>
+
+            <div id="costoPdfDraftContainer" style="margin-bottom:1.15rem;"></div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.85rem; font-size:0.94rem;">
+                <i data-lucide="save"></i> ${existingCosto ? 'Salva Modifiche Spesa Laboratorio' : 'Registra Spesa in Costi Laboratorio'}
+            </button>
+        </form>
+    `;
+};
+
+window.renderCostoPdfDraft = function() {
+    const container = document.getElementById("costoPdfDraftContainer");
+    if (!container) return;
+    const d = window.costoPdfDraft;
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    if (!d) {
+        container.innerHTML = `
+            <div style="font-size:0.79rem; color:var(--text-muted); text-align:center; padding:0.6rem; background:rgba(0,0,0,0.25); border-radius:8px; border:1px solid rgba(255,255,255,0.05);">
+                Nessun PDF allegato a questa spesa. Puoi caricare una fattura o ricevuta PDF qui sopra (opzionale).
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:0.8rem; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.4); border-radius:10px; padding:0.65rem 0.9rem;">
+            <div style="display:flex; align-items:center; gap:0.75rem; min-width:0;">
+                <div style="width:42px; height:42px; border-radius:8px; background:rgba(244, 63, 94, 0.22); color:#fda4af; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.76rem; flex-shrink:0;">
+                    PDF
+                </div>
+                <div style="min-width:0;">
+                    <div style="color:#fff; font-weight:700; font-size:0.86rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${esc(d.name)}
+                    </div>
+                    <div style="font-size:0.74rem; color:var(--text-secondary);">
+                        Dimensione: <strong style="color:var(--accent-gold); font-family:var(--font-mono);">${esc(d.sizeFormatted || "PDF")}</strong> • <span style="color:var(--accent-emerald);">✓ PDF pronto per visualizzazione e download</span>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.6rem; color:#ef4444;" onclick="window.removeCostoPdfDraft()" title="Rimuovi PDF allegato">
+                &times;
+            </button>
+        </div>
+    `;
+};
+
+window.removeCostoPdfDraft = function() {
+    if (window.costoPdfDraft && window.costoPdfDraft.id && window.socialMediaDB) {
+        window.socialMediaDB.deleteBlob(window.costoPdfDraft.id);
+    }
+    window.costoPdfDraft = null;
+    window._costoPdfRemoved = true;
+    window.renderCostoPdfDraft();
+};
+
+window.setupCostoModalDropzone = function() {
+    const dz = document.getElementById("costoModalDropzone");
+    if (!dz) return;
+    dz.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "var(--accent-gold)";
+        dz.style.background = "rgba(245, 158, 11, 0.14)";
+    });
+    dz.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(244, 63, 94, 0.45)";
+        dz.style.background = "linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(245, 158, 11, 0.06))";
+    });
+    dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dz.style.borderColor = "rgba(244, 63, 94, 0.45)";
+        dz.style.background = "linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(245, 158, 11, 0.06))";
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            window.processCostoPdfFile(e.dataTransfer.files[0]);
+        }
+    });
+};
+
+window.handleCostoPdfFileInput = function(event) {
+    const file = event.target && event.target.files ? event.target.files[0] : null;
+    if (!file) return;
+    event.target.value = "";
+    window.processCostoPdfFile(file);
+};
+
+window.handleDirectCostiPagePdfUpload = function(event) {
+    const file = event.target && event.target.files ? event.target.files[0] : null;
+    if (!file) return;
+    event.target.value = "";
+    window.openAddModal("costiLaboratorio");
+    setTimeout(() => {
+        window.processCostoPdfFile(file);
+    }, 60);
+};
+
+window.processCostoPdfFile = async function(file) {
+    if (!file) return;
+    const progBox = document.getElementById("costoUploadProgressBox");
+    const progBar = document.getElementById("costoUploadProgressBar");
+    const statusText = document.getElementById("costoUploadStatusText");
+    const pctText = document.getElementById("costoUploadPercentText");
+
+    if (progBox) progBox.style.display = "block";
+    const fileId = "cstpdf-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    const mimeType = file.type || "application/pdf";
+    const sizeStr = window.formatSocialBytes ? window.formatSocialBytes(file.size) : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+
+    if (statusText) statusText.innerText = `Archiviazione "${file.name}" (${sizeStr})...`;
+    if (pctText) pctText.innerText = "40%";
+    if (progBar) progBar.style.width = "40%";
+
+    if (window.socialMediaDB) {
+        await window.socialMediaDB.saveBlob(fileId, file, {
+            name: file.name,
+            mimeType: mimeType,
+            sizeBytes: file.size
+        });
+    }
+
+    if (pctText) pctText.innerText = "75%";
+    if (progBar) progBar.style.width = "75%";
+
+    let serverFileUrl = "";
+    try {
+        const upR = await fetch("/api/costi/upload-file", {
+            method: "POST",
+            headers: {
+                "Content-Type": mimeType,
+                "X-Costo-Id": fileId,
+                "X-Costo-Name": encodeURIComponent(file.name),
+                "X-Costo-Mime": mimeType
+            },
+            body: file
+        });
+        if (upR.ok) {
+            const upJson = await upR.json();
+            if (upJson && upJson.url) serverFileUrl = upJson.url;
+        }
+    } catch (e) {
+        // Fallback IndexedDB locale
+    }
+
+    window.costoPdfDraft = {
+        id: fileId,
+        name: file.name,
+        mimeType: mimeType,
+        sizeBytes: file.size,
+        sizeFormatted: sizeStr,
+        url: serverFileUrl,
+        isIndexedDB: true
+    };
+    window._costoPdfRemoved = false;
+    window.renderCostoPdfDraft();
+
+    // Se il campo Tipo di Spesa è vuoto, suggerisci il nome pulito del PDF
+    const tipoInp = document.getElementById("f_costo_tipo");
+    if (tipoInp && !tipoInp.value.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ").trim();
+        if (cleanName) {
+            tipoInp.value = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+        }
+    }
+
+    if (pctText) pctText.innerText = "100%";
+    if (progBar) progBar.style.width = "100%";
+    setTimeout(() => {
+        if (progBox) progBox.style.display = "none";
+    }, 550);
+    window.showToast(`PDF "${file.name}" allegato alla spesa!`);
+};
+
+window.openEditCostoLaboratorioModal = function(itemId) {
+    const item = window.atelierDB.getItem("costiLaboratorio", itemId);
+    if (!item) return;
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "820px";
+
+    modalTitle.innerText = `Modifica Spesa Laboratorio: ${item.tipoSpesa}`;
+    modalBody.innerHTML = window.buildCostiLaboratorioModalForm(item);
+    modalOverlay.classList.add("active");
+    window.renderCostoPdfDraft();
+    window.setupCostoModalDropzone();
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.resolveCostoPdfUrlAndBlob = async function(item) {
+    if (!item) return { url: "", blob: null };
+    if (item.fileId && window.socialMediaDB) {
+        const blob = await window.socialMediaDB.getBlob(item.fileId);
+        if (blob) {
+            const objUrl = await window.socialMediaDB.getObjectUrl(item.fileId);
+            return { url: objUrl, blob: blob };
+        }
+    }
+    const candidates = [];
+    if (item.fileUrl) {
+        candidates.push(item.fileUrl);
+        if (item.fileUrl.startsWith("/costi_uploads/")) {
+            const fname = item.fileUrl.slice("/costi_uploads/".length);
+            candidates.push("/api/costi/file/" + fname);
+        }
+    } else if (item.fileId && item.fileName) {
+        const safeName = item.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+        candidates.push(`/api/costi/file/${item.fileId}_${safeName}`);
+    }
+
+    for (const candidateUrl of candidates) {
+        try {
+            const r = await fetch(candidateUrl);
+            if (!r.ok) continue;
+            const ct = (r.headers.get("content-type") || "").toLowerCase();
+            if (ct.includes("text/html")) continue;
+            const b = await r.blob();
+            return { url: candidateUrl, blob: b };
+        } catch (e) {
+            // ignore
+        }
+    }
+    return { url: item.fileUrl || "", blob: null };
+};
+
+window.openCostoPdfViewerModal = async function(itemId) {
+    const item = window.atelierDB.getItem("costiLaboratorio", itemId);
+    if (!item) return;
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "920px";
+
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    modalTitle.innerText = `📄 Documento Spesa: ${item.tipoSpesa}`;
+    modalBody.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-secondary);">Caricamento documento PDF in corso...</div>`;
+    modalOverlay.classList.add("active");
+
+    const { url, blob } = await window.resolveCostoPdfUrlAndBlob(item);
+    const viewUrl = blob ? URL.createObjectURL(blob) : url;
+    const prezzoFmt = Number(item.prezzo || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    modalBody.innerHTML = `
+        <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; background:rgba(0,0,0,0.35); padding:0.95rem 1.15rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); margin-bottom:1.1rem;">
+                <div>
+                    <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; margin-bottom:0.3rem;">
+                        <span class="badge badge-danger">${esc(item.categoria || "Spesa Laboratorio")}</span>
+                        <span style="font-size:0.78rem; color:var(--text-muted);">Data: ${esc(item.data || "-")} ${item.fornitore ? `• Fornitore: ${esc(item.fornitore)}` : ""}</span>
+                    </div>
+                    <h4 style="color:#fff; font-family:var(--font-heading); font-size:1.15rem; margin:0;">${esc(item.tipoSpesa)}</h4>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <div style="font-size:1.3rem; font-weight:800; color:var(--accent-gold); font-family:var(--font-heading);">
+                        € ${prezzoFmt}
+                    </div>
+                    ${viewUrl ? `
+                        <button type="button" class="btn btn-primary" onclick="window.downloadCostoPdfFile('${esc(item.id)}')">
+                            <i data-lucide="download"></i> Scarica PDF
+                        </button>
+                    ` : ""}
+                    <button type="button" class="btn btn-secondary" onclick="window.openEditCostoLaboratorioModal('${esc(item.id)}')">
+                        <i data-lucide="edit-3"></i> Modifica
+                    </button>
+                </div>
+            </div>
+
+            ${viewUrl ? `
+                <div style="background:#090c12; border:1px solid rgba(244, 63, 94, 0.4); border-radius:12px; overflow:hidden; margin-bottom:1.1rem;">
+                    <div style="background:rgba(244, 63, 94, 0.14); padding:0.55rem 1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; font-size:0.8rem;">
+                        <span style="color:#fecdd3; font-weight:700;">📄 ${esc(item.fileName || "Documento_Spesa.pdf")} (${esc(item.fileSizeFormatted || "PDF")})</span>
+                        <a href="${viewUrl}" target="_blank" rel="noopener" class="btn btn-secondary" style="padding:0.22rem 0.65rem; font-size:0.74rem;">
+                            <i data-lucide="external-link"></i> Apri in Nuova Scheda
+                        </a>
+                    </div>
+                    <iframe src="${viewUrl}" style="width:100%; height:520px; border:none; background:#1a1d24;"></iframe>
+                </div>
+            ` : `
+                <div style="background:rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.18); border-radius:12px; padding:1.6rem; text-align:center; margin-bottom:1.1rem;">
+                    <p style="font-size:0.86rem; color:var(--text-secondary); margin:0 0 0.85rem 0;">
+                        Nessun documento PDF allegato a questa spesa.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="window.openEditCostoLaboratorioModal('${esc(item.id)}')">
+                        <i data-lucide="upload-cloud"></i> Allega PDF Fattura / Ricevuta
+                    </button>
+                </div>
+            `}
+
+            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:0.95rem 1.15rem;">
+                <strong style="color:var(--accent-gold); font-size:0.78rem; text-transform:uppercase; display:block; margin-bottom:0.3rem;">Note & Dettagli</strong>
+                <p style="font-size:0.88rem; color:#e5e7eb; margin:0; white-space:pre-line;">${esc(item.note || "Nessuna nota aggiuntiva.")}</p>
+            </div>
+        </div>
+    `;
+
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.downloadCostoPdfFile = async function(itemId) {
+    const item = window.atelierDB.getItem("costiLaboratorio", itemId);
+    if (!item) return;
+
+    const { url, blob } = await window.resolveCostoPdfUrlAndBlob(item);
+    const dlUrl = blob ? URL.createObjectURL(blob) : url;
+    if (!dlUrl) {
+        window.showToast("Nessun file PDF allegato a questa spesa. Clicca su Modifica per caricarlo.");
+        return;
+    }
+
+    const a = document.createElement("a");
+    a.href = dlUrl;
+    a.download = item.fileName || `${(item.tipoSpesa || "spesa_laboratorio").replace(/[^a-z0-9]/gi, "_")}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (blob) {
+        setTimeout(() => URL.revokeObjectURL(dlUrl), 5000);
+    }
+    window.showToast(`Download avviato: ${a.download}`);
+};
+
+window.deleteCostoLaboratorioItem = function(itemId, label) {
+    const item = window.atelierDB.getItem("costiLaboratorio", itemId);
+    if (!confirm(`Vuoi eliminare la spesa "${label || (item && item.tipoSpesa) || 'selezionata'}" da Costi Laboratorio?`)) return;
+    if (item && item.fileId && window.socialMediaDB) {
+        window.socialMediaDB.deleteBlob(item.fileId);
+    }
+    window.atelierDB.removeItem("costiLaboratorio", itemId);
+    window.showToast("Spesa rimossa da Costi Laboratorio.");
+    if (window.appController && window.appController.activeModuleId === "costiLaboratorio") {
+        window.appController.openModule("costiLaboratorio");
+    }
 };
 
 document.addEventListener("DOMContentLoaded", () => {

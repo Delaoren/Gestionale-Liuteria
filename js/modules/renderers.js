@@ -851,6 +851,218 @@ window.AppModules = {
         `;
     },
 
+    // 5b. Costi Laboratorio
+    renderCostiLaboratorio: function(container) {
+        const allItems = window.atelierDB.data.costiLaboratorio || [];
+        const activeCat = window.costiCategoryFilter || "all";
+        const searchQ = (window.costiSearchQuery || "").trim().toLowerCase();
+        const esc = window.escapeHtml || (s => String(s ?? ""));
+
+        const totaleSpese = allItems.reduce((acc, i) => acc + (parseFloat(i.prezzo) || 0), 0);
+        const conPdfCount = allItems.filter(i => Boolean(i.fileId || i.fileUrl || i.fileName)).length;
+
+        const categories = Array.from(new Set([
+            ...(window.COSTI_LABORATORIO_CATEGORIE || []),
+            ...allItems.map(i => i.categoria).filter(Boolean)
+        ]));
+
+        const filtered = allItems.filter(item => {
+            if (!item) return false;
+            if (activeCat !== "all" && item.categoria !== activeCat) return false;
+            if (searchQ) {
+                const hay = `${item.tipoSpesa || ""} ${item.categoria || ""} ${item.fornitore || ""} ${item.note || ""} ${item.fileName || ""} ${item.data || ""}`.toLowerCase();
+                if (!hay.includes(searchQ)) return false;
+            }
+            return true;
+        });
+
+        const totaleFiltrato = filtered.reduce((acc, i) => acc + (parseFloat(i.prezzo) || 0), 0);
+
+        container.innerHTML = `
+            <!-- KPI Costi Laboratorio -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap:1rem; margin-bottom:1.35rem;">
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid #f43f5e;">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(244, 63, 94, 0.16); color:#f43f5e; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="wallet"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Totale Costi Sostenuti</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:#fff; font-family:var(--font-heading);">
+                            € ${totaleSpese.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">${allItems.length} spese registrate in archivio</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-gold);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(245, 158, 11, 0.16); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="file-text"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Documenti PDF Allegati</div>
+                        <div style="font-size:1.45rem; font-weight:800; color:#fff; font-family:var(--font-heading);">
+                            ${conPdfCount} <small style="font-size:0.78rem; color:var(--accent-gold); font-family:var(--font-body); font-weight:600;">PDF salvati</small>
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">Fatture, ricevute e bolle consultabili</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-emerald);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(16, 185, 129, 0.16); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="filter"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Totale Vista Attuale</div>
+                        <div style="font-size:1.45rem; font-weight:800; color:var(--accent-emerald); font-family:var(--font-heading);">
+                            € ${totaleFiltrato.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">${filtered.length} voci visualizzate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Banner Inserimento Rapido Spesa / Upload PDF -->
+            <div class="glass-panel" style="margin-bottom:1.4rem; background:linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(245, 158, 11, 0.08)); border:1.5px dashed rgba(244, 63, 94, 0.45); padding:1.25rem 1.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                    <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:250px;">
+                        <div style="width:50px; height:50px; border-radius:12px; background:rgba(244, 63, 94, 0.2); border:1px solid #f43f5e; color:#fda4af; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="file-plus-2" style="width:26px; height:26px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.12rem; margin-bottom:0.2rem;">
+                                Registra Nuova Spesa di Laboratorio & Carica PDF
+                            </h3>
+                            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                                Inserisci il <strong>tipo di spesa sostenuta</strong>, il <strong>prezzo</strong>, le <strong>note</strong> e allega il relativo <strong>documento PDF</strong> (fattura fornitore, ricevuta legname, vernici, utensili o utenze).
+                            </p>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <label class="btn btn-secondary" style="cursor:pointer; margin:0; padding:0.62rem 1.05rem; font-size:0.84rem; border-color:var(--accent-gold); color:#fff;">
+                            <i data-lucide="upload-cloud"></i> 📄 Carica Subito da PDF
+                            <input type="file" accept=".pdf,application/pdf" onchange="window.handleDirectCostiPagePdfUpload(event)" style="display:none;">
+                        </label>
+                        <button type="button" class="btn btn-primary" style="padding:0.62rem 1.15rem; font-size:0.85rem;" onclick="window.openAddModal('costiLaboratorio')">
+                            <i data-lucide="plus"></i> + Nuova Spesa Laboratorio
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Elenco Spese Sostenute -->
+            <div class="glass-panel">
+                <div class="panel-header" style="flex-wrap:wrap; gap:0.9rem;">
+                    <div>
+                        <div class="panel-title">
+                            <i data-lucide="wallet" class="lucide-wallet" style="color:#f43f5e;"></i>
+                            Registro Costi & Spese Sostenute in Laboratorio (${filtered.length})
+                        </div>
+                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                            Elenco cronologico dei costi di bottega con importo, note e documento PDF allegato.
+                        </p>
+                    </div>
+                    <div style="display:flex; gap:0.55rem; flex-wrap:wrap; align-items:center;">
+                        <input type="text" id="costiSearchInput" class="form-control" placeholder="Cerca tipo spesa, fornitore, note..." value="${esc(window.costiSearchQuery || '')}" oninput="window.handleCostiSearchInput(this.value)" style="width:230px; padding:0.4rem 0.8rem; font-size:0.82rem;">
+                        <select class="form-control" style="width:auto; max-width:250px; padding:0.4rem 0.75rem; font-size:0.82rem;" onchange="window.setCostiCategoryFilter(this.value)">
+                            <option value="all" ${activeCat === 'all' ? 'selected' : ''}>Tutte le Categorie</option>
+                            ${categories.map(c => `<option value="${esc(c)}" ${activeCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-primary" onclick="window.openAddModal('costiLaboratorio')">
+                            <i data-lucide="plus"></i> + Aggiungi Spesa
+                        </button>
+                    </div>
+                </div>
+
+                ${filtered.length === 0 ? `
+                    <div style="text-align:center; padding:3rem 1.2rem; color:var(--text-muted);">
+                        <i data-lucide="wallet" style="width:48px; height:48px; color:#f43f5e; margin-bottom:0.8rem;"></i>
+                        <h4 style="color:#fff; margin-bottom:0.4rem;">Nessuna spesa registrata in questa vista</h4>
+                        <p style="font-size:0.85rem; margin-bottom:1.2rem;">Clicca su <strong>+ Aggiungi Spesa</strong> per inserire il tipo di spesa sostenuta, il prezzo, le note e caricare il PDF.</p>
+                        <button class="btn btn-primary" onclick="window.openAddModal('costiLaboratorio')">
+                            <i data-lucide="plus"></i> + Registra Prima Spesa Laboratorio
+                        </button>
+                    </div>
+                ` : `
+                    <div class="custom-table-container">
+                        <table class="custom-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Tipo di Spesa Sostenuta</th>
+                                    <th>Prezzo</th>
+                                    <th>Note</th>
+                                    <th>Documento PDF</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filtered.map(item => {
+                                    const hasPdf = Boolean(item.fileId || item.fileUrl || item.fileName);
+                                    const prezzoFmt = Number(item.prezzo || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    const safeLabel = esc(item.tipoSpesa || "").replace(/'/g, "\\'");
+                                    return `
+                                        <tr>
+                                            <td style="font-size:0.82rem; white-space:nowrap; font-family:var(--font-mono); color:var(--text-secondary);">
+                                                ${esc(item.data || "-")}
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:700; color:#fff; font-size:0.94rem; margin-bottom:0.2rem;">
+                                                    ${esc(item.tipoSpesa)}
+                                                </div>
+                                                <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                                                    <span class="badge badge-info" style="font-size:0.68rem;">${esc(item.categoria || "Spesa Laboratorio")}</span>
+                                                    ${item.fornitore ? `<span style="font-size:0.75rem; color:var(--text-muted);">Fornitore: <strong style="color:#e2e8f0;">${esc(item.fornitore)}</strong></span>` : ""}
+                                                    ${item.metodoPagamento ? `<span style="font-size:0.72rem; color:var(--text-muted);">• ${esc(item.metodoPagamento)}</span>` : ""}
+                                                </div>
+                                            </td>
+                                            <td style="white-space:nowrap;">
+                                                <strong style="font-size:1.06rem; color:var(--accent-gold); font-family:var(--font-heading);">
+                                                    € ${prezzoFmt}
+                                                </strong>
+                                            </td>
+                                            <td style="font-size:0.83rem; color:var(--text-secondary); max-width:280px; white-space:pre-line;">
+                                                ${item.note ? esc(item.note) : '<span style="color:var(--text-muted); font-style:italic;">-</span>'}
+                                            </td>
+                                            <td>
+                                                ${hasPdf ? `
+                                                    <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                                                        <button type="button" class="btn btn-primary" style="padding:0.3rem 0.65rem; font-size:0.74rem; background:rgba(244, 63, 94, 0.22); border:1px solid rgba(244, 63, 94, 0.5); color:#fecdd3;" onclick="window.openCostoPdfViewerModal('${esc(item.id)}')" title="Visualizza PDF: ${esc(item.fileName || 'Documento.pdf')}">
+                                                            <i data-lucide="file-text"></i> Apri PDF
+                                                        </button>
+                                                        <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.55rem; font-size:0.74rem;" onclick="window.downloadCostoPdfFile('${esc(item.id)}')" title="Scarica PDF (${esc(item.fileName || 'PDF')})">
+                                                            <i data-lucide="download"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem; max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(item.fileName || '')}">
+                                                        📎 ${esc(item.fileName || "Allegato.pdf")}
+                                                    </div>
+                                                ` : `
+                                                    <button type="button" class="btn btn-secondary" style="padding:0.28rem 0.6rem; font-size:0.73rem; border-style:dashed; color:var(--text-secondary);" onclick="window.openEditCostoLaboratorioModal('${esc(item.id)}')" title="Carica un PDF per questa spesa">
+                                                        <i data-lucide="upload-cloud"></i> + Carica PDF
+                                                    </button>
+                                                `}
+                                            </td>
+                                            <td>
+                                                <div style="display:flex; gap:0.35rem;">
+                                                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.55rem; font-size:0.75rem;" onclick="window.openEditCostoLaboratorioModal('${esc(item.id)}')" title="Modifica spesa">
+                                                        <i data-lucide="edit-3"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-secondary" style="padding:0.3rem 0.55rem; font-size:0.75rem; color:#ef4444;" onclick="window.deleteCostoLaboratorioItem('${esc(item.id)}', '${safeLabel}')" title="Elimina spesa">
+                                                        <i data-lucide="trash-2"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    },
+
     // 5. Costruzione
     renderCostruzione: function(container) {
         const items = window.atelierDB.data.costruzione || [];

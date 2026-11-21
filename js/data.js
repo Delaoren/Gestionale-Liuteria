@@ -359,6 +359,8 @@ const defaultData = {
             note: "Manutenzione annuale programmata ogni mese di Settembre."
         }
     ],
+    // 5b. Costi Laboratorio
+    costiLaboratorio: [],
     // 5. Costruzione
     costruzione: [
         {
@@ -937,6 +939,9 @@ class DataStore {
                     parsed.mail = [];
                 } else {
                     parsed.mail = parsed.mail.filter(m => m && !String(m.id || "").startsWith("mail-init-"));
+                }
+                if (!Array.isArray(parsed.costiLaboratorio)) {
+                    parsed.costiLaboratorio = [];
                 }
                 if (!parsed.liuteriaMaking || !parsed.liuteriaMaking.measurements) {
                     parsed.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));

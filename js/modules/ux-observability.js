@@ -128,6 +128,7 @@
     const SEARCH_MODULES = [
         { key: "biblioteca", label: "Biblioteca", icon: "book-open", fields: ["titolo", "autore", "categoria", "note", "fileName"] },
         { key: "clienti", label: "Clienti", icon: "users", fields: ["nome", "email", "telefono", "strumento", "note"] },
+        { key: "costiLaboratorio", label: "Costi Laboratorio", icon: "wallet", fields: ["tipoSpesa", "categoria", "fornitore", "note", "fileName"] },
         { key: "certificati", label: "Certificati", icon: "award", fields: ["codice", "strumento", "proprietario", "modello", "note"] },
         { key: "costruzione", label: "Costruzione", icon: "hammer", fields: ["codice", "modello", "strumento", "legno", "note"] },
         { key: "restauro", label: "Restauro", icon: "wrench", fields: ["codice", "strumento", "proprietario", "diagnosi", "interventiPrevisti"] },
@@ -176,8 +177,8 @@
                 if (!item || typeof item !== "object") return;
                 const hay = mod.fields.map(f => item[f] || "").concat(Array.isArray(item.tags) ? item.tags : []).join(" ").toLowerCase();
                 if (!q || hay.includes(q)) {
-                    const title = item.titolo || item.nome || item.subject || item.cliente || item.strumento || item.modello || item.codice || item.id;
-                    const sub = item.autore || item.proprietario || item.fromName || item.email || item.categoria || item.tipologia || item.data || "";
+                    const title = item.titolo || item.nome || item.tipoSpesa || item.subject || item.cliente || item.strumento || item.modello || item.codice || item.id;
+                    const sub = item.autore || item.proprietario || item.fornitore || item.fromName || item.email || item.categoria || item.tipologia || item.data || "";
                     results.push({ mod, item, title: String(title || "Elemento"), sub: String(sub || "") });
                 }
             });

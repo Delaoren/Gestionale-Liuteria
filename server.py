@@ -101,7 +101,7 @@ minio_client = None
 
 DB_ARRAY_COLLECTIONS = {
     "biblioteca", "calendarioAppuntamenti", "calendarioLavorazioni",
-    "certificati", "clienti", "costruzione", "gestioneContabilita",
+    "certificati", "clienti", "costiLaboratorio", "costruzione", "gestioneContabilita",
     "laboratorio", "magazzinoLegno", "magazzinoStrumenti", "media",
     "report", "restauro", "social", "mail"
 }
@@ -416,6 +416,8 @@ def _cleanup_storage_for_doc(doc):
         ("/social_uploads/", "social", SOCIAL_UPLOADS_DIR),
         ("/api/certificati/file/", "certificati", CERTIFICATI_UPLOADS_DIR),
         ("/certificati_uploads/", "certificati", CERTIFICATI_UPLOADS_DIR),
+        ("/api/costi/file/", "costi", COSTI_UPLOADS_DIR),
+        ("/costi_uploads/", "costi", COSTI_UPLOADS_DIR),
     ]
     for u in urls:
         clean_u = urllib.parse.unquote(u.split("?")[0])
@@ -733,9 +735,11 @@ SOCIAL_UPLOADS_DIR = os.path.join(DIRECTORY, "social_uploads")
 BIBLIOTECA_UPLOADS_DIR = os.path.join(DIRECTORY, "biblioteca_uploads")
 MEDIA_UPLOADS_DIR = os.path.join(DIRECTORY, "media_uploads")
 CERTIFICATI_UPLOADS_DIR = os.path.join(DIRECTORY, "certificati_uploads")
+COSTI_UPLOADS_DIR = os.path.join(DIRECTORY, "costi_uploads")
 SOCIAL_STATE_FILE = os.path.join(DIRECTORY, "social_state.json")
 BIBLIOTECA_STATE_FILE = os.path.join(DIRECTORY, "biblioteca_state.json")
 os.makedirs(CERTIFICATI_UPLOADS_DIR, exist_ok=True)
+os.makedirs(COSTI_UPLOADS_DIR, exist_ok=True)
 biblioteca_lock = threading.Lock()
 biblioteca_state = {"items": [], "updatedAt": ""}
 
@@ -1997,6 +2001,7 @@ PROTECTED_DIRS = {
     "biblioteca_uploads",
     "media_uploads",
     "certificati_uploads",
+    "costi_uploads",
     ".venv",
     "venv",
     "env",
@@ -2430,7 +2435,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Credentials', 'true')
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime, X-Book-Id, X-Book-Name, X-Book-Mime')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime, X-Book-Id, X-Book-Name, X-Book-Mime, X-Costo-Id, X-Costo-Name, X-Costo-Mime')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
@@ -2523,6 +2528,8 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_storage_get_file('/api/social/file/', 'social', SOCIAL_UPLOADS_DIR)
         elif self.path.startswith('/api/certificati/file/'):
             self.handle_storage_get_file('/api/certificati/file/', 'certificati', CERTIFICATI_UPLOADS_DIR)
+        elif self.path.startswith('/api/costi/file/'):
+            self.handle_storage_get_file('/api/costi/file/', 'costi', COSTI_UPLOADS_DIR)
         elif self.path.startswith('/api/mail/status'):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -2574,6 +2581,8 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_media_upload_file()
         elif self.path.startswith('/api/certificati/upload-file'):
             self.handle_certificati_upload_file()
+        elif self.path.startswith('/api/costi/upload-file'):
+            self.handle_costi_upload_file()
         elif self.path.startswith('/api/sendinblue/config'):
             self.handle_sendinblue_config()
         elif self.path.startswith('/api/sendinblue/send-reminder'):
@@ -3095,6 +3104,37 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "success": True,
                 "fileId": cert_img_id,
                 "url": f"/api/certificati/file/{stored_filename}",
+                "relUrl": "/" + rel_path,
+                "minio": stored_minio,
+                "sizeBytes": len(file_bytes)
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_costi_upload_file(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        costo_file_id = (self.headers.get('X-Costo-Id') or f"cstpdf-{int(time.time()*1000)}").strip()
+        raw_name = urllib.parse.unquote(self.headers.get('X-Costo-Name') or "documento_spesa.pdf")
+        mime_type = (self.headers.get('X-Costo-Mime') or mimetypes.guess_type(raw_name)[0] or "application/pdf").strip()
+
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)
+        stored_filename = f"{costo_file_id}_{safe_name}"
+        rel_path = f"costi_uploads/{stored_filename}"
+
+        try:
+            file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
+            stored_minio = storage_put_object("costi", stored_filename, file_bytes, mime_type, COSTI_UPLOADS_DIR)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "fileId": costo_file_id,
+                "url": f"/api/costi/file/{stored_filename}",
                 "relUrl": "/" + rel_path,
                 "minio": stored_minio,
                 "sizeBytes": len(file_bytes)
