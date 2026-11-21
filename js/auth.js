@@ -8,8 +8,6 @@
     const AUTHORIZED_EMAIL = "fabio.delorenzi@gmail.com";
     const AUTHORIZED_DOMAIN = "gestionale.liuteriadelorenzi.it";
     const SESSION_KEY = "atelier_auth_session";
-    const PWD_KEY = "atelier_auth_hash";
-    const DEFAULT_MASTER_PWD = "Liuteria2026!"; // Password master predefinita, modificabile
 
     class AuthController {
         constructor() {
@@ -34,7 +32,7 @@
             }
         }
 
-        onReady() {
+        async onReady() {
             if (!this.isDomainAllowed()) return;
 
             if (!this.isAuthenticated()) {
@@ -45,6 +43,39 @@
             }
 
             this.bindEvents();
+            await this.verifyServerSession();
+        }
+
+        async verifyServerSession() {
+            try {
+                const res = await fetch("/api/auth/session", { credentials: "same-origin" });
+                if (!res.ok) return;
+                const ct = (res.headers.get("content-type") || "").toLowerCase();
+                if (!ct.includes("application/json")) return;
+                const data = await res.json();
+                if (data && data.authenticated === true) {
+                    if (!this.isAuthenticated()) {
+                        this.session = {
+                            email: data.email || AUTHORIZED_EMAIL,
+                            name: "Fabio De Lorenzi",
+                            role: "Maestro Liutaio",
+                            loginTime: new Date().toISOString()
+                        };
+                        localStorage.setItem(SESSION_KEY, JSON.stringify(this.session));
+                        this.hideLoginOverlay();
+                        this.renderUserBadge();
+                    }
+                } else if (data && data.authenticated === false) {
+                    localStorage.removeItem(SESSION_KEY);
+                    sessionStorage.removeItem(SESSION_KEY);
+                    this.session = null;
+                    const badge = document.getElementById("userProfileWidget");
+                    if (badge) badge.remove();
+                    this.showLoginOverlay();
+                }
+            } catch (e) {
+                // Modalità offline / statica
+            }
         }
 
         isDomainAllowed() {
@@ -145,7 +176,7 @@
             }
         }
 
-        handleLogin(e) {
+        async handleLogin(e) {
             e.preventDefault();
             const errBox = document.getElementById("loginErrorBox");
             if (errBox) {
@@ -159,21 +190,39 @@
 
             const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
             const pwd = pwdInput ? pwdInput.value : "";
+            const remember = Boolean(rememberCheck && rememberCheck.checked);
 
-            // 1. Verifica rigorosa dell'indirizzo email autorizzato
             if (email !== AUTHORIZED_EMAIL.toLowerCase()) {
                 this.showError(`Accesso Negato: L'indirizzo "${email}" non è autorizzato. Solo l'utente ${AUTHORIZED_EMAIL} può accedere a questo gestionale.`);
                 return;
             }
 
-            // 2. Verifica password
-            const savedPwd = localStorage.getItem(PWD_KEY) || DEFAULT_MASTER_PWD;
-            if (pwd !== savedPwd && pwd !== DEFAULT_MASTER_PWD) {
-                this.showError("Chiave di accesso / Password errata. Riprova.");
+            let serverHandled = false;
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
+                    body: JSON.stringify({ email, password: pwd, remember })
+                });
+                const ct = (res.headers.get("content-type") || "").toLowerCase();
+                if (ct.includes("application/json")) {
+                    serverHandled = true;
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        this.showError(data.error || "Chiave di accesso / Password errata. Riprova.");
+                        return;
+                    }
+                }
+            } catch (err) {
+                // Server non raggiungibile -> modalità offline
+            }
+
+            if (!serverHandled && !pwd) {
+                this.showError("Inserisci la password di accesso.");
                 return;
             }
 
-            // 3. Salva sessione autorizzata
             const sessionData = {
                 email: AUTHORIZED_EMAIL,
                 name: "Fabio De Lorenzi",
@@ -181,7 +230,7 @@
                 loginTime: new Date().toISOString()
             };
 
-            if (rememberCheck && rememberCheck.checked) {
+            if (remember) {
                 localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
             } else {
                 sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
@@ -191,6 +240,16 @@
             this.session = sessionData;
             this.hideLoginOverlay();
             this.renderUserBadge();
+
+            if (window.atelierDB && typeof window.atelierDB.syncFromMongo === "function") {
+                window.atelierDB.syncFromMongo();
+            }
+            if (typeof window.syncBibliotecaFromServer === "function") {
+                window.syncBibliotecaFromServer();
+            }
+            if (typeof window.refreshDbStatusIndicator === "function") {
+                window.refreshDbStatusIndicator();
+            }
 
             if (window.showToast) {
                 window.showToast(`Bentornato Maestro De Lorenzi (${AUTHORIZED_EMAIL})`);
@@ -205,8 +264,13 @@
             }
         }
 
-        logout() {
+        async logout() {
             if (confirm("Sei sicuro di voler effettuare la disconnessione dalla suite gestionale?")) {
+                try {
+                    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+                } catch (e) {
+                    // ignore
+                }
                 localStorage.removeItem(SESSION_KEY);
                 sessionStorage.removeItem(SESSION_KEY);
                 this.session = null;

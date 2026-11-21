@@ -171,9 +171,14 @@ window.AppModules = {
                             Consulta e scarica manuali di liuteria, sesti acustici, ricettari di vernici ed ebook in formato PDF, EPUB, MOBI, AZW3, DJVU e testo.
                         </p>
                     </div>
-                    <button class="btn btn-primary" onclick="window.openAddModal('biblioteca')">
-                        <i data-lucide="upload-cloud" class="lucide-upload-cloud"></i> + Carica Ebook / PDF
-                    </button>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                        <button type="button" class="btn btn-secondary" onclick="window.syncBibliotecaFromServer(true)" title="Sincronizza e ripristina i testi salvati sul server">
+                            <i data-lucide="refresh-cw"></i> Ripristina da Server
+                        </button>
+                        <button class="btn btn-primary" onclick="window.openAddModal('biblioteca')">
+                            <i data-lucide="upload-cloud" class="lucide-upload-cloud"></i> + Carica Ebook / PDF
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Filter Bar (Formato Ebook + Categoria) -->
@@ -216,51 +221,52 @@ window.AppModules = {
                         ${filteredItems.map(item => {
                             const fMeta = getFormatBadgeMeta(item);
                             const hasFile = Boolean(item.fileId || item.fileUrl || item.fileName);
-                            const safeTitle = (item.titolo || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                            const esc = window.escapeHtml || (s => String(s ?? ''));
+                            const safeTitle = esc(item.titolo || '').replace(/'/g, "\\'");
                             return `
                                 <div class="info-card" style="display:flex; flex-direction:column; justify-content:space-between; border:1px solid ${hasFile ? fMeta.border : 'rgba(255,255,255,0.08)'};">
                                     <div>
                                         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:0.8rem;">
-                                            <span class="badge badge-info">${item.categoria || 'Trattato Tecnico'}</span>
-                                            <span style="font-size:0.78rem; color:var(--text-muted);">${item.anno || '-'} • ${item.pagine || '-'} pag.</span>
+                                            <span class="badge badge-info">${esc(item.categoria || 'Trattato Tecnico')}</span>
+                                            <span style="font-size:0.78rem; color:var(--text-muted);">${esc(item.anno || '-')} • ${esc(item.pagine || '-')} pag.</span>
                                         </div>
 
-                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.08rem; margin-bottom:0.45rem; line-height:1.35; cursor:pointer;" onclick="window.openBibliotecaReaderModal('${item.id}')">
-                                            ${item.titolo}
+                                        <h4 style="font-family:var(--font-heading); color:#fff; font-size:1.08rem; margin-bottom:0.45rem; line-height:1.35; cursor:pointer;" onclick="window.openBibliotecaReaderModal('${esc(item.id)}')">
+                                            ${esc(item.titolo)}
                                         </h4>
                                         <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:0.65rem;">
-                                            <strong>Autore:</strong> ${item.autore || 'Autore non specificato'}
+                                            <strong>Autore:</strong> ${esc(item.autore || 'Autore non specificato')}
                                         </p>
 
                                         <!-- Attached Ebook / PDF File Box -->
                                         ${hasFile ? `
-                                            <div onclick="window.openBibliotecaReaderModal('${item.id}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.6rem; background:rgba(255,255,255,0.04); border:1px solid ${fMeta.border}; border-radius:8px; padding:0.5rem 0.7rem; margin-bottom:0.75rem;">
+                                            <div onclick="window.openBibliotecaReaderModal('${esc(item.id)}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.6rem; background:rgba(255,255,255,0.04); border:1px solid ${fMeta.border}; border-radius:8px; padding:0.5rem 0.7rem; margin-bottom:0.75rem;">
                                                 <div style="display:flex; align-items:center; gap:0.55rem; min-width:0;">
                                                     <div style="width:32px; height:32px; border-radius:7px; background:${fMeta.bg}; color:${fMeta.color}; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800; font-size:0.68rem;">
-                                                        ${fMeta.short}
+                                                        ${esc(fMeta.short)}
                                                     </div>
                                                     <div style="min-width:0;">
                                                         <div style="color:#fff; font-size:0.78rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                                            ${item.fileName || (item.titolo + '.' + fMeta.short.toLowerCase())}
+                                                            ${esc(item.fileName || (item.titolo + '.' + fMeta.short.toLowerCase()))}
                                                         </div>
                                                         <div style="font-size:0.69rem; color:var(--text-muted);">
-                                                            ${item.fileSizeFormatted || formatBytes(item.fileSizeBytes)} • Clicca per aprire
+                                                            ${esc(item.fileSizeFormatted || formatBytes(item.fileSizeBytes))} • Clicca per aprire
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <span style="font-size:0.68rem; color:var(--accent-emerald); font-weight:700; flex-shrink:0;">✓ File Pronto</span>
                                             </div>
                                         ` : `
-                                            <div onclick="window.openEditBibliotecaModal('${item.id}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.5rem; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.14); border-radius:8px; padding:0.45rem 0.7rem; margin-bottom:0.75rem; font-size:0.74rem; color:var(--text-muted);">
+                                            <div onclick="window.openEditBibliotecaModal('${esc(item.id)}')" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:0.5rem; background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.14); border-radius:8px; padding:0.45rem 0.7rem; margin-bottom:0.75rem; font-size:0.74rem; color:var(--text-muted);">
                                                 <span><i data-lucide="paperclip" style="width:13px; height:13px; vertical-align:middle;"></i> Scheda archivio (nessun file binario allegato)</span>
                                                 <span style="color:var(--accent-cyan); font-weight:600;">+ Allega Ebook/PDF</span>
                                             </div>
                                         `}
 
-                                        ${item.note ? `<p style="font-size:0.81rem; color:var(--text-muted); margin-bottom:0.85rem; font-style:italic;">"${item.note}"</p>` : ''}
+                                        ${item.note ? `<p style="font-size:0.81rem; color:var(--text-muted); margin-bottom:0.85rem; font-style:italic;">"${esc(item.note)}"</p>` : ''}
 
                                         <div style="display:flex; flex-wrap:wrap; gap:0.38rem; margin-bottom:0.9rem;">
-                                            ${Array.isArray(item.tags) ? item.tags.map(t => `<span style="background:rgba(255,255,255,0.06); font-size:0.7rem; padding:0.18rem 0.5rem; border-radius:4px; color:var(--accent-gold);">${t}</span>`).join('') : ''}
+                                            ${Array.isArray(item.tags) ? item.tags.map(t => `<span style="background:rgba(255,255,255,0.06); font-size:0.7rem; padding:0.18rem 0.5rem; border-radius:4px; color:var(--accent-gold);">${esc(t)}</span>`).join('') : ''}
                                         </div>
                                     </div>
 

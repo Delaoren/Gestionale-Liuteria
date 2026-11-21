@@ -7,6 +7,7 @@ Permette di eseguire il gestionale su http://localhost:8080 con:
 """
 
 import http.server
+import http.cookies
 import socketserver
 import urllib.request
 import urllib.error
@@ -22,6 +23,8 @@ import mimetypes
 import uuid
 import re
 import hashlib
+import hmac
+import secrets
 import subprocess
 import tarfile
 import io
@@ -42,11 +45,394 @@ try:
 except ImportError:
     HAS_PAHO = False
 
+try:
+    from pymongo import MongoClient
+    HAS_PYMONGO = True
+except ImportError:
+    HAS_PYMONGO = False
+
+try:
+    from minio import Minio
+    HAS_MINIO = True
+except ImportError:
+    HAS_MINIO = False
+
 PORT = int(os.environ.get("PORT", 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+
+def _load_dotenv_if_present():
+    env_path = os.path.join(DIRECTORY, ".env")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        print(f"[Env] Errore lettura .env: {e}")
+
+_load_dotenv_if_present()
+
 DEFAULT_MQTT_BROKER = os.environ.get("MQTT_BROKER", "192.168.68.108")
 DEFAULT_MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
 DEFAULT_ESPHOME_HOST = os.environ.get("ESPHOME_HOST", "192.168.68.101")
+
+# ==============================================================================
+# MONGODB & MINIO STORAGE LAYER (CON FALLBACK AUTOMATICO SU DISCO/JSON)
+# ==============================================================================
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://127.0.0.1:27017")
+MONGO_DB_NAME = os.environ.get("MONGO_DB", "atelier_liuteria")
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "127.0.0.1:9000")
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
+MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "atelier-liuteria")
+MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
+
+mongo_client = None
+mongo_db = None
+minio_client = None
+
+DB_ARRAY_COLLECTIONS = {
+    "biblioteca", "calendarioAppuntamenti", "calendarioLavorazioni",
+    "certificati", "clienti", "costruzione", "gestioneContabilita",
+    "laboratorio", "magazzinoLegno", "magazzinoStrumenti", "media",
+    "report", "restauro", "social", "mail"
+}
+DB_SINGLETON_COLLECTIONS = {"settings", "liuteriaMaking"}
+DB_ALL_COLLECTIONS = DB_ARRAY_COLLECTIONS | DB_SINGLETON_COLLECTIONS
+
+def init_mongo_and_minio():
+    global mongo_client, mongo_db, minio_client
+    if HAS_PYMONGO and MONGO_URI:
+        try:
+            c = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000, connectTimeoutMS=2000)
+            c.admin.command("ping")
+            mongo_client = c
+            mongo_db = c[MONGO_DB_NAME]
+            print(f"[MongoDB] Connesso al database '{MONGO_DB_NAME}'")
+        except Exception as e:
+            mongo_client = None
+            mongo_db = None
+            print(f"[MongoDB] Non disponibile ({e}) -> uso fallback JSON/localStorage")
+
+    if HAS_MINIO and MINIO_ENDPOINT and MINIO_ACCESS_KEY and MINIO_SECRET_KEY:
+        try:
+            mc = Minio(
+                MINIO_ENDPOINT,
+                access_key=MINIO_ACCESS_KEY,
+                secret_key=MINIO_SECRET_KEY,
+                secure=MINIO_SECURE
+            )
+            if not mc.bucket_exists(MINIO_BUCKET):
+                mc.make_bucket(MINIO_BUCKET)
+            minio_client = mc
+            print(f"[MinIO] Connesso a {MINIO_ENDPOINT} (bucket '{MINIO_BUCKET}')")
+        except Exception as e:
+            minio_client = None
+            print(f"[MinIO] Non disponibile ({e}) -> uso fallback disco locale")
+
+init_mongo_and_minio()
+
+def storage_put_object(prefix, filename, data_bytes, mime_type="application/octet-stream", local_dir=None):
+    """Salva su MinIO (se attivo) e su disco locale come fallback."""
+    object_key = f"{prefix.strip('/')}/{filename}"
+    saved_to_minio = False
+    if minio_client is not None:
+        try:
+            minio_client.put_object(
+                MINIO_BUCKET,
+                object_key,
+                io.BytesIO(data_bytes),
+                length=len(data_bytes),
+                content_type=mime_type or "application/octet-stream"
+            )
+            saved_to_minio = True
+        except Exception as e:
+            print(f"[MinIO] Errore put_object {object_key}: {e}")
+
+    if local_dir and (not saved_to_minio or os.environ.get("KEEP_LOCAL_UPLOADS", "true").lower() == "true"):
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, filename), "wb") as f:
+            f.write(data_bytes)
+    return saved_to_minio
+
+def storage_get_object(prefix, filename, local_dir=None):
+    """Legge da MinIO (se attivo), altrimenti da disco locale."""
+    object_key = f"{prefix.strip('/')}/{filename}"
+    if minio_client is not None:
+        resp = None
+        try:
+            resp = minio_client.get_object(MINIO_BUCKET, object_key)
+            data = resp.read()
+            ctype = resp.headers.get("Content-Type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            return data, ctype
+        except Exception:
+            pass
+        finally:
+            if resp is not None:
+                try:
+                    resp.close()
+                    resp.release_conn()
+                except Exception:
+                    pass
+
+    if local_dir:
+        disk_path = os.path.join(local_dir, filename)
+        if os.path.isfile(disk_path):
+            with open(disk_path, "rb") as f:
+                data = f.read()
+            ctype = mimetypes.guess_type(disk_path)[0] or "application/octet-stream"
+            return data, ctype
+    return None, None
+
+def storage_list_objects(prefix, local_dir=None):
+    """Elenca i nomi file presenti in MinIO sotto prefix + disco locale."""
+    found = {}
+    if minio_client is not None:
+        try:
+            pfx = prefix.strip("/") + "/"
+            for obj in minio_client.list_objects(MINIO_BUCKET, prefix=pfx, recursive=True):
+                fname = os.path.basename(obj.object_name)
+                if fname:
+                    found[fname] = obj.size or 0
+        except Exception as e:
+            print(f"[MinIO] Errore list_objects {prefix}: {e}")
+    if local_dir and os.path.isdir(local_dir):
+        for fname in os.listdir(local_dir):
+            fpath = os.path.join(local_dir, fname)
+            if os.path.isfile(fpath) and fname not in found:
+                found[fname] = os.path.getsize(fpath)
+    return found
+
+def _sanitize_mongo_doc(doc):
+    if not isinstance(doc, dict):
+        return doc
+    clean = dict(doc)
+    clean.pop("_id", None)
+    return clean
+
+SENSITIVE_SETTINGS_KEYS = {"apiKey", "token", "password", "smtpPass", "imapPass", "secret", "accessToken"}
+
+def _sanitize_settings_doc(obj):
+    """Rimuove chiavi/password sensibili dall'oggetto settings prima di salvarlo o esporlo in /api/db/all."""
+    if isinstance(obj, list):
+        return [_sanitize_settings_doc(x) for x in obj]
+    if not isinstance(obj, dict):
+        return obj
+    out = {}
+    for k, v in obj.items():
+        if k in SENSITIVE_SETTINGS_KEYS:
+            out[k] = ""
+        elif isinstance(v, (dict, list)):
+            out[k] = _sanitize_settings_doc(v)
+        else:
+            out[k] = v
+    return out
+
+# ==============================================================================
+# AUTENTICAZIONE LATO SERVER (HMAC SESSION TOKEN + PBKDF2-SHA256)
+# ==============================================================================
+AUTH_STATE_FILE = os.path.join(DIRECTORY, "auth_state.json")
+AUTH_SESSION_TTL = int(os.environ.get("ATELIER_SESSION_TTL", 86400 * 7))  # 7 giorni
+AUTHORIZED_EMAIL = os.environ.get("ATELIER_AUTH_EMAIL", "fabio.delorenzi@gmail.com").strip().lower()
+auth_lock = threading.Lock()
+auth_state = {"sessionSecret": "", "passwordHash": ""}
+
+def _hash_password_pbkdf2(password, salt=None):
+    if not salt:
+        salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000)
+    return f"pbkdf2_sha256${salt}${dk.hex()}"
+
+def _verify_password_pbkdf2(password, stored_hash):
+    try:
+        parts = str(stored_hash).split("$")
+        if len(parts) != 3 or parts[0] != "pbkdf2_sha256":
+            return False
+        _, salt, expected_hex = parts
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120000)
+        return hmac.compare_digest(dk.hex(), expected_hex)
+    except Exception:
+        return False
+
+def load_or_init_auth_state():
+    with auth_lock:
+        loaded = {}
+        if os.path.isfile(AUTH_STATE_FILE):
+            try:
+                with open(AUTH_STATE_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f) or {}
+            except Exception:
+                loaded = {}
+        changed = False
+        if not loaded.get("sessionSecret"):
+            loaded["sessionSecret"] = secrets.token_hex(32)
+            changed = True
+        env_pwd = os.environ.get("ATELIER_AUTH_PASSWORD", "").strip()
+        if not loaded.get("passwordHash"):
+            loaded["passwordHash"] = _hash_password_pbkdf2(env_pwd or "Liuteria2026!")
+            changed = True
+        auth_state["sessionSecret"] = loaded["sessionSecret"]
+        auth_state["passwordHash"] = loaded["passwordHash"]
+        if changed:
+            try:
+                with open(AUTH_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(auth_state, f, indent=2)
+            except Exception as e:
+                print(f"[Auth] Errore salvataggio auth_state.json: {e}")
+
+load_or_init_auth_state()
+
+def _sign_session_token(email_addr, ttl_seconds=AUTH_SESSION_TTL):
+    exp = int(time.time()) + ttl_seconds
+    payload_b64 = base64.urlsafe_b64encode(json.dumps({"email": email_addr, "exp": exp}).encode("utf-8")).decode("ascii").rstrip("=")
+    sig = hmac.new(auth_state["sessionSecret"].encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+def _verify_session_token(token):
+    if not token or "." not in token:
+        return None
+    try:
+        payload_b64, sig = token.split(".", 1)
+        expected_sig = hmac.new(auth_state["sessionSecret"].encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+        if int(data.get("exp", 0)) < int(time.time()):
+            return None
+        if str(data.get("email", "")).lower() != AUTHORIZED_EMAIL:
+            return None
+        return data
+    except Exception:
+        return None
+
+def mongo_get_all_data():
+    if mongo_db is None:
+        return None
+    out = {}
+    for col in DB_ARRAY_COLLECTIONS:
+        if col == "mail":
+            try:
+                mongo_db[col].delete_many({"id": {"$regex": "^mail-init-"}})
+            except Exception:
+                pass
+        docs = [_sanitize_mongo_doc(d) for d in mongo_db[col].find({})]
+        if col == "mail":
+            docs = [d for d in docs if not str(d.get("id", "")).startswith("mail-init-")]
+        if docs:
+            out[col] = docs
+    for col in DB_SINGLETON_COLLECTIONS:
+        doc = mongo_db[col].find_one({"_singleton_id": col})
+        if doc:
+            c = _sanitize_mongo_doc(doc)
+            c.pop("_singleton_id", None)
+            if col == "settings":
+                c = _sanitize_settings_doc(c)
+            out[col] = c
+    return out
+
+def mongo_sync_collection(collection, data):
+    if mongo_db is None or collection not in DB_ALL_COLLECTIONS:
+        return False
+    col = mongo_db[collection]
+    if collection in DB_SINGLETON_COLLECTIONS and isinstance(data, dict):
+        payload = _sanitize_settings_doc(data) if collection == "settings" else dict(data)
+        payload["_singleton_id"] = collection
+        col.replace_one({"_singleton_id": collection}, payload, upsert=True)
+        return True
+    if collection in DB_ARRAY_COLLECTIONS and isinstance(data, list):
+        col.delete_many({})
+        if data:
+            docs = [
+                _sanitize_mongo_doc(it) for it in data
+                if isinstance(it, dict) and not (collection == "mail" and str(it.get("id", "")).startswith("mail-init-"))
+            ]
+            if docs:
+                col.insert_many(docs)
+        return True
+    return False
+
+def mongo_upsert_item(collection, item):
+    if mongo_db is None or collection not in DB_ALL_COLLECTIONS:
+        return False
+    if collection in DB_SINGLETON_COLLECTIONS and isinstance(item, dict):
+        return mongo_sync_collection(collection, item)
+    if isinstance(item, dict) and item.get("id"):
+        if collection == "mail" and str(item.get("id", "")).startswith("mail-init-"):
+            return False
+        clean = _sanitize_mongo_doc(item)
+        mongo_db[collection].replace_one({"id": clean["id"]}, clean, upsert=True)
+        return True
+    return False
+
+def storage_delete_object(prefix, filename, local_dir=None):
+    """Elimina un file da MinIO (se attivo) e dall'eventuale disco locale."""
+    safe_fname = os.path.basename(filename or "")
+    if not safe_fname:
+        return
+    object_key = f"{prefix.strip('/')}/{safe_fname}"
+    if minio_client is not None:
+        try:
+            minio_client.remove_object(MINIO_BUCKET, object_key)
+        except Exception as e:
+            print(f"[MinIO] Errore remove_object {object_key}: {e}")
+    if local_dir:
+        disk_path = os.path.join(local_dir, safe_fname)
+        if os.path.isfile(disk_path):
+            try:
+                os.remove(disk_path)
+            except Exception:
+                pass
+
+def _cleanup_storage_for_doc(doc):
+    """Rimuove da MinIO/disco eventuali file referenziati dal documento eliminato."""
+    if not isinstance(doc, dict):
+        return
+    urls = []
+    for k in ("fileUrl", "url"):
+        if isinstance(doc.get(k), str) and doc.get(k):
+            urls.append(doc[k])
+    for arr_key in ("fotografie", "mediaAttachments"):
+        arr = doc.get(arr_key)
+        if isinstance(arr, list):
+            for entry in arr:
+                if isinstance(entry, dict) and isinstance(entry.get("url"), str):
+                    urls.append(entry["url"])
+
+    prefix_map = [
+        ("/api/biblioteca/file/", "biblioteca", BIBLIOTECA_UPLOADS_DIR),
+        ("/biblioteca_uploads/", "biblioteca", BIBLIOTECA_UPLOADS_DIR),
+        ("/api/media/file/", "media", MEDIA_UPLOADS_DIR),
+        ("/media_uploads/", "media", MEDIA_UPLOADS_DIR),
+        ("/api/social/file/", "social", SOCIAL_UPLOADS_DIR),
+        ("/social_uploads/", "social", SOCIAL_UPLOADS_DIR),
+        ("/api/certificati/file/", "certificati", CERTIFICATI_UPLOADS_DIR),
+        ("/certificati_uploads/", "certificati", CERTIFICATI_UPLOADS_DIR),
+    ]
+    for u in urls:
+        clean_u = urllib.parse.unquote(u.split("?")[0])
+        for url_pfx, minio_pfx, local_dir in prefix_map:
+            if clean_u.startswith(url_pfx):
+                fname = clean_u[len(url_pfx):].strip("/")
+                storage_delete_object(minio_pfx, fname, local_dir)
+                break
+
+def mongo_delete_item(collection, item_id):
+    if mongo_db is None or collection not in DB_ARRAY_COLLECTIONS or not item_id:
+        return False
+    doc = mongo_db[collection].find_one({"id": item_id})
+    if doc:
+        _cleanup_storage_for_doc(doc)
+    mongo_db[collection].delete_one({"id": item_id})
+    return True
 
 def calculate_emc(temp_c, hum_pct):
     """
@@ -346,7 +732,123 @@ mqtt_bridge_instance = None
 SOCIAL_UPLOADS_DIR = os.path.join(DIRECTORY, "social_uploads")
 BIBLIOTECA_UPLOADS_DIR = os.path.join(DIRECTORY, "biblioteca_uploads")
 MEDIA_UPLOADS_DIR = os.path.join(DIRECTORY, "media_uploads")
+CERTIFICATI_UPLOADS_DIR = os.path.join(DIRECTORY, "certificati_uploads")
 SOCIAL_STATE_FILE = os.path.join(DIRECTORY, "social_state.json")
+BIBLIOTECA_STATE_FILE = os.path.join(DIRECTORY, "biblioteca_state.json")
+os.makedirs(CERTIFICATI_UPLOADS_DIR, exist_ok=True)
+biblioteca_lock = threading.Lock()
+biblioteca_state = {"items": [], "updatedAt": ""}
+
+def load_biblioteca_state():
+    if mongo_db is not None:
+        try:
+            docs = [_sanitize_mongo_doc(d) for d in mongo_db["biblioteca"].find({})]
+            if docs:
+                with biblioteca_lock:
+                    biblioteca_state["items"] = docs
+                return
+        except Exception as e:
+            print(f"[Biblioteca] Errore lettura MongoDB: {e}")
+    with biblioteca_lock:
+        if os.path.isfile(BIBLIOTECA_STATE_FILE):
+            try:
+                with open(BIBLIOTECA_STATE_FILE, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict) and isinstance(loaded.get("items"), list):
+                        biblioteca_state["items"] = loaded["items"]
+                        biblioteca_state["updatedAt"] = loaded.get("updatedAt", "")
+            except Exception as e:
+                print(f"[Biblioteca] Errore caricamento biblioteca_state.json: {e}")
+
+def save_biblioteca_state():
+    with biblioteca_lock:
+        items_copy = [dict(it) for it in biblioteca_state.get("items", []) if isinstance(it, dict)]
+        biblioteca_state["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            with open(BIBLIOTECA_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(biblioteca_state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[Biblioteca] Errore salvataggio biblioteca_state.json: {e}")
+    if mongo_db is not None:
+        try:
+            mongo_sync_collection("biblioteca", items_copy)
+        except Exception as e:
+            print(f"[Biblioteca] Errore sync MongoDB: {e}")
+
+def _format_bytes_human(num_bytes):
+    if not num_bytes or num_bytes <= 0:
+        return "0 KB"
+    mb = num_bytes / (1024 * 1024)
+    if mb >= 1024:
+        return f"{mb / 1024:.2f} GB"
+    if mb >= 1:
+        return f"{mb:.1f} MB"
+    return f"{max(1, round(num_bytes / 1024))} KB"
+
+def get_biblioteca_items_with_orphan_recovery():
+    """Restituisce le schede salvate (MongoDB/JSON) e ripristina automaticamente eventuali file orfani in MinIO o biblioteca_uploads/."""
+    if mongo_db is not None:
+        try:
+            docs = [_sanitize_mongo_doc(d) for d in mongo_db["biblioteca"].find({})]
+            if docs:
+                with biblioteca_lock:
+                    biblioteca_state["items"] = docs
+        except Exception:
+            pass
+
+    with biblioteca_lock:
+        items = [dict(it) for it in biblioteca_state.get("items", []) if isinstance(it, dict)]
+
+    known_file_ids = {str(it.get("fileId") or "").strip() for it in items if it.get("fileId")}
+    known_urls = {str(it.get("fileUrl") or "").strip() for it in items if it.get("fileUrl")}
+    known_names = {str(it.get("fileName") or "").strip() for it in items if it.get("fileName")}
+
+    all_files = storage_list_objects("biblioteca", BIBLIOTECA_UPLOADS_DIR)
+    for fname in sorted(all_files.keys()):
+        api_url = f"/api/biblioteca/file/{fname}"
+        legacy_url = f"/biblioteca_uploads/{fname}"
+
+        m = re.match(r'^(ebk-[^_]+)_(.+)$', fname)
+        file_id = m.group(1) if m else f"ebk-restored-{abs(hash(fname)) % 1000000}"
+        orig_name = m.group(2) if m else fname
+
+        if file_id in known_file_ids or api_url in known_urls or legacy_url in known_urls or orig_name in known_names:
+            continue
+
+        ext = os.path.splitext(orig_name)[1].lower() or ".pdf"
+        mime = mimetypes.guess_type(orig_name)[0] or "application/octet-stream"
+        size_bytes = all_files[fname]
+        clean_title = re.sub(r'[-_]+', ' ', os.path.splitext(orig_name)[0]).strip()
+        pretty_title = (clean_title[:1].upper() + clean_title[1:]) if clean_title else orig_name
+
+        ext_upper = ext.lstrip('.').upper() or "DOC"
+        fmt_label = "PDF Documento / Blueprint" if ext == ".pdf" else (
+            "EPUB Ebook" if ext == ".epub" else (
+                "TXT Testo / Appunti" if ext == ".txt" else f"{ext_upper} Ebook / Documento"
+            )
+        )
+        items.append({
+            "id": f"bib-srv-{file_id}",
+            "titolo": pretty_title,
+            "autore": "Archivio Liuteria De Lorenzi",
+            "categoria": "Tecnica Costruttiva",
+            "anno": int(time.strftime("%Y")),
+            "formato": fmt_label,
+            "pagine": 24,
+            "note": "Testo/documento ripristinato automaticamente dall'archivio server/MinIO.",
+            "tags": [ext_upper, "Ripristinato", "Liuteria"],
+            "fileId": file_id,
+            "fileName": orig_name,
+            "fileExt": ext,
+            "fileMime": mime,
+            "fileSizeBytes": size_bytes,
+            "fileSizeFormatted": _format_bytes_human(size_bytes),
+            "fileUrl": api_url,
+            "isIndexedDB": False
+        })
+    return items
+
+load_biblioteca_state()
 os.makedirs(SOCIAL_UPLOADS_DIR, exist_ok=True)
 os.makedirs(BIBLIOTECA_UPLOADS_DIR, exist_ok=True)
 os.makedirs(MEDIA_UPLOADS_DIR, exist_ok=True)
@@ -968,7 +1470,9 @@ AUTO_UPDATE_INTERVAL = int(os.environ.get("AUTO_UPDATE_INTERVAL", 120))
 LAST_COMMIT_FILE = os.path.join(DIRECTORY, ".last_github_commit")
 
 PROTECTED_REL_PATHS = {
+    "auth_state.json",
     "social_state.json",
+    "biblioteca_state.json",
     "sendinblue_state.json",
     "mail_state.json",
     ".last_github_commit",
@@ -981,115 +1485,7 @@ PROTECTED_REL_PATHS = {
 MAIL_STATE_FILE = os.path.join(DIRECTORY, "mail_state.json")
 mail_lock = threading.Lock()
 
-DEFAULT_MAIL_MESSAGES = [
-    {
-        "id": "mail-init-1",
-        "uid": "init-1",
-        "accountId": "domain",
-        "accountEmail": "info@liuteriadelorenzi.it",
-        "folder": "INBOX",
-        "fromName": "Maestro Marco Rossi (Teatro alla Scala)",
-        "fromEmail": "m.rossi.violin@orchestra.it",
-        "toEmail": "info@liuteriadelorenzi.it",
-        "subject": "Richiesta prova acustica Violino Modello Guarneri 'Il Cannone' 1743",
-        "dateIso": time.strftime("%Y-%m-%dT09:42:00"),
-        "dateFormatted": time.strftime("%d/%m/%Y 09:42"),
-        "snippet": "Buongiorno Maestro De Lorenzi, le scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo violino...",
-        "bodyText": "Buongiorno Maestro De Lorenzi,\n\nLe scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo Violino ispirato al Guarneri del Gesù 'Il Cannone' 1743.\n\nSarei disponibile giovedì mattina alle ore 10:30. Porterò con me il mio archetto Sartory per testare la proiezione sulle quarte corde e la risposta nel registro acuto.\n\nResto in attesa di un Suo gentile riscontro.\n\nCordiali saluti,\nMaestro Marco Rossi\nPrimo Violino",
-        "bodyHtml": "",
-        "read": False,
-        "starred": True,
-        "attachments": [
-            {
-                "filename": "Scheda_Preferenze_Acustiche_Rossi.pdf",
-                "contentType": "application/pdf",
-                "sizeFormatted": "245 KB"
-            }
-        ]
-    },
-    {
-        "id": "mail-init-2",
-        "uid": "init-2",
-        "accountId": "gmail",
-        "accountEmail": "liuteriadelorenzi@gmail.com",
-        "folder": "INBOX",
-        "fromName": "Segheria Legnami di Risonanza Val di Fiemme",
-        "fromEmail": "ordini@abetepanaveggio.it",
-        "toEmail": "liuteriadelorenzi@gmail.com",
-        "subject": "Disponibilità tavole Abete Rosso stagionatura 2014 (Scelta Master Quarter-Sawn)",
-        "dateIso": time.strftime("%Y-%m-%dT08:15:00"),
-        "dateFormatted": time.strftime("%d/%m/%Y 08:15"),
-        "snippet": "Gentile Liuteria De Lorenzi, abbiamo selezionato 6 cunei di Abete Rosso di Paneveggio a spacco naturale con velocità del suono > 5750 m/s...",
-        "bodyText": "Gentile Maestro De Lorenzi,\n\nCome da accordi telefonici, abbiamo messo da parte per il Suo atelier 6 tavole per violino e 2 per violoncello in Abete Rosso di Paneveggio (taglio a quarto radiale perfetto, abbattimento luna calante novembre 2014).\n\nCaratteristiche fisiche rilevate in laboratorio:\n- Densità media: 395 kg/m³\n- Velocità longitudinale ultrasuoni: 5.780 m/s\n- Anelli di accrescimento regolari (1.1 mm al centro, 1.6 mm ai bordi)\n\nIn allegato trova il bollettino tecnico del lotto.\n\nUn cordiale saluto,\nDott. For. Luca Varesco — Val di Fiemme Tonewoods",
-        "bodyHtml": "",
-        "read": False,
-        "starred": True,
-        "attachments": [
-            {
-                "filename": "Lotto_Abete_Paneveggio_2014_Certificato.pdf",
-                "contentType": "application/pdf",
-                "sizeFormatted": "412 KB"
-            }
-        ]
-    },
-    {
-        "id": "mail-init-3",
-        "uid": "init-3",
-        "accountId": "domain",
-        "accountEmail": "info@liuteriadelorenzi.it",
-        "folder": "INBOX",
-        "fromName": "Prof.ssa Clara Weiss — Universität Mozarteum Salzburg",
-        "fromEmail": "c.weiss@mozarteum.at",
-        "toEmail": "info@liuteriadelorenzi.it",
-        "subject": "Commissione Viola 41.2 cm Modello Stradivari — Preventivo e tempi di consegna",
-        "dateIso": "2026-11-14T17:20:00",
-        "dateFormatted": "14/11/2026 17:20",
-        "snippet": "Gentile Maestro De Lorenzi, ho avuto modo di ascoltare una Sua Viola durante il festival di Salisburgo e desidero richiedere informazioni per una commissione...",
-        "bodyText": "Gentile Maestro De Lorenzi,\n\nHo avuto il piacere di ascoltare e provare una Sua Viola 41.2 cm appartenente a un collega durante il recente concerto da camera a Salisburgo. Sono rimasta profondamente colpita dalla prontezza del Do grave e dal timbro caldo e avvolgente sul La.\n\nVorrei chiederLe la disponibilità per la commissione di una Viola su misura con fondo unico in acero marezzato balcanico e conoscere i tempi attuali di lavorazione e le modalità di acconto.\n\nCon viva stima,\nProf.ssa Clara Weiss\nUniversität Mozarteum Salzburg",
-        "bodyHtml": "",
-        "read": False,
-        "starred": False,
-        "attachments": []
-    },
-    {
-        "id": "mail-init-4",
-        "uid": "init-4",
-        "accountId": "gmail",
-        "accountEmail": "liuteriadelorenzi@gmail.com",
-        "folder": "INBOX",
-        "fromName": "Kremer Pigmente GmbH & Co. KG",
-        "fromEmail": "info@kremer-pigmente.de",
-        "toEmail": "liuteriadelorenzi@gmail.com",
-        "subject": "Conferma spedizione #KP-88412: Lacca di Robbia, Sangue di Drago e Colofonia",
-        "dateIso": "2026-11-13T14:05:00",
-        "dateFormatted": "13/11/2026 14:05",
-        "snippet": "Il Suo ordine #KP-88412 contenente resine naturali e pigmenti per vernice ad olio cremonese è stato affidato al corriere...",
-        "bodyText": "Gentile Cliente Liuteria De Lorenzi,\n\nConfermiamo la spedizione dell'ordine #KP-88412 indirizzato al vostro laboratorio di Cremona:\n- 1x Alizarina / Lacca di Robbia pura in radice (250g)\n- 1x Resina Sangue di Drago Sumatra extra (100g)\n- 1x Mastice di Chios in lacrime (250g)\n- 1x Olio di Lino spremuto a freddo purificato (1000ml)\n\nConsegna prevista entro 48 ore lavorative.\n\nCordiali saluti,\nTeam Kremer Pigmente",
-        "bodyHtml": "",
-        "read": True,
-        "starred": False,
-        "attachments": []
-    },
-    {
-        "id": "mail-init-5",
-        "uid": "init-5",
-        "accountId": "domain",
-        "accountEmail": "info@liuteriadelorenzi.it",
-        "folder": "INBOX",
-        "fromName": "Fondazione Museo del Violino Cremona",
-        "fromEmail": "segreteria@museodelviolino.org",
-        "toEmail": "info@liuteriadelorenzi.it",
-        "subject": "Invito Rassegna Acustica & Mostra Liuteria Contemporanea Cremonese",
-        "dateIso": "2026-11-12T11:30:00",
-        "dateFormatted": "12/11/2026 11:30",
-        "snippet": "Gentile Maestro, siamo lieti di invitarLa alla sessione di audizione comparativa nell'Auditorium Giovanni Arvedi...",
-        "bodyText": "Gentile Maestro De Lorenzi,\n\nSiamo lieti di invitarLa alla prossima sessione di audizione acustica comparativa dedicata agli strumenti ad arco contemporanei presso l'Auditorium Giovanni Arvedi.\n\nPer confermare la partecipazione con un violino o violoncello del Suo atelier, La preghiamo di rispondere a questa comunicazione indicando il modello presentato.\n\nCordiali saluti,\nSegreteria Scientifica — Cremona",
-        "bodyHtml": "",
-        "read": True,
-        "starred": True,
-        "attachments": []
-    }
-]
+DEFAULT_MAIL_MESSAGES = []
 
 mail_state = {
     "accounts": {
@@ -1132,7 +1528,7 @@ mail_state = {
             "lastError": ""
         }
     },
-    "messages": list(DEFAULT_MAIL_MESSAGES),
+    "messages": [],
     "lastGlobalSync": ""
 }
 
@@ -1148,8 +1544,12 @@ def load_mail_state():
                         for acc_key in ("gmail", "domain"):
                             if isinstance(loaded["accounts"].get(acc_key), dict):
                                 mail_state["accounts"][acc_key].update(loaded["accounts"][acc_key])
-                    if isinstance(loaded.get("messages"), list) and len(loaded["messages"]) > 0:
-                        mail_state["messages"] = loaded["messages"][:250]
+                    if isinstance(loaded.get("messages"), list):
+                        cleaned_msgs = [
+                            m for m in loaded["messages"]
+                            if isinstance(m, dict) and not str(m.get("id", "")).startswith("mail-init-")
+                        ]
+                        mail_state["messages"] = cleaned_msgs[:250]
                     if loaded.get("lastGlobalSync"):
                         mail_state["lastGlobalSync"] = loaded["lastGlobalSync"]
             except Exception as e:
@@ -1434,7 +1834,11 @@ def sync_imap_account(acc_id, limit=30):
                 mail_state["accounts"]["domain"]["lastSync"] = f"{now_fmt} (via inoltro Gmail)"
                 mail_state["accounts"]["domain"]["lastError"] = ""
 
-            existing_by_id = {m.get("id"): m for m in mail_state.get("messages", []) if isinstance(m, dict)}
+            existing_by_id = {
+                m.get("id"): m
+                for m in mail_state.get("messages", [])
+                if isinstance(m, dict) and not str(m.get("id", "")).startswith("mail-init-")
+            }
             for fm in fetched_messages:
                 old_m = existing_by_id.get(fm["id"])
                 if old_m:
@@ -1442,16 +1846,6 @@ def sync_imap_account(acc_id, limit=30):
                     fm["starred"] = old_m.get("starred", fm["starred"])
                     fm["folder"] = old_m.get("folder", fm["folder"])
                 existing_by_id[fm["id"]] = fm
-
-            # Se abbiamo scaricato email reali via IMAP per questo account, rimuovi i messaggi demo iniziali di quell'account
-            if len(fetched_messages) > 0:
-                synced_acc_ids = {acc_id}
-                if acc_id == "gmail" and acc_cfg.get("detectForwardedDomain", True):
-                    synced_acc_ids.add("domain")
-                existing_by_id = {
-                    k: v for k, v in existing_by_id.items()
-                    if not (str(k).startswith("mail-init-") and v.get("accountId") in synced_acc_ids)
-                }
 
             merged_list = list(existing_by_id.values())
             merged_list.sort(key=lambda x: x.get("dateIso") or "", reverse=True)
@@ -1602,6 +1996,7 @@ PROTECTED_DIRS = {
     "social_uploads",
     "biblioteca_uploads",
     "media_uploads",
+    "certificati_uploads",
     ".venv",
     "venv",
     "env",
@@ -1985,9 +2380,56 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+    def _is_origin_allowed(self, origin):
+        if not origin:
+            return False
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            host = (parsed.hostname or "").lower()
+            if host in ("gestionale.liuteriadelorenzi.it", "liuteriadelorenzi.it", "www.liuteriadelorenzi.it", "localhost", "127.0.0.1"):
+                return True
+            if host.startswith(("192.168.", "10.", "100.")) or host.endswith((".ts.net", ".local")):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _is_local_lan_client(self):
+        ip = (self.client_address[0] if self.client_address else "") or ""
+        return ip in ("127.0.0.1", "::1") or ip.startswith(("192.168.", "10.", "100.", "172."))
+
+    def _extract_session_token(self):
+        auth_hdr = self.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            return auth_hdr[7:].strip()
+        cookie_hdr = self.headers.get("Cookie", "")
+        if cookie_hdr:
+            c = http.cookies.SimpleCookie()
+            try:
+                c.load(cookie_hdr)
+                if "atelier_session" in c:
+                    return c["atelier_session"].value
+            except Exception:
+                pass
+        return ""
+
+    def _is_request_authenticated(self):
+        tok = self._extract_session_token()
+        return _verify_session_token(tok) is not None
+
+    def _send_unauthorized(self):
+        self.send_response(401)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({"success": False, "error": "Autenticazione richiesta"}).encode('utf-8'))
+
     def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        origin = self.headers.get('Origin', '')
+        if self._is_origin_allowed(origin):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Credentials', 'true')
+            self.send_header('Vary', 'Origin')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Media-Id, X-Media-Name, X-Media-Mime, X-Book-Id, X-Book-Name, X-Book-Mime')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
@@ -1998,7 +2440,32 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+    def do_DELETE(self):
+        if not self._is_request_authenticated():
+            self._send_unauthorized()
+            return
+        clean_path = self.path.split('?')[0]
+        if clean_path.startswith('/api/db/'):
+            parts = [p for p in clean_path[len('/api/db/'):].split('/') if p]
+            if len(parts) == 2:
+                collection, item_id = urllib.parse.unquote(parts[0]), urllib.parse.unquote(parts[1])
+                ok = mongo_delete_item(collection, item_id)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "mongo": ok}).encode('utf-8'))
+                return
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self):
+        if self.path.startswith('/api/auth/session'):
+            self.handle_auth_session()
+            return
+        if self.path.startswith('/api/') and not self.path.startswith('/api/telemetry') and not (self.path.startswith('/api/system/') and self._is_local_lan_client()):
+            if not self._is_request_authenticated():
+                self._send_unauthorized()
+                return
         if self.path.startswith('/api/telemetry'):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -2042,6 +2509,20 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "config": sendinblue_state.get("config", {}),
                 "history": sendinblue_state.get("history", [])[:20]
             }, ensure_ascii=False).encode('utf-8'))
+        elif self.path.startswith('/api/db/status'):
+            self.handle_db_status()
+        elif self.path.startswith('/api/db/all'):
+            self.handle_db_all()
+        elif self.path.startswith('/api/biblioteca/state'):
+            self.handle_biblioteca_get_state()
+        elif self.path.startswith('/api/biblioteca/file/'):
+            self.handle_storage_get_file('/api/biblioteca/file/', 'biblioteca', BIBLIOTECA_UPLOADS_DIR)
+        elif self.path.startswith('/api/media/file/'):
+            self.handle_storage_get_file('/api/media/file/', 'media', MEDIA_UPLOADS_DIR)
+        elif self.path.startswith('/api/social/file/'):
+            self.handle_storage_get_file('/api/social/file/', 'social', SOCIAL_UPLOADS_DIR)
+        elif self.path.startswith('/api/certificati/file/'):
+            self.handle_storage_get_file('/api/certificati/file/', 'certificati', CERTIFICATI_UPLOADS_DIR)
         elif self.path.startswith('/api/mail/status'):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -2056,6 +2537,19 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith('/api/auth/login'):
+            self.handle_auth_login()
+            return
+        if self.path.startswith('/api/auth/logout'):
+            self.handle_auth_logout()
+            return
+        if self.path.startswith('/api/') and not (self.path.startswith('/api/system/') and self._is_local_lan_client()):
+            if not self._is_request_authenticated():
+                self._send_unauthorized()
+                return
+        if self.path.startswith('/api/auth/change-password'):
+            self.handle_auth_change_password()
+            return
         if self.path.startswith('/api/ha-proxy'):
             self.handle_ha_proxy()
         elif self.path.startswith('/api/mqtt/test-publish'):
@@ -2070,10 +2564,16 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_social_upload_media()
         elif self.path.startswith('/api/social/publish'):
             self.handle_social_publish()
+        elif self.path.startswith('/api/db/'):
+            self.handle_db_post()
         elif self.path.startswith('/api/biblioteca/upload-file'):
             self.handle_biblioteca_upload_file()
+        elif self.path.startswith('/api/biblioteca/sync'):
+            self.handle_biblioteca_sync()
         elif self.path.startswith('/api/media/upload-file'):
             self.handle_media_upload_file()
+        elif self.path.startswith('/api/certificati/upload-file'):
+            self.handle_certificati_upload_file()
         elif self.path.startswith('/api/sendinblue/config'):
             self.handle_sendinblue_config()
         elif self.path.startswith('/api/sendinblue/send-reminder'):
@@ -2287,6 +2787,227 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
+    def handle_auth_session(self):
+        sess = _verify_session_token(self._extract_session_token())
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "success": True,
+            "authenticated": sess is not None,
+            "email": sess.get("email") if sess else ""
+        }).encode('utf-8'))
+
+    def handle_auth_login(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        try:
+            raw = self.rfile.read(content_length) if content_length > 0 else b'{}'
+            payload = json.loads(raw.decode('utf-8'))
+            email_in = str(payload.get("email", "")).strip().lower()
+            pwd_in = str(payload.get("password", ""))
+            remember = bool(payload.get("remember", True))
+
+            if email_in != AUTHORIZED_EMAIL or not _verify_password_pbkdf2(pwd_in, auth_state["passwordHash"]):
+                self.send_response(401)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "Credenziali non valide"}).encode('utf-8'))
+                return
+
+            ttl = AUTH_SESSION_TTL if remember else 86400
+            token = _sign_session_token(AUTHORIZED_EMAIL, ttl)
+            max_age_part = f"; Max-Age={ttl}" if remember else ""
+            is_https = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+            secure_part = "; Secure" if is_https else ""
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Set-Cookie', f"atelier_session={token}; Path=/; HttpOnly; SameSite=Lax{max_age_part}{secure_part}")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "email": AUTHORIZED_EMAIL,
+                "name": "Fabio De Lorenzi",
+                "role": "Maestro Liutaio"
+            }).encode('utf-8'))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_auth_logout(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Set-Cookie', "atelier_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+        self.end_headers()
+        self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
+
+    def handle_auth_change_password(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        try:
+            raw = self.rfile.read(content_length) if content_length > 0 else b'{}'
+            payload = json.loads(raw.decode('utf-8'))
+            cur_pwd = str(payload.get("currentPassword", ""))
+            new_pwd = str(payload.get("newPassword", ""))
+            if len(new_pwd) < 8:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "La nuova password deve avere almeno 8 caratteri"}).encode('utf-8'))
+                return
+            if not _verify_password_pbkdf2(cur_pwd, auth_state["passwordHash"]):
+                self.send_response(401)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "Password attuale errata"}).encode('utf-8'))
+                return
+            with auth_lock:
+                auth_state["passwordHash"] = _hash_password_pbkdf2(new_pwd)
+                with open(AUTH_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(auth_state, f, indent=2)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_db_status(self):
+        cols = {}
+        if mongo_db is not None:
+            for c in sorted(DB_ALL_COLLECTIONS):
+                try:
+                    cols[c] = mongo_db[c].count_documents({})
+                except Exception:
+                    cols[c] = 0
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "success": True,
+            "mongo": {
+                "installed": HAS_PYMONGO,
+                "connected": mongo_db is not None,
+                "database": MONGO_DB_NAME if mongo_db is not None else "",
+                "collections": cols
+            },
+            "minio": {
+                "installed": HAS_MINIO,
+                "connected": minio_client is not None,
+                "endpoint": MINIO_ENDPOINT if minio_client is not None else "",
+                "bucket": MINIO_BUCKET if minio_client is not None else ""
+            }
+        }, ensure_ascii=False).encode('utf-8'))
+
+    def handle_db_all(self):
+        data = mongo_get_all_data()
+        if data is not None:
+            # Integra sempre eventuali file orfani recuperati in Biblioteca
+            bib_items = get_biblioteca_items_with_orphan_recovery()
+            if bib_items:
+                data["biblioteca"] = bib_items
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "success": data is not None,
+            "mongo": mongo_db is not None,
+            "data": data or {}
+        }, ensure_ascii=False).encode('utf-8'))
+
+    def handle_db_post(self):
+        clean_path = self.path.split('?')[0]
+        parts = [p for p in clean_path[len('/api/db/'):].split('/') if p]
+        content_length = int(self.headers.get('Content-Length', 0))
+        try:
+            raw_body = self.rfile.read(content_length) if content_length > 0 else b'{}'
+            payload = json.loads(raw_body.decode('utf-8'))
+            if len(parts) < 2:
+                self.send_response(400)
+                self.end_headers()
+                return
+            collection = urllib.parse.unquote(parts[0])
+            action = urllib.parse.unquote(parts[1])
+            ok = False
+            if action == "sync":
+                ok = mongo_sync_collection(collection, payload.get("items") if "items" in payload else payload.get("data"))
+            elif action == "upsert":
+                ok = mongo_upsert_item(collection, payload.get("item"))
+            elif action == "delete":
+                ok = mongo_delete_item(collection, payload.get("id"))
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True, "mongo": ok}, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_biblioteca_get_state(self):
+        items = get_biblioteca_items_with_orphan_recovery()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "success": True,
+            "items": items,
+            "updatedAt": biblioteca_state.get("updatedAt", "")
+        }, ensure_ascii=False).encode('utf-8'))
+
+    def handle_storage_get_file(self, url_prefix, minio_prefix, local_dir):
+        req_path = urllib.parse.unquote(self.path.split('?')[0])
+        filename = req_path[len(url_prefix):].strip('/')
+        safe_fname = os.path.basename(filename)
+        if not safe_fname or '..' in filename or '/' in filename or '\\' in filename:
+            self.send_response(400)
+            self.end_headers()
+            return
+        try:
+            data, mime_type = storage_get_object(minio_prefix, safe_fname, local_dir)
+            if data is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', mime_type or "application/octet-stream")
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'public, max-age=86400')
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception:
+            self.send_response(500)
+            self.end_headers()
+
+    def handle_biblioteca_sync(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        try:
+            raw_body = self.rfile.read(content_length) if content_length > 0 else b'{}'
+            payload = json.loads(raw_body.decode('utf-8'))
+            items = payload.get("items")
+            if isinstance(items, list):
+                with biblioteca_lock:
+                    biblioteca_state["items"] = items
+                save_biblioteca_state()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "count": len(biblioteca_state.get("items", [])),
+                "updatedAt": biblioteca_state.get("updatedAt", "")
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
     def handle_biblioteca_upload_file(self):
         content_length = int(self.headers.get('Content-Length', 0))
         book_id = (self.headers.get('X-Book-Id') or f"ebk-{int(time.time()*1000)}").strip()
@@ -2297,11 +3018,11 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
         stored_filename = f"{book_id}_{safe_name}"
         disk_path = os.path.join(BIBLIOTECA_UPLOADS_DIR, stored_filename)
         rel_path = f"biblioteca_uploads/{stored_filename}"
+        api_url = f"/api/biblioteca/file/{stored_filename}"
 
         try:
             file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
-            with open(disk_path, "wb") as f:
-                f.write(file_bytes)
+            stored_minio = storage_put_object("biblioteca", stored_filename, file_bytes, mime_type, BIBLIOTECA_UPLOADS_DIR)
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -2309,7 +3030,9 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "success": True,
                 "fileId": book_id,
-                "url": "/" + rel_path,
+                "url": api_url,
+                "relUrl": "/" + rel_path,
+                "minio": stored_minio,
                 "sizeBytes": len(file_bytes)
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
@@ -2331,8 +3054,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
 
         try:
             file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
-            with open(disk_path, "wb") as f:
-                f.write(file_bytes)
+            stored_minio = storage_put_object("media", stored_filename, file_bytes, mime_type, MEDIA_UPLOADS_DIR)
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -2340,8 +3062,41 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "success": True,
                 "fileId": media_id,
-                "url": "/" + rel_path,
+                "url": f"/api/media/file/{stored_filename}",
+                "relUrl": "/" + rel_path,
+                "minio": stored_minio,
                 "mimeType": mime_type,
+                "sizeBytes": len(file_bytes)
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+    def handle_certificati_upload_file(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        cert_img_id = (self.headers.get('X-Media-Id') or f"certimg-{int(time.time()*1000)}").strip()
+        raw_name = urllib.parse.unquote(self.headers.get('X-Media-Name') or "certificato_foto.jpg")
+        mime_type = (self.headers.get('X-Media-Mime') or mimetypes.guess_type(raw_name)[0] or "image/jpeg").strip()
+
+        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)
+        stored_filename = f"{cert_img_id}_{safe_name}"
+        rel_path = f"certificati_uploads/{stored_filename}"
+
+        try:
+            file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
+            stored_minio = storage_put_object("certificati", stored_filename, file_bytes, mime_type, CERTIFICATI_UPLOADS_DIR)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "fileId": cert_img_id,
+                "url": f"/api/certificati/file/{stored_filename}",
+                "relUrl": "/" + rel_path,
+                "minio": stored_minio,
                 "sizeBytes": len(file_bytes)
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
@@ -2475,8 +3230,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
 
         try:
             file_bytes = self.rfile.read(content_length) if content_length > 0 else b''
-            with open(disk_path, "wb") as f:
-                f.write(file_bytes)
+            stored_minio = storage_put_object("social", stored_filename, file_bytes, mime_type, SOCIAL_UPLOADS_DIR)
 
             social_state.setdefault("mediaFiles", {})[media_id] = {
                 "id": media_id,
@@ -2484,6 +3238,7 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
                 "mimeType": mime_type,
                 "sizeBytes": len(file_bytes),
                 "relPath": rel_path,
+                "minioKey": f"social/{stored_filename}" if stored_minio else "",
                 "uploadedAt": datetime.now().isoformat()
             }
             save_social_state()
@@ -2494,7 +3249,9 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "success": True,
                 "mediaId": media_id,
-                "url": "/" + rel_path,
+                "url": f"/api/social/file/{stored_filename}",
+                "relUrl": "/" + rel_path,
+                "minio": stored_minio,
                 "sizeBytes": len(file_bytes)
             }, ensure_ascii=False).encode('utf-8'))
         except Exception as e:

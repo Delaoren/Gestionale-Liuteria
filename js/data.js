@@ -3,6 +3,16 @@
  */
 const STORAGE_KEY = 'liuteria_gestionale_db_v1';
 
+window.escapeHtml = window.escapeHtml || function(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
 const _getTodayIso = () => {
     const d = new Date();
     const y = d.getFullYear();
@@ -893,115 +903,7 @@ const defaultData = {
             ]
         },
         // 15. Mail (liuteriadelorenzi@gmail.com & info@liuteriadelorenzi.it)
-        mail: [
-            {
-                id: "mail-init-1",
-                uid: "init-1",
-                accountId: "domain",
-                accountEmail: "info@liuteriadelorenzi.it",
-                folder: "INBOX",
-                fromName: "Maestro Marco Rossi (Teatro alla Scala)",
-                fromEmail: "m.rossi.violin@orchestra.it",
-                toEmail: "info@liuteriadelorenzi.it",
-                subject: "Richiesta prova acustica Violino Modello Guarneri 'Il Cannone' 1743",
-                dateIso: `${_getTodayIso()}T09:42:00`,
-                dateFormatted: "Oggi, 09:42",
-                snippet: "Buongiorno Maestro De Lorenzi, le scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo violino...",
-                bodyText: "Buongiorno Maestro De Lorenzi,\n\nLe scrivo per confermare la mia visita in bottega a Cremona per la prova acustica del nuovo Violino ispirato al Guarneri del Gesù 'Il Cannone' 1743.\n\nSarei disponibile giovedì mattina alle ore 10:30. Porterò con me il mio archetto Sartory per testare la proiezione sulle quarte corde e la risposta nel registro acuto.\n\nResto in attesa di un Suo gentile riscontro.\n\nCordiali saluti,\nMaestro Marco Rossi\nPrimo Violino",
-                bodyHtml: "",
-                read: false,
-                starred: true,
-                attachments: [
-                    {
-                        filename: "Scheda_Preferenze_Acustiche_Rossi.pdf",
-                        contentType: "application/pdf",
-                        sizeFormatted: "245 KB"
-                    }
-                ]
-            },
-            {
-                id: "mail-init-2",
-                uid: "init-2",
-                accountId: "gmail",
-                accountEmail: "liuteriadelorenzi@gmail.com",
-                folder: "INBOX",
-                fromName: "Segheria Legnami di Risonanza Val di Fiemme",
-                fromEmail: "ordini@abetepanaveggio.it",
-                toEmail: "liuteriadelorenzi@gmail.com",
-                subject: "Disponibilità tavole Abete Rosso stagionatura 2014 (Scelta Master Quarter-Sawn)",
-                dateIso: `${_getTodayIso()}T08:15:00`,
-                dateFormatted: "Oggi, 08:15",
-                snippet: "Gentile Liuteria De Lorenzi, abbiamo selezionato 6 cunei di Abete Rosso di Paneveggio a spacco naturale con velocità del suono > 5750 m/s...",
-                bodyText: "Gentile Maestro De Lorenzi,\n\nCome da accordi telefonici, abbiamo messo da parte per il Suo atelier 6 tavole per violino e 2 per violoncello in Abete Rosso di Paneveggio (taglio a quarto radiale perfetto, abbattimento luna calante novembre 2014).\n\nCaratteristiche fisiche rilevate in laboratorio:\n- Densità media: 395 kg/m³\n- Velocità longitudinale ultrasuoni: 5.780 m/s\n- Anelli di accrescimento regolari (1.1 mm al centro, 1.6 mm ai bordi)\n\nIn allegato trova il bollettino tecnico del lotto.\n\nUn cordiale saluto,\nDott. For. Luca Varesco — Val di Fiemme Tonewoods",
-                bodyHtml: "",
-                read: false,
-                starred: true,
-                attachments: [
-                    {
-                        filename: "Lotto_Abete_Paneveggio_2014_Certificato.pdf",
-                        contentType: "application/pdf",
-                        sizeFormatted: "412 KB"
-                    }
-                ]
-            },
-            {
-                id: "mail-init-3",
-                uid: "init-3",
-                accountId: "domain",
-                accountEmail: "info@liuteriadelorenzi.it",
-                folder: "INBOX",
-                fromName: "Prof.ssa Clara Weiss — Universität Mozarteum Salzburg",
-                fromEmail: "c.weiss@mozarteum.at",
-                toEmail: "info@liuteriadelorenzi.it",
-                subject: "Commissione Viola 41.2 cm Modello Stradivari — Preventivo e tempi di consegna",
-                dateIso: "2026-11-14T17:20:00",
-                dateFormatted: "14/11/2026 17:20",
-                snippet: "Gentile Maestro De Lorenzi, ho avuto modo di ascoltare una Sua Viola durante il festival di Salisburgo e desidero richiedere informazioni per una commissione...",
-                bodyText: "Gentile Maestro De Lorenzi,\n\nHo avuto il piacere di ascoltare e provare una Sua Viola 41.2 cm appartenente a un collega durante il recente concerto da camera a Salisburgo. Sono rimasta profondamente colpita dalla prontezza del Do grave e dal timbro caldo e avvolgente sul La.\n\nVorrei chiederLe la disponibilità per la commissione di una Viola su misura con fondo unico in acero marezzato balcanico e conoscere i tempi attuali di lavorazione e le modalità di acconto.\n\nCon viva stima,\nProf.ssa Clara Weiss\nUniversität Mozarteum Salzburg",
-                bodyHtml: "",
-                read: false,
-                starred: false,
-                attachments: []
-            },
-            {
-                id: "mail-init-4",
-                uid: "init-4",
-                accountId: "gmail",
-                accountEmail: "liuteriadelorenzi@gmail.com",
-                folder: "INBOX",
-                fromName: "Kremer Pigmente GmbH & Co. KG",
-                fromEmail: "info@kremer-pigmente.de",
-                toEmail: "liuteriadelorenzi@gmail.com",
-                subject: "Conferma spedizione #KP-88412: Lacca di Robbia, Sangue di Drago e Colofonia",
-                dateIso: "2026-11-13T14:05:00",
-                dateFormatted: "13/11/2026 14:05",
-                snippet: "Il Suo ordine #KP-88412 contenente resine naturali e pigmenti per vernice ad olio cremonese è stato affidato al corriere...",
-                bodyText: "Gentile Cliente Liuteria De Lorenzi,\n\nConfermiamo la spedizione dell'ordine #KP-88412 indirizzato al vostro laboratorio di Cremona:\n- 1x Alizarina / Lacca di Robbia pura in radice (250g)\n- 1x Resina Sangue di Drago Sumatra extra (100g)\n- 1x Mastice di Chios in lacrime (250g)\n- 1x Olio di Lino spremuto a freddo purificato (1000ml)\n\nConsegna prevista entro 48 ore lavorative.\n\nCordiali saluti,\nTeam Kremer Pigmente",
-                bodyHtml: "",
-                read: true,
-                starred: false,
-                attachments: []
-            },
-            {
-                id: "mail-init-5",
-                uid: "init-5",
-                accountId: "domain",
-                accountEmail: "info@liuteriadelorenzi.it",
-                folder: "INBOX",
-                fromName: "Fondazione Museo del Violino Cremona",
-                fromEmail: "segreteria@museodelviolino.org",
-                toEmail: "info@liuteriadelorenzi.it",
-                subject: "Invito Rassegna Acustica & Mostra Liuteria Contemporanea Cremonese",
-                dateIso: "2026-11-12T11:30:00",
-                dateFormatted: "12/11/2026 11:30",
-                snippet: "Gentile Maestro, siamo lieti di invitarLa alla sessione di audizione comparativa nell'Auditorium Giovanni Arvedi...",
-                bodyText: "Gentile Maestro De Lorenzi,\n\nSiamo lieti di invitarLa alla prossima sessione di audizione acustica comparativa dedicata agli strumenti ad arco contemporanei presso l'Auditorium Giovanni Arvedi.\n\nPer confermare la partecipazione con un violino o violoncello del Suo atelier, La preghiamo di rispondere a questa comunicazione indicando il modello presentato.\n\nCordiali saluti,\nSegreteria Scientifica — Cremona",
-                bodyHtml: "",
-                read: true,
-                starred: true,
-                attachments: []
-            }
-        ]
+        mail: []
     };
 
 class DataStore {
@@ -1031,8 +933,10 @@ class DataStore {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";
                     }
                 }
-                if (!Array.isArray(parsed.mail) || parsed.mail.length === 0) {
-                    parsed.mail = JSON.parse(JSON.stringify(defaultData.mail));
+                if (!Array.isArray(parsed.mail)) {
+                    parsed.mail = [];
+                } else {
+                    parsed.mail = parsed.mail.filter(m => m && !String(m.id || "").startsWith("mail-init-"));
                 }
                 if (!parsed.liuteriaMaking || !parsed.liuteriaMaking.measurements) {
                     parsed.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));
@@ -1106,6 +1010,20 @@ class DataStore {
         } catch (e) {
             console.error('Errore nel salvataggio LocalStorage:', e);
         }
+        this._scheduleSingletonSync();
+    }
+
+    _scheduleSingletonSync() {
+        if (this._isSyncingFromRemote || !this.data) return;
+        clearTimeout(this._singletonSyncTimer);
+        this._singletonSyncTimer = setTimeout(() => {
+            if (this.data.liuteriaMaking) {
+                this.syncCollectionToMongo('liuteriaMaking');
+            }
+            if (this.data.settings) {
+                this.syncCollectionToMongo('settings');
+            }
+        }, 500);
     }
 
     resetToDefault() {
@@ -1125,8 +1043,10 @@ class DataStore {
         if (!this.data[collection]) {
             this.data[collection] = [];
         }
-        this.data[collection].unshift(item);
+        const stamped = { ...item, updatedAt: item.updatedAt || new Date().toISOString() };
+        this.data[collection].unshift(stamped);
         this.saveData();
+        this.upsertToMongo(collection, stamped);
         if (window.appController && window.appController.updateHeaderStats) {
             window.appController.updateHeaderStats();
         }
@@ -1136,8 +1056,13 @@ class DataStore {
         if (!this.data[collection]) return false;
         const index = this.data[collection].findIndex(item => item.id === id);
         if (index !== -1) {
-            this.data[collection][index] = { ...this.data[collection][index], ...updatedFields };
+            this.data[collection][index] = {
+                ...this.data[collection][index],
+                ...updatedFields,
+                updatedAt: new Date().toISOString()
+            };
             this.saveData();
+            this.upsertToMongo(collection, this.data[collection][index]);
             if (window.appController && window.appController.updateHeaderStats) {
                 window.appController.updateHeaderStats();
             }
@@ -1150,10 +1075,136 @@ class DataStore {
         if (!this.data[collection]) return false;
         this.data[collection] = this.data[collection].filter(item => item.id !== id);
         this.saveData();
+        this.deleteFromMongo(collection, id);
         if (window.appController && window.appController.updateHeaderStats) {
             window.appController.updateHeaderStats();
         }
         return true;
+    }
+
+    deleteItem(collection, id) {
+        return this.removeItem(collection, id);
+    }
+
+    async syncCollectionToMongo(collection) {
+        if (!this.data || !this.data[collection]) return;
+        try {
+            await fetch(`/api/db/${encodeURIComponent(collection)}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: this.data[collection] })
+            });
+        } catch (e) {
+            // Modalità offline / statica
+        }
+    }
+
+    async upsertToMongo(collection, item) {
+        if (!item) return;
+        try {
+            await fetch(`/api/db/${encodeURIComponent(collection)}/upsert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item })
+            });
+        } catch (e) {
+            // Modalità offline / statica
+        }
+    }
+
+    async deleteFromMongo(collection, id) {
+        if (!id) return;
+        try {
+            await fetch(`/api/db/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {
+                method: 'DELETE'
+            });
+        } catch (e) {
+            // Modalità offline / statica
+        }
+    }
+
+    async syncFromMongo() {
+        try {
+            const res = await fetch('/api/db/all');
+            if (!res.ok) return false;
+            const ct = (res.headers.get('content-type') || '').toLowerCase();
+            if (!ct.includes('application/json')) return false;
+            const payload = await res.json();
+            if (!payload || !payload.mongo || !payload.data) return false;
+
+            const remote = payload.data;
+            let changed = false;
+
+            Object.keys(this.data).forEach(key => {
+                if (Array.isArray(remote[key]) && remote[key].length > 0) {
+                    const localArr = Array.isArray(this.data[key]) ? this.data[key] : [];
+                    const localById = new Map(localArr.filter(x => x && x.id).map(x => [x.id, x]));
+                    const merged = [];
+                    const seenIds = new Set();
+
+                    remote[key].forEach(remItem => {
+                        if (!remItem || !remItem.id) {
+                            merged.push(remItem);
+                            return;
+                        }
+                        if (key === 'mail' && String(remItem.id).startsWith('mail-init-')) {
+                            this.deleteFromMongo('mail', remItem.id);
+                            changed = true;
+                            return;
+                        }
+                        seenIds.add(remItem.id);
+                        const locItem = localById.get(remItem.id);
+                        if (locItem && locItem.updatedAt && remItem.updatedAt && new Date(locItem.updatedAt) > new Date(remItem.updatedAt)) {
+                            // Il record locale è più recente: mantieni il locale e aggiorna MongoDB
+                            merged.push(locItem);
+                            this.upsertToMongo(key, locItem);
+                        } else {
+                            merged.push(remItem);
+                            if (!locItem || JSON.stringify(locItem) !== JSON.stringify(remItem)) {
+                                changed = true;
+                            }
+                        }
+                    });
+
+                    // Conserva eventuali elementi locali creati offline non ancora su MongoDB
+                    localArr.forEach(locItem => {
+                        if (locItem && locItem.id && !seenIds.has(locItem.id) && locItem.updatedAt) {
+                            merged.unshift(locItem);
+                            this.upsertToMongo(key, locItem);
+                        }
+                    });
+
+                    this.data[key] = merged;
+                } else if (!Array.isArray(this.data[key]) && remote[key] && typeof remote[key] === 'object') {
+                    const locTs = this.data[key] && this.data[key].updatedAt ? new Date(this.data[key].updatedAt).getTime() : 0;
+                    const remTs = remote[key].updatedAt ? new Date(remote[key].updatedAt).getTime() : 0;
+                    if (locTs > remTs && locTs > 0) {
+                        this.syncCollectionToMongo(key);
+                    } else {
+                        this.data[key] = { ...this.data[key], ...remote[key] };
+                        changed = true;
+                    }
+                } else if ((Array.isArray(this.data[key]) && this.data[key].length > 0) || (!Array.isArray(this.data[key]) && this.data[key])) {
+                    // Collezioni presenti solo in locale: inizializza MongoDB
+                    this.syncCollectionToMongo(key);
+                }
+            });
+
+            if (changed) {
+                this._isSyncingFromRemote = true;
+                this.saveData();
+                this._isSyncingFromRemote = false;
+                if (window.appController) {
+                    if (window.appController.updateHeaderStats) window.appController.updateHeaderStats();
+                    if (window.appController.activeModuleId && window.appController.renderActiveModule) {
+                        window.appController.renderActiveModule();
+                    }
+                }
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 }
 

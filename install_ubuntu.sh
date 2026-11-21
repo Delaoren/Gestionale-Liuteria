@@ -35,7 +35,7 @@ apt-get install -y python3 python3-venv python3-pip rsync git || true
 echo "[2/5] Copia dei file dell'applicazione in ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 if [ "${SCRIPT_DIR}" != "${INSTALL_DIR}" ]; then
-    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='.git' --exclude='social_uploads' --exclude='biblioteca_uploads' --exclude='social_state.json' --exclude='sendinblue_state.json' "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
+    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='.git' --exclude='data' --exclude='.env' --exclude='social_uploads' --exclude='biblioteca_uploads' --exclude='media_uploads' --exclude='certificati_uploads' --exclude='auth_state.json' --exclude='social_state.json' --exclude='biblioteca_state.json' --exclude='sendinblue_state.json' --exclude='mail_state.json' "${SCRIPT_DIR}/" "${INSTALL_DIR}/"
 fi
 
 # Configura repository Git collegato al branch 'main' per Auto-Update automatico
@@ -48,10 +48,10 @@ if [ ! -d "${INSTALL_DIR}/.git" ]; then
     git branch --set-upstream-to=origin/main main 2>/dev/null || true
 fi
 
-echo "[3/5] Creazione ambiente virtuale Python e installazione paho-mqtt..."
+echo "[3/5] Creazione ambiente virtuale Python e installazione dipendenze (paho-mqtt, pymongo, minio)..."
 python3 -m venv "${INSTALL_DIR}/.venv"
 "${INSTALL_DIR}/.venv/bin/pip" install --upgrade pip -q
-"${INSTALL_DIR}/.venv/bin/pip" install paho-mqtt -q
+"${INSTALL_DIR}/.venv/bin/pip" install paho-mqtt pymongo minio -q
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 
