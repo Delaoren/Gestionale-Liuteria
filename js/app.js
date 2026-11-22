@@ -10637,7 +10637,6 @@ window.getNoleggioReminderDateIso = function(dataFineIso) {
 window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) {
     const cfg = Object.assign({}, (window.getSendinblueConfig ? window.getSendinblueConfig() : {}), cfgOverride || {});
     const atelierName = cfg.senderName || "Liuteria De Lorenzi — Cremona";
-    const atelierAddr = cfg.atelierAddress || "Bottega Liuteria De Lorenzi — Cremona";
     const atelierPhone = cfg.atelierPhone || "+39 0372 000000";
     const replyEmail = cfg.replyToEmail || cfg.senderEmail || "info@liuteriadelorenzi.it";
 
@@ -10676,7 +10675,6 @@ window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) 
         `Un cordiale saluto,`,
         `Maestro Fabio De Lorenzi`,
         `${atelierName}`,
-        `${atelierAddr}`,
         `Email: ${replyEmail} | Tel: ${atelierPhone}`
     ].filter(line => line !== null).join("\n");
 
@@ -10731,7 +10729,7 @@ window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) 
                 <p style="margin-bottom:0;">Un cordiale saluto,<br><strong style="color:#fbbf24;">Maestro Fabio De Lorenzi</strong><br><span style="font-size:13px; color:#94a3b8;">${esc(atelierName)}</span></p>
             </div>
             <div style="background:#090d16; padding:14px 24px; text-align:center; font-size:12px; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.08);">
-                ${esc(atelierAddr)} • Email: <a href="mailto:${esc(replyEmail)}" style="color:#38bdf8;">${esc(replyEmail)}</a> • Tel: ${esc(atelierPhone)}
+                Email: <a href="mailto:${esc(replyEmail)}" style="color:#38bdf8;">${esc(replyEmail)}</a> • Tel: ${esc(atelierPhone)}
             </div>
         </div>
     `;
