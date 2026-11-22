@@ -135,6 +135,7 @@
         { key: "magazzinoLegno", label: "Magazzino Legno", icon: "trees", fields: ["codice", "specie", "provenienza", "note"] },
         { key: "magazzinoStrumenti", label: "Magazzino Strumenti", icon: "music", fields: ["codice", "nome", "tipologia", "modello"] },
         { key: "media", label: "Media", icon: "image", fields: ["titolo", "tipo", "categoria", "fileName", "descrizione"] },
+        { key: "noleggio", label: "Noleggio", icon: "key-round", fields: ["cliente", "emailCliente", "strumento", "codiceStrumento", "periodoNoleggio", "note"] },
         { key: "calendarioAppuntamenti", label: "Calendario", icon: "calendar", fields: ["cliente", "tipo", "strumento", "data", "note"] },
         { key: "social", label: "Social", icon: "share-2", fields: ["titolo", "testo", "stato"] },
         { key: "mail", label: "Mail", icon: "mail", fields: ["subject", "fromName", "fromEmail", "snippet"] }

@@ -2127,6 +2127,311 @@ window.AppModules = {
         }
     },
 
+    // 10b. Noleggio Strumenti (Selezione da App Clienti, Periodo, Strumento, Prezzo e Avviso Automatico -7gg)
+    renderNoleggio: function(container) {
+        const allItems = window.atelierDB.data.noleggio || [];
+        const activeFilter = window.noleggioStatusFilter || "all";
+        const searchQ = (window.noleggioSearchQuery || "").trim().toLowerCase();
+        const esc = window.escapeHtml || (s => String(s ?? ""));
+
+        const calcDays = window.calculateNoleggioDaysRemaining || (() => null);
+        const fmtDate = window.formatDateItShort || (s => s || "-");
+        const getRemDate = window.getNoleggioReminderDateIso || (() => "");
+
+        let activeCount = 0;
+        let expiring7DaysCount = 0;
+        let totalCanone = 0;
+        let remindersSentCount = 0;
+
+        allItems.forEach(item => {
+            if (!item) return;
+            const days = calcDays(item.dataFine);
+            const isClosed = item.stato === "Restituito / Concluso";
+            if (!isClosed) {
+                activeCount++;
+                totalCanone += (parseFloat(item.prezzo) || 0);
+                if (days !== null && days >= 0 && days <= 7) {
+                    expiring7DaysCount++;
+                }
+            }
+            if (item.reminder7ggInviato) {
+                remindersSentCount++;
+            }
+        });
+
+        const filtered = allItems.filter(item => {
+            if (!item) return false;
+            const days = calcDays(item.dataFine);
+            const isClosed = item.stato === "Restituito / Concluso";
+            if (activeFilter === "active" && isClosed) return false;
+            if (activeFilter === "expiring7" && (isClosed || days === null || days > 7)) return false;
+            if (activeFilter === "closed" && !isClosed) return false;
+
+            if (searchQ) {
+                const hay = `${item.cliente || ""} ${item.emailCliente || ""} ${item.strumento || ""} ${item.codiceStrumento || ""} ${item.periodoNoleggio || ""} ${item.note || ""}`.toLowerCase();
+                if (!hay.includes(searchQ)) return false;
+            }
+            return true;
+        });
+
+        // Costruisci un esempio per mostrare subito il testo completo del reminder nella pagina
+        const sampleRental = allItems[0] || null;
+        const previewReminder = window.buildNoleggioReminderEmailContent
+            ? window.buildNoleggioReminderEmailContent(sampleRental)
+            : { subject: "", textContent: "", htmlContent: "" };
+
+        container.innerHTML = `
+            <!-- KPI Noleggio Strumenti -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(225px, 1fr)); gap:1rem; margin-bottom:1.35rem;">
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-emerald);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(16, 185, 129, 0.16); color:var(--accent-emerald); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="key-round"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Noleggi Attivi</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:#fff; font-family:var(--font-heading);">
+                            ${activeCount} <small style="font-size:0.78rem; color:var(--accent-emerald); font-family:var(--font-body); font-weight:600;">in corso</small>
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">${allItems.length} contratti totali in archivio</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-gold);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(245, 158, 11, 0.16); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="bell-ring"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">In Scadenza (≤ 7 Giorni)</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:${expiring7DaysCount > 0 ? 'var(--accent-gold)' : '#fff'}; font-family:var(--font-heading);">
+                            ${expiring7DaysCount} <small style="font-size:0.78rem; color:var(--accent-gold); font-family:var(--font-body); font-weight:600;">avviso -7gg</small>
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">${remindersSentCount} reminder già inviati ai clienti</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="padding:1.15rem 1.35rem; display:flex; align-items:center; gap:1rem; border-left:3px solid var(--accent-cyan);">
+                    <div style="width:46px; height:46px; border-radius:12px; background:rgba(6, 182, 212, 0.16); color:var(--accent-cyan); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="euro"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.74rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Valore Canoni Attivi</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:#fff; font-family:var(--font-heading);">
+                            € ${totalCanone.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted);">Collezione collegata ad App Clienti</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Banner Avviso Automatico 1 Settimana Prima della Scadenza -->
+            <div class="glass-panel" style="margin-bottom:1.4rem; background:linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(245, 158, 11, 0.08)); border:1px solid rgba(16, 185, 129, 0.4); padding:1.25rem 1.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                    <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:260px;">
+                        <div style="width:50px; height:50px; border-radius:12px; background:rgba(245, 158, 11, 0.2); border:1px solid var(--accent-gold); color:var(--accent-gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="mail-Check" style="width:26px; height:26px;"></i>
+                        </div>
+                        <div>
+                            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.2rem;">
+                                <h3 style="font-family:var(--font-heading); color:#fff; font-size:1.12rem; margin:0;">
+                                    Servizio Avviso Scadenza Noleggio (1 Settimana Prima)
+                                </h3>
+                                <span class="badge badge-success" style="font-size:0.7rem;">✓ Monitoraggio Attivo (-7 Giorni)</span>
+                            </div>
+                            <p style="font-size:0.82rem; color:var(--text-secondary); margin:0;">
+                                Quando mancano <strong>7 giorni (1 settimana)</strong> alla data di fine noleggio, il sistema invia automaticamente un'email di preavviso all'indirizzo del cliente importato dall'<strong>App Clienti</strong>.
+                            </p>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary" style="padding:0.58rem 1rem; font-size:0.82rem; border-color:var(--accent-gold); color:#fff;" onclick="window.openNoleggioReminderPreviewModal('${sampleRental ? esc(sampleRental.id) : ''}')">
+                            <i data-lucide="eye"></i> 👁️ Mostra Testo Completo del Reminder
+                        </button>
+                        <button type="button" class="btn btn-secondary" style="padding:0.58rem 1rem; font-size:0.82rem; border-color:var(--accent-emerald); color:#6ee7b7;" onclick="window.checkAndSendNoleggio7DaysReminders(true)">
+                            <i data-lucide="send"></i> 🔔 Controlla & Invia Avvisi (-7gg)
+                        </button>
+                        <button type="button" class="btn btn-primary" style="padding:0.58rem 1.1rem; font-size:0.84rem;" onclick="window.openAddModal('noleggio')">
+                            <i data-lucide="plus"></i> + Nuovo Noleggio
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabella Contratti di Noleggio -->
+            <div class="glass-panel" style="margin-bottom:1.4rem;">
+                <div class="panel-header" style="flex-wrap:wrap; gap:0.9rem;">
+                    <div>
+                        <div class="panel-title">
+                            <i data-lucide="key-round" class="lucide-key-round" style="color:var(--accent-emerald);"></i>
+                            Contratti di Noleggio Strumenti (${filtered.length})
+                        </div>
+                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                            Dati cliente importati dall'App Clienti, periodo di noleggio, strumento noleggiato, prezzo e stato dell'avviso a -7 giorni.
+                        </p>
+                    </div>
+
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                        <input type="text" id="noleggioSearchInput" class="form-control" placeholder="Cerca cliente, strumento, codice..." value="${esc(window.noleggioSearchQuery || '')}" oninput="window.handleNoleggioSearchInput(this.value)" style="width:220px; padding:0.4rem 0.8rem; font-size:0.82rem;">
+                        ${[
+                            { id: "all", label: `Tutti (${allItems.length})` },
+                            { id: "active", label: `Attivi (${activeCount})` },
+                            { id: "expiring7", label: `In Scadenza ≤7gg (${expiring7DaysCount})` },
+                            { id: "closed", label: "Conclusi" }
+                        ].map(tab => `
+                            <button type="button" class="btn ${activeFilter === tab.id ? 'btn-primary' : 'btn-secondary'}" style="padding:0.38rem 0.78rem; font-size:0.76rem; border-radius:18px;" onclick="window.setNoleggioStatusFilter('${tab.id}')">
+                                ${tab.label}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                ${filtered.length === 0 ? `
+                    <div style="text-align:center; padding:2.8rem 1.2rem; color:var(--text-muted);">
+                        <i data-lucide="key-round" style="width:46px; height:46px; color:var(--accent-emerald); margin-bottom:0.75rem;"></i>
+                        <h4 style="color:#fff; margin-bottom:0.35rem;">Nessun contratto di noleggio in questa vista</h4>
+                        <p style="font-size:0.85rem; margin-bottom:1.15rem;">Clicca su <strong>+ Nuovo Noleggio</strong> per selezionare un cliente dall'App Clienti, impostare il periodo, lo strumento e il prezzo.</p>
+                        <button class="btn btn-primary" onclick="window.openAddModal('noleggio')">
+                            <i data-lucide="plus"></i> + Crea Primo Contratto di Noleggio
+                        </button>
+                    </div>
+                ` : `
+                    <div class="custom-table-container">
+                        <table class="custom-table">
+                            <thead>
+                                <tr>
+                                    <th>Cliente (da App Clienti)</th>
+                                    <th>Strumento Noleggiato</th>
+                                    <th>Periodo di Noleggio</th>
+                                    <th>Prezzo Noleggio</th>
+                                    <th>Avviso -7 Giorni</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filtered.map(item => {
+                                    const days = calcDays(item.dataFine);
+                                    const remDateIso = getRemDate(item.dataFine);
+                                    const prezzoFmt = Number(item.prezzo || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    const safeLabel = esc((item.strumento || "") + " - " + (item.cliente || "")).replace(/'/g, "\\'");
+
+                                    let daysBadgeHtml = "";
+                                    if (item.stato === "Restituito / Concluso") {
+                                        daysBadgeHtml = `<span class="badge badge-info">Restituito / Concluso</span>`;
+                                    } else if (days === null) {
+                                        daysBadgeHtml = `<span class="badge badge-info">${esc(item.stato || "Attivo")}</span>`;
+                                    } else if (days < 0) {
+                                        daysBadgeHtml = `<span class="badge badge-danger">Scaduto da ${Math.abs(days)} gg</span>`;
+                                    } else if (days <= 7) {
+                                        daysBadgeHtml = `<span class="badge badge-warning">⚠️ Scade tra ${days} ${days === 1 ? 'giorno' : 'giorni'}</span>`;
+                                    } else {
+                                        daysBadgeHtml = `<span class="badge badge-success">Attivo (-${days} gg alla scadenza)</span>`;
+                                    }
+
+                                    return `
+                                        <tr>
+                                            <td>
+                                                <div style="font-weight:700; color:#fff; font-size:0.94rem;">${esc(item.cliente)}</div>
+                                                <div style="font-size:0.76rem; color:#38bdf8; margin-top:0.15rem;">
+                                                    ✉️ ${esc(item.emailCliente || "Email non inserita")}
+                                                </div>
+                                                ${item.telefonoCliente ? `<div style="font-size:0.73rem; color:var(--text-muted);">📞 ${esc(item.telefonoCliente)} ${item.cittaCliente ? `• ${esc(item.cittaCliente)}` : ""}</div>` : ""}
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:700; color:var(--accent-gold); font-size:0.93rem;">
+                                                    🎻 ${esc(item.strumento)}
+                                                </div>
+                                                ${item.codiceStrumento ? `<div style="font-size:0.74rem; color:var(--text-muted); font-family:var(--font-mono);">Cod: ${esc(item.codiceStrumento)}</div>` : ""}
+                                                ${item.note ? `<div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.2rem; max-width:250px;">${esc(item.note)}</div>` : ""}
+                                            </td>
+                                            <td>
+                                                <div style="font-size:0.84rem; color:#fff; font-weight:600;">
+                                                    ${esc(fmtDate(item.dataInizio))} &rarr; <strong style="color:var(--accent-gold);">${esc(fmtDate(item.dataFine))}</strong>
+                                                </div>
+                                                <div style="margin-top:0.25rem; display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+                                                    ${item.durataLabel ? `<span style="font-size:0.72rem; color:var(--text-secondary);">(${esc(item.durataLabel)})</span>` : ""}
+                                                    ${daysBadgeHtml}
+                                                </div>
+                                            </td>
+                                            <td style="white-space:nowrap;">
+                                                <strong style="font-size:1.05rem; color:var(--accent-emerald); font-family:var(--font-heading);">
+                                                    € ${prezzoFmt}
+                                                </strong>
+                                                <div style="font-size:0.72rem; color:var(--text-muted);">${esc(item.frequenzaCanone || "Canone")}</div>
+                                                ${item.cauzione > 0 ? `<div style="font-size:0.7rem; color:var(--accent-gold);">Cauzione: € ${Number(item.cauzione).toLocaleString("it-IT")}</div>` : ""}
+                                            </td>
+                                            <td>
+                                                ${item.reminder7ggInviato ? `
+                                                    <span class="badge badge-success" style="font-size:0.72rem;">✓ Avviso -7gg Inviato</span>
+                                                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">${esc(item.dataInvioReminder7gg || "")}</div>
+                                                ` : `
+                                                    <span class="badge badge-info" style="font-size:0.72rem;">⏰ Previsto il ${esc(fmtDate(remDateIso))}</span>
+                                                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.2rem;">7 giorni prima della scadenza</div>
+                                                `}
+                                            </td>
+                                            <td>
+                                                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                                    <button type="button" class="btn btn-primary" style="padding:0.32rem 0.65rem; font-size:0.74rem;" onclick="window.openNoleggioReminderPreviewModal('${esc(item.id)}')" title="Visualizza il testo completo del reminder e invia l'avviso al cliente">
+                                                        <i data-lucide="bell-ring"></i> Reminder
+                                                    </button>
+                                                    <button type="button" class="btn btn-secondary" style="padding:0.32rem 0.55rem; font-size:0.74rem;" onclick="window.openEditNoleggioModal('${esc(item.id)}')" title="Modifica contratto">
+                                                        <i data-lucide="edit-3"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-secondary" style="padding:0.32rem 0.55rem; font-size:0.74rem; color:#ef4444;" onclick="window.deleteNoleggioItem('${esc(item.id)}', '${safeLabel}')" title="Elimina contratto">
+                                                        <i data-lucide="trash-2"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+
+            <!-- Riquadro Permanente: Anteprima Integrale del Reminder Scadenza (1 Settimana Prima) -->
+            <div class="glass-panel" style="border:1px solid rgba(212, 175, 55, 0.35);">
+                <div class="panel-header" style="flex-wrap:wrap; gap:0.8rem;">
+                    <div>
+                        <div class="panel-title" style="color:var(--accent-gold);">
+                            <i data-lucide="mail" style="color:var(--accent-gold);"></i>
+                            Modello & Contenuto Completo del Reminder (Inviato 7 Giorni Prima della Scadenza)
+                        </div>
+                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                            Ecco il testo integrale e l'impaginazione dell'avviso automatico che il cliente riceve una settimana prima della scadenza del noleggio.
+                        </p>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="window.openNoleggioReminderPreviewModal('${sampleRental ? esc(sampleRental.id) : ''}')">
+                        <i data-lucide="maximize-2"></i> Personalizza / Invia in Pop-up
+                    </button>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1.2rem; align-items:start;">
+                    <!-- Colonna 1: Versione Grafica HTML -->
+                    <div>
+                        <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-gold); margin-bottom:0.5rem;">
+                            📨 Vista Email HTML Ricevuta dal Cliente
+                        </div>
+                        <div style="background:#070a10; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1rem;">
+                            <div style="font-size:0.8rem; color:#cbd5e1; padding-bottom:0.65rem; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.08);">
+                                <strong>Oggetto:</strong> <span style="color:#fff;">${esc(previewReminder.subject)}</span>
+                            </div>
+                            ${previewReminder.htmlContent}
+                        </div>
+                    </div>
+
+                    <!-- Colonna 2: Testo Integrale Plain-Text -->
+                    <div>
+                        <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-cyan); margin-bottom:0.5rem;">
+                            📝 Testo Integrale del Reminder (Plain-Text)
+                        </div>
+                        <pre style="background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1.15rem; color:#e2e8f0; font-family:var(--font-mono); font-size:0.79rem; line-height:1.6; white-space:pre-wrap; margin:0;">${esc(previewReminder.textContent)}</pre>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
     // 11. Report
     renderReport: function(container) {
         const items = window.atelierDB.data.report || [];

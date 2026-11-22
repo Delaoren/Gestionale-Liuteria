@@ -103,7 +103,7 @@ DB_ARRAY_COLLECTIONS = {
     "biblioteca", "calendarioAppuntamenti", "calendarioLavorazioni",
     "certificati", "clienti", "costiLaboratorio", "costruzione", "gestioneContabilita",
     "laboratorio", "magazzinoLegno", "magazzinoStrumenti", "media",
-    "report", "restauro", "social", "mail"
+    "noleggio", "report", "restauro", "social", "mail"
 }
 DB_SINGLETON_COLLECTIONS = {"settings", "liuteriaMaking"}
 DB_ALL_COLLECTIONS = DB_ARRAY_COLLECTIONS | DB_SINGLETON_COLLECTIONS
@@ -3489,6 +3489,96 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
 
+def check_and_send_noleggio_reminders_server():
+    """
+    Controlla in MongoDB la collezione 'noleggio': se mancano <= 7 giorni (una settimana)
+    alla data di fine noleggio e reminder7ggInviato è False, invia l'avviso al cliente.
+    """
+    if mongo_db is None:
+        return
+    try:
+        today = datetime.now().date()
+        docs = list(mongo_db["noleggio"].find({}))
+        for r in docs:
+            if not isinstance(r, dict):
+                continue
+            if r.get("stato") == "Restituito / Concluso":
+                continue
+            if r.get("autoReminder7gg") is False or r.get("reminder7ggInviato"):
+                continue
+            data_fine_str = str(r.get("dataFine") or "").split("T")[0].strip()
+            if not data_fine_str:
+                continue
+            try:
+                end_date = datetime.strptime(data_fine_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            days_left = (end_date - today).days
+            if 0 <= days_left <= 7:
+                to_email = str(r.get("emailCliente") or "").strip()
+                if not to_email or "@" not in to_email:
+                    continue
+                cliente_nome = str(r.get("cliente") or "Gentile Cliente").strip()
+                strumento = str(r.get("strumento") or "Strumento ad Arco").strip()
+                codice = f" (Cod. {r.get('codiceStrumento')})" if r.get("codiceStrumento") else ""
+                data_fine_it = end_date.strftime("%d/%m/%Y")
+                periodo = str(r.get("periodoNoleggio") or data_fine_it)
+                prezzo = r.get("prezzo") or 0
+                freq = str(r.get("frequenzaCanone") or "Canone")
+
+                subject = f"Avviso Scadenza Noleggio tra 7 giorni: {strumento} (Scadenza {data_fine_it}) — Liuteria De Lorenzi"
+                body_text = (
+                    f"Gentile {cliente_nome},\n\n"
+                    f"Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana ({days_left} giorni), "
+                    f"in data {data_fine_it}, giungerà a scadenza il contratto di noleggio relativo allo strumento a Lei affidato.\n\n"
+                    f"RIEPILOGO DEL NOLEGGIO:\n"
+                    f"- Strumento Noleggiato: {strumento}{codice}\n"
+                    f"- Intestatario: {cliente_nome}\n"
+                    f"- Periodo di Noleggio: {periodo}\n"
+                    f"- Data di Scadenza: {data_fine_it}\n"
+                    f"- Canone / Prezzo Noleggio: EUR {prezzo} ({freq})\n\n"
+                    f"MODALITA' DI RINNOVO O RICONSEGNA:\n"
+                    f"1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il {data_fine_it}.\n"
+                    f"2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier.\n\n"
+                    f"Un cordiale saluto,\n"
+                    f"Maestro Fabio De Lorenzi\n"
+                    f"Liuteria De Lorenzi — Cremona\n"
+                    f"info@liuteriadelorenzi.it"
+                )
+                send_res = send_mail_from_account({
+                    "accountId": "domain",
+                    "toEmail": to_email,
+                    "subject": subject,
+                    "bodyText": body_text
+                })
+                if send_res and send_res.get("success") and not send_res.get("localOnly"):
+                    now_str = time.strftime("%d/%m/%Y %H:%M")
+                    mongo_db["noleggio"].update_one(
+                        {"id": r.get("id")},
+                        {"$set": {
+                            "reminder7ggInviato": True,
+                            "dataInvioReminder7gg": f"{now_str} (Server Auto -7gg)",
+                            "ultimoPromemoriaInviato": now_str,
+                            "updatedAt": datetime.now().isoformat()
+                        }}
+                    )
+                    print(f"[NoleggioScheduler] Inviato avviso -7gg a {to_email} per '{strumento}'", flush=True)
+    except Exception as e:
+        print(f"[NoleggioScheduler] Errore controllo scadenze: {e}", flush=True)
+
+
+class NoleggioReminderThread(threading.Thread):
+    def __init__(self, interval=1800):
+        super().__init__(daemon=True)
+        self.interval = interval
+
+    def run(self):
+        time.sleep(20)
+        while True:
+            check_and_send_noleggio_reminders_server()
+            time.sleep(self.interval)
+
+
 def run_server():
     global mqtt_bridge_instance, httpd_server_instance
     mqtt_bridge_instance = MqttBridge()
@@ -3499,6 +3589,9 @@ def run_server():
 
     social_scheduler = SocialSchedulerThread(interval=15)
     social_scheduler.start()
+
+    noleggio_scheduler = NoleggioReminderThread(interval=1800)
+    noleggio_scheduler.start()
 
     github_updater = GitHubAutoUpdaterThread(interval=AUTO_UPDATE_INTERVAL)
     github_updater.start()

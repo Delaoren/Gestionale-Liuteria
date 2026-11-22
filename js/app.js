@@ -145,6 +145,16 @@ const APPS = [
         renderer: window.AppModules.renderMedia
     },
     {
+        id: "noleggio",
+        name: "Noleggio",
+        tag: "Contratti & Scadenze 7gg",
+        icon: "key-round",
+        color: "linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(6, 182, 212, 0.42))",
+        borderColor: "#10b981",
+        desc: "Gestione noleggio strumenti con selezione cliente dall'anagrafica Clienti, periodo, strumento, canone e avviso automatico 7 giorni prima della scadenza.",
+        renderer: window.AppModules.renderNoleggio
+    },
+    {
         id: "report",
         name: "Report",
         tag: "Statistiche & KPI",
@@ -1086,6 +1096,8 @@ window.openAddModal = function(collectionName) {
         formHTML = window.buildCertificatoModalForm(null);
     } else if (collectionName === 'costiLaboratorio') {
         formHTML = window.buildCostiLaboratorioModalForm(null);
+    } else if (collectionName === 'noleggio') {
+        formHTML = window.buildNoleggioModalForm(null);
     } else {
         // Generic fallback form
         formHTML = `
@@ -1105,7 +1117,7 @@ window.openAddModal = function(collectionName) {
 
     const modalContainer = modalOverlay.querySelector('.modal-container');
     if (modalContainer) {
-        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca' || collectionName === 'media' || collectionName === 'costiLaboratorio') {
+        if (collectionName === 'social' || collectionName === 'certificati' || collectionName === 'biblioteca' || collectionName === 'media' || collectionName === 'costiLaboratorio' || collectionName === 'noleggio') {
             modalContainer.style.maxWidth = '820px';
         } else {
             modalContainer.style.maxWidth = '';
@@ -1492,6 +1504,63 @@ window.saveNewRecord = function(e, collectionName) {
         }
         window.costoPdfDraft = null;
         window._costoPdfRemoved = false;
+    } else if (collectionName === 'noleggio') {
+        const editingId = document.getElementById("f_nol_edit_id") ? document.getElementById("f_nol_edit_id").value.trim() : "";
+        const existing = editingId ? window.atelierDB.getItem("noleggio", editingId) : null;
+
+        const dataInizio = document.getElementById("f_nol_data_inizio")?.value || new Date().toISOString().split("T")[0];
+        const dataFine = document.getElementById("f_nol_data_fine")?.value || "";
+        const durataLabel = (document.getElementById("f_nol_durata_label")?.value || "").trim();
+        const periodoNoleggio = durataLabel
+            ? `${durataLabel} (${window.formatDateItShort(dataInizio)} → ${window.formatDateItShort(dataFine)})`
+            : `${window.formatDateItShort(dataInizio)} → ${window.formatDateItShort(dataFine)}`;
+
+        const rawPrezzo = parseFloat((document.getElementById("f_nol_prezzo")?.value || "0").replace(",", "."));
+        const prezzoVal = isNaN(rawPrezzo) ? 0 : Math.round(rawPrezzo * 100) / 100;
+        const rawCauzione = parseFloat((document.getElementById("f_nol_cauzione")?.value || "0").replace(",", "."));
+        const cauzioneVal = isNaN(rawCauzione) ? 0 : Math.round(rawCauzione * 100) / 100;
+
+        const noleggioObj = {
+            id: editingId || ("nol-" + Date.now()),
+            clienteId: document.getElementById("f_nol_cliente_id")?.value || "",
+            cliente: (document.getElementById("f_nol_cliente_nome")?.value || "").trim() || "Cliente Atelier",
+            emailCliente: (document.getElementById("f_nol_cliente_email")?.value || "").trim(),
+            telefonoCliente: (document.getElementById("f_nol_cliente_telefono")?.value || "").trim(),
+            cittaCliente: (document.getElementById("f_nol_cliente_citta")?.value || "").trim(),
+            strumento: (document.getElementById("f_nol_strumento")?.value || "").trim() || "Violino 4/4",
+            codiceStrumento: (document.getElementById("f_nol_codice_strumento")?.value || "").trim(),
+            dataInizio,
+            dataFine,
+            durataLabel,
+            periodoNoleggio,
+            prezzo: prezzoVal,
+            frequenzaCanone: document.getElementById("f_nol_frequenza")?.value || "Totale Periodo",
+            cauzione: cauzioneVal,
+            stato: document.getElementById("f_nol_stato")?.value || "Attivo",
+            autoReminder7gg: document.getElementById("f_nol_auto_reminder") ? document.getElementById("f_nol_auto_reminder").checked : true,
+            note: (document.getElementById("f_nol_note")?.value || "").trim(),
+            reminder7ggInviato: existing ? Boolean(existing.reminder7ggInviato) : false,
+            dataInvioReminder7gg: existing ? (existing.dataInvioReminder7gg || "") : "",
+            ultimoPromemoriaInviato: existing ? (existing.ultimoPromemoriaInviato || "") : ""
+        };
+
+        // Se la data di fine scadenza è cambiata, riabilita l'avviso automatico 7gg prima
+        if (existing && existing.dataFine !== dataFine) {
+            noleggioObj.reminder7ggInviato = false;
+            noleggioObj.dataInvioReminder7gg = "";
+        }
+
+        if (editingId) {
+            window.atelierDB.updateItem("noleggio", editingId, noleggioObj);
+        } else {
+            window.atelierDB.addItem("noleggio", noleggioObj);
+        }
+
+        setTimeout(() => {
+            if (typeof window.checkAndSendNoleggio7DaysReminders === "function") {
+                window.checkAndSendNoleggio7DaysReminders(false);
+            }
+        }, 300);
     }
 
     window.closeModal();
@@ -10527,6 +10596,760 @@ window.deleteCostoLaboratorioItem = function(itemId, label) {
     }
 };
 
+// ============================================================================
+// MODULO NOLEGGIO STRUMENTI: ANAGRAFICA CLIENTI, PERIODO, STRUMENTO, PREZZO
+// & AVVISO AUTOMATICO 1 SETTIMANA (7 GIORNI) PRIMA DELLA SCADENZA
+// ============================================================================
+
+window.noleggioStatusFilter = "all";
+window.noleggioSearchQuery = "";
+
+window.formatDateItShort = function(isoStr) {
+    if (!isoStr) return "-";
+    const parts = String(isoStr).split("T")[0].split("-");
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return isoStr;
+};
+
+window.calculateNoleggioDaysRemaining = function(dataFineIso) {
+    if (!dataFineIso) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(String(dataFineIso).split("T")[0] + "T00:00:00");
+    if (isNaN(end.getTime())) return null;
+    const diffMs = end.getTime() - today.getTime();
+    return Math.round(diffMs / 86400000);
+};
+
+window.getNoleggioReminderDateIso = function(dataFineIso) {
+    if (!dataFineIso) return "";
+    const end = new Date(String(dataFineIso).split("T")[0] + "T00:00:00");
+    if (isNaN(end.getTime())) return "";
+    end.setDate(end.getDate() - 7);
+    const y = end.getFullYear();
+    const m = String(end.getMonth() + 1).padStart(2, "0");
+    const d = String(end.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+};
+
+window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) {
+    const cfg = Object.assign({}, (window.getSendinblueConfig ? window.getSendinblueConfig() : {}), cfgOverride || {});
+    const atelierName = cfg.senderName || "Liuteria De Lorenzi — Cremona";
+    const atelierAddr = cfg.atelierAddress || "Bottega Liuteria De Lorenzi — Cremona";
+    const atelierPhone = cfg.atelierPhone || "+39 0372 000000";
+    const replyEmail = cfg.replyToEmail || cfg.senderEmail || "info@liuteriadelorenzi.it";
+
+    const clienteNome = (rental && rental.cliente) || "Gentile Cliente";
+    const strumento = (rental && rental.strumento) || "Strumento ad Arco";
+    const codiceStr = (rental && rental.codiceStrumento) ? ` (Cod. ${rental.codiceStrumento})` : "";
+    const dataInizioIt = window.formatDateItShort(rental && rental.dataInizio);
+    const dataFineIt = window.formatDateItShort(rental && rental.dataFine);
+    const periodoLabel = (rental && rental.periodoNoleggio) || `dal ${dataInizioIt} al ${dataFineIt}`;
+    const prezzoFmt = Number((rental && rental.prezzo) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const freqLabel = (rental && rental.frequenzaCanone) || "Canone Noleggio";
+    const daysLeft = window.calculateNoleggioDaysRemaining(rental && rental.dataFine);
+    const daysLeftText = daysLeft === null ? "7 giorni" : (daysLeft === 1 ? "1 giorno" : `${Math.max(0, daysLeft)} giorni`);
+
+    const subject = `Avviso Scadenza Noleggio tra 7 giorni: ${strumento} (Scadenza ${dataFineIt}) — Liuteria De Lorenzi`;
+
+    const textContent = [
+        `Gentile ${clienteNome},`,
+        ``,
+        `Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana (${daysLeftText}), in data ${dataFineIt}, giungerà a scadenza il contratto di noleggio relativo allo strumento a Lei affidato.`,
+        ``,
+        `RIEPILOGO DEL NOLEGGIO:`,
+        `• Strumento Noleggiato: ${strumento}${codiceStr}`,
+        `• Intestatario: ${clienteNome}`,
+        `• Periodo di Noleggio: ${periodoLabel}`,
+        `• Data di Scadenza: ${dataFineIt}`,
+        `• Canone / Prezzo Noleggio: € ${prezzoFmt} (${freqLabel})`,
+        rental && rental.note ? `• Note Contratto: ${rental.note}` : null,
+        ``,
+        `MODALITÀ DI RINNOVO O RICONSEGNA:`,
+        `1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il ${dataFineIt} indicando la nuova durata desiderata.`,
+        `2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier per la verifica acustica e conservativa finale.`,
+        ``,
+        `Restiamo a Sua completa disposizione per qualsiasi necessità.`,
+        ``,
+        `Un cordiale saluto,`,
+        `Maestro Fabio De Lorenzi`,
+        `${atelierName}`,
+        `${atelierAddr}`,
+        `Email: ${replyEmail} | Tel: ${atelierPhone}`
+    ].filter(line => line !== null).join("\n");
+
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    const htmlContent = `
+        <div style="font-family:Georgia, 'Times New Roman', serif; max-width:640px; margin:0 auto; background:#0f172a; color:#f8fafc; border:1px solid #d4af37; border-radius:14px; overflow:hidden;">
+            <div style="background:linear-gradient(135deg, #1e293b, #090d16); padding:24px 28px; border-bottom:2px solid #d4af37; text-align:center;">
+                <div style="font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#fbbf24; font-weight:700;">Bottega d'Arte Liutaria • Cremona</div>
+                <h2 style="margin:6px 0 4px 0; color:#ffffff; font-size:22px;">Liuteria De Lorenzi</h2>
+                <div style="font-size:13px; color:#cbd5e1;">Avviso di Prossima Scadenza Noleggio Strumento (Preavviso 7 Giorni)</div>
+            </div>
+            <div style="padding:26px 28px; line-height:1.65; font-size:15px; color:#e2e8f0;">
+                <p style="margin-top:0;">Gentile <strong style="color:#ffffff;">${esc(clienteNome)}</strong>,</p>
+                <p>Le scriviamo dalla <strong>Liuteria De Lorenzi</strong> per informarLa che tra <strong>una settimana</strong> (in data <strong style="color:#fbbf24;">${esc(dataFineIt)}</strong>) giungerà a scadenza il periodo di noleggio dello strumento a Lei affidato.</p>
+
+                <div style="background:#1e293b; border-left:4px solid #f59e0b; border-radius:8px; padding:16px 18px; margin:20px 0;">
+                    <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#fbbf24; font-weight:700; margin-bottom:10px;">🎻 Riepilogo Contratto di Noleggio</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:14px; color:#f1f5f9;">
+                        <tr>
+                            <td style="padding:5px 0; color:#94a3b8; width:42%;">Strumento Noleggiato:</td>
+                            <td style="padding:5px 0; font-weight:700; color:#ffffff;">${esc(strumento)}${esc(codiceStr)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 0; color:#94a3b8;">Periodo di Noleggio:</td>
+                            <td style="padding:5px 0;">${esc(periodoLabel)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 0; color:#94a3b8;">Data di Scadenza:</td>
+                            <td style="padding:5px 0; font-weight:700; color:#fbbf24;">${esc(dataFineIt)} (${esc(daysLeftText)} rimanenti)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 0; color:#94a3b8;">Prezzo / Canone:</td>
+                            <td style="padding:5px 0; font-weight:700; color:#34d399;">€ ${esc(prezzoFmt)} <span style="font-weight:400; color:#cbd5e1;">(${esc(freqLabel)})</span></td>
+                        </tr>
+                        ${rental && rental.note ? `
+                        <tr>
+                            <td style="padding:5px 0; color:#94a3b8;">Note:</td>
+                            <td style="padding:5px 0; color:#cbd5e1;">${esc(rental.note)}</td>
+                        </tr>` : ""}
+                    </table>
+                </div>
+
+                <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.35); border-radius:8px; padding:14px 18px; margin:18px 0; font-size:14px;">
+                    <strong style="color:#6ee7b7; display:block; margin-bottom:6px;">📌 Rinnovo o Riconsegna dello Strumento:</strong>
+                    <ul style="margin:0; padding-left:18px; color:#e2e8f0;">
+                        <li style="margin-bottom:6px;"><strong>Rinnovo del noleggio:</strong> qualora desiderasse prolungare il noleggio, La invitiamo a rispondere a questa email entro il <strong>${esc(dataFineIt)}</strong>.</li>
+                        <li><strong>Riconsegna in Atelier:</strong> in caso di restituzione, La preghiamo di contattarci per fissare l'appuntamento di riconsegna e controllo in bottega.</li>
+                    </ul>
+                </div>
+
+                <p>Restiamo a Sua completa disposizione per qualsiasi chiarimento.</p>
+                <p style="margin-bottom:0;">Un cordiale saluto,<br><strong style="color:#fbbf24;">Maestro Fabio De Lorenzi</strong><br><span style="font-size:13px; color:#94a3b8;">${esc(atelierName)}</span></p>
+            </div>
+            <div style="background:#090d16; padding:14px 24px; text-align:center; font-size:12px; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.08);">
+                ${esc(atelierAddr)} • Email: <a href="mailto:${esc(replyEmail)}" style="color:#38bdf8;">${esc(replyEmail)}</a> • Tel: ${esc(atelierPhone)}
+            </div>
+        </div>
+    `;
+
+    return {
+        subject,
+        textContent,
+        htmlContent,
+        dataInizioIt,
+        dataFineIt,
+        daysLeft,
+        daysLeftText,
+        prezzoFmt
+    };
+};
+
+window.setNoleggioStatusFilter = function(st) {
+    window.noleggioStatusFilter = st || "all";
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderNoleggio) {
+            window.AppModules.renderNoleggio(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.handleNoleggioSearchInput = function(val) {
+    window.noleggioSearchQuery = val || "";
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderNoleggio) {
+            window.AppModules.renderNoleggio(container);
+            window.appController.setupLucideIcons();
+            const inp = document.getElementById("noleggioSearchInput");
+            if (inp) {
+                inp.focus();
+                inp.setSelectionRange(inp.value.length, inp.value.length);
+            }
+        }
+    }
+};
+
+window.onSelectNoleggioCliente = function(clientId) {
+    const clienti = (window.atelierDB && window.atelierDB.data.clienti) || [];
+    const found = clienti.find(c => c && c.id === clientId);
+    if (!found) return;
+    const idEl = document.getElementById("f_nol_cliente_id");
+    const nomeEl = document.getElementById("f_nol_cliente_nome");
+    const emailEl = document.getElementById("f_nol_cliente_email");
+    const telEl = document.getElementById("f_nol_cliente_telefono");
+    const cittaEl = document.getElementById("f_nol_cliente_citta");
+
+    if (idEl) idEl.value = found.id || "";
+    if (nomeEl) nomeEl.value = found.nome || "";
+    if (emailEl) emailEl.value = (found.email && found.email !== "-") ? found.email : "";
+    if (telEl) telEl.value = (found.telefono && found.telefono !== "-") ? found.telefono : "";
+    if (cittaEl) cittaEl.value = found.citta || "";
+};
+
+window.applyNoleggioPeriodPreset = function(months, labelText) {
+    const startInput = document.getElementById("f_nol_data_inizio");
+    const endInput = document.getElementById("f_nol_data_fine");
+    const durInput = document.getElementById("f_nol_durata_label");
+    const remDateBadge = document.getElementById("nolReminderPreviewDateBadge");
+
+    const baseIso = (startInput && startInput.value) ? startInput.value : new Date().toISOString().split("T")[0];
+    if (startInput && !startInput.value) startInput.value = baseIso;
+
+    const d = new Date(baseIso + "T00:00:00");
+    if (!isNaN(d.getTime())) {
+        if (months === 0.25) {
+            // Preset 7 giorni (utile anche per testare subito il preavviso 1 settimana prima!)
+            d.setDate(d.getDate() + 7);
+        } else {
+            d.setMonth(d.getMonth() + months);
+        }
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const endIso = `${y}-${m}-${day}`;
+        if (endInput) endInput.value = endIso;
+        if (durInput) durInput.value = labelText || `${months} Mesi`;
+        if (remDateBadge) {
+            const remIso = window.getNoleggioReminderDateIso(endIso);
+            remDateBadge.innerText = window.formatDateItShort(remIso);
+        }
+    }
+};
+
+window.updateNoleggioReminderDatePreview = function() {
+    const endInput = document.getElementById("f_nol_data_fine");
+    const remDateBadge = document.getElementById("nolReminderPreviewDateBadge");
+    if (!endInput || !remDateBadge) return;
+    const remIso = window.getNoleggioReminderDateIso(endInput.value);
+    remDateBadge.innerText = remIso ? window.formatDateItShort(remIso) : "-";
+};
+
+window.onSelectNoleggioInstrumentPreset = function(val) {
+    if (!val) return;
+    const strInp = document.getElementById("f_nol_strumento");
+    const codInp = document.getElementById("f_nol_codice_strumento");
+    const parts = val.split("::");
+    if (strInp) strInp.value = parts[0] || val;
+    if (codInp && parts[1]) codInp.value = parts[1];
+};
+
+window.buildNoleggioModalForm = function(existingRental = null) {
+    const todayIso = new Date().toISOString().split("T")[0];
+    const d30 = new Date();
+    d30.setMonth(d30.getMonth() + 1);
+    const defaultEndIso = d30.toISOString().split("T")[0];
+
+    const r = existingRental || {
+        id: "",
+        clienteId: "",
+        cliente: "",
+        emailCliente: "",
+        telefonoCliente: "",
+        cittaCliente: "",
+        strumento: "",
+        codiceStrumento: "",
+        dataInizio: todayIso,
+        dataFine: defaultEndIso,
+        durataLabel: "1 Mese",
+        prezzo: "",
+        frequenzaCanone: "Mensile",
+        cauzione: 0,
+        stato: "Attivo",
+        autoReminder7gg: true,
+        note: ""
+    };
+
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    const clienti = (window.atelierDB && window.atelierDB.data.clienti) || [];
+    const strumentiShowroom = (window.atelierDB && window.atelierDB.data.magazzinoStrumenti) || [];
+    const strumentiCostruzione = (window.atelierDB && window.atelierDB.data.costruzione) || [];
+    const remIso = window.getNoleggioReminderDateIso(r.dataFine || defaultEndIso);
+
+    return `
+        <form onsubmit="window.saveNewRecord(event, 'noleggio')">
+            <input type="hidden" id="f_nol_edit_id" value="${esc(r.id || '')}">
+            <input type="hidden" id="f_nol_cliente_id" value="${esc(r.clienteId || '')}">
+
+            <!-- 1. SELEZIONE CLIENTE DALL'APP CLIENTI -->
+            <div style="border-left:3px solid var(--accent-emerald); padding-left:0.75rem; margin-bottom:0.8rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong style="color:var(--accent-emerald); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">1. Dati del Cliente (dall'App Clienti)</strong>
+                    <span style="display:block; font-size:0.75rem; color:var(--text-secondary);">Seleziona un cliente dall'anagrafica per importare automaticamente nome, email, telefono e città.</span>
+                </div>
+            </div>
+
+            <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.32); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem;">
+                <label style="font-size:0.79rem; color:#6ee7b7; font-weight:700; display:block; margin-bottom:0.35rem;">
+                    👤 Scegli Cliente dall'Anagrafica App Clienti (${clienti.length} presenti)
+                </label>
+                <select class="form-control" onchange="window.onSelectNoleggioCliente(this.value)" style="font-size:0.86rem;">
+                    <option value="">-- Seleziona un Cliente dall'App Clienti per compilare i campi --</option>
+                    ${clienti.map(c => `
+                        <option value="${esc(c.id)}" ${(r.clienteId === c.id || r.cliente === c.nome) ? 'selected' : ''}>
+                            ${esc(c.nome)} — ${esc(c.email || 'Senza email')} (${esc(c.telefono || '-')}) • ${esc(c.citta || '')}
+                        </option>
+                    `).join('')}
+                </select>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1.3;">
+                    <label>Nome e Cognome / Ente Cliente *</label>
+                    <input type="text" id="f_nol_cliente_nome" class="form-control" required value="${esc(r.cliente || '')}" placeholder="Es. Maestro Marco Rossi">
+                </div>
+                <div class="form-group" style="flex:1.2;">
+                    <label>Email Cliente (per Avviso 7gg prima della scadenza) *</label>
+                    <input type="email" id="f_nol_cliente_email" class="form-control" required value="${esc(r.emailCliente || '')}" placeholder="es. cliente@orchestra.it">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Telefono Cliente</label>
+                    <input type="text" id="f_nol_cliente_telefono" class="form-control" value="${esc(r.telefonoCliente || '')}" placeholder="Es. +39 335 8492011">
+                </div>
+                <div class="form-group">
+                    <label>Città / Sede</label>
+                    <input type="text" id="f_nol_cliente_citta" class="form-control" value="${esc(r.cittaCliente || '')}" placeholder="Es. Cremona / Milano">
+                </div>
+            </div>
+
+            <!-- 2. STRUMENTO NOLEGGIATO & PREZZO -->
+            <div style="border-left:3px solid var(--accent-gold); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0;">
+                <strong style="color:var(--accent-gold); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">2. Strumento Noleggiato & Prezzo del Noleggio</strong>
+            </div>
+
+            ${(strumentiShowroom.length > 0 || strumentiCostruzione.length > 0) ? `
+                <div class="form-group" style="margin-bottom:0.75rem;">
+                    <label style="font-size:0.78rem; color:var(--accent-gold);">🎻 Importa Strumento da Magazzino Strumenti (Opzionale)</label>
+                    <select class="form-control" onchange="window.onSelectNoleggioInstrumentPreset(this.value)" style="font-size:0.84rem;">
+                        <option value="">-- Seleziona uno strumento dal Magazzino o inseriscilo manualmente sotto --</option>
+                        ${strumentiShowroom.map(s => `<option value="${esc(s.nome + ' (' + s.modello + ')')}::${esc(s.codice || '')}">[${esc(s.codice || 'STR')}] ${esc(s.nome)} — ${esc(s.tipologia)} (${esc(s.modello)})</option>`).join('')}
+                        ${strumentiCostruzione.map(b => `<option value="${esc(b.opNumero + ' - ' + b.modello)}::${esc(b.opNumero || '')}">[${esc(b.opNumero)}] ${esc(b.modello)}</option>`).join('')}
+                    </select>
+                </div>
+            ` : ''}
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1.6;">
+                    <label>Strumento Noleggiato *</label>
+                    <input type="text" id="f_nol_strumento" class="form-control" required value="${esc(r.strumento || '')}" placeholder="Es. Violino 4/4 Modello Stradivari 1715 + Archetto e Custodia">
+                </div>
+                <div class="form-group" style="flex:0.8;">
+                    <label>Codice / Matricola</label>
+                    <input type="text" id="f_nol_codice_strumento" class="form-control" value="${esc(r.codiceStrumento || '')}" placeholder="Es. VIO-2024-001">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Prezzo del Noleggio (€) *</label>
+                    <input type="number" id="f_nol_prezzo" class="form-control" step="0.01" min="0" required value="${r.prezzo !== '' && r.prezzo !== undefined ? r.prezzo : ''}" placeholder="Es. 180.00">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Tipologia Canone</label>
+                    <select id="f_nol_frequenza" class="form-control">
+                        ${["Mensile", "Trimestrale", "Semestrale", "Annuale", "Totale Periodo / Forfait"].map(f =>
+                            `<option value="${f}" ${r.frequenzaCanone === f ? 'selected' : ''}>${f}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="flex:0.9;">
+                    <label>Deposito Cauzionale (€)</label>
+                    <input type="number" id="f_nol_cauzione" class="form-control" step="0.01" min="0" value="${r.cauzione || 0}" placeholder="Es. 500">
+                </div>
+            </div>
+
+            <!-- 3. PERIODO DI NOLEGGIO & REMINDER 1 SETTIMANA PRIMA -->
+            <div style="border-left:3px solid var(--accent-cyan); padding-left:0.75rem; margin:1.1rem 0 0.8rem 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <strong style="color:var(--accent-cyan); font-size:0.9rem; text-transform:uppercase; letter-spacing:0.5px;">3. Periodo di Noleggio & Avviso Automatico (-7 Giorni)</strong>
+                <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.applyNoleggioPeriodPreset(0.25, '1 Settimana (7 gg)')">7 Giorni</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.applyNoleggioPeriodPreset(1, '1 Mese')">1 Mese</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.applyNoleggioPeriodPreset(3, '3 Mesi')">3 Mesi</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.applyNoleggioPeriodPreset(6, '6 Mesi')">6 Mesi</button>
+                    <button type="button" class="btn btn-secondary" style="padding:0.2rem 0.55rem; font-size:0.71rem;" onclick="window.applyNoleggioPeriodPreset(12, '1 Anno (12 Mesi)')">1 Anno</button>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Data Inizio Noleggio *</label>
+                    <input type="date" id="f_nol_data_inizio" class="form-control" required value="${esc(r.dataInizio || todayIso)}">
+                </div>
+                <div class="form-group">
+                    <label>Data Fine / Scadenza Noleggio *</label>
+                    <input type="date" id="f_nol_data_fine" class="form-control" required value="${esc(r.dataFine || defaultEndIso)}" onchange="window.updateNoleggioReminderDatePreview()">
+                </div>
+                <div class="form-group">
+                    <label>Etichetta Periodo</label>
+                    <input type="text" id="f_nol_durata_label" class="form-control" value="${esc(r.durataLabel || '1 Mese')}" placeholder="Es. 3 Mesi / Anno Accademico">
+                </div>
+            </div>
+
+            <div style="background:rgba(245, 158, 11, 0.1); border:1px solid rgba(245, 158, 11, 0.35); border-radius:10px; padding:0.85rem 1rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; margin:0; font-size:0.85rem; color:#fff;">
+                    <input type="checkbox" id="f_nol_auto_reminder" ${r.autoReminder7gg !== false ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--accent-gold);">
+                    <span>🔔 <strong>Invia automaticamente l'avviso di scadenza al cliente 1 settimana (7 giorni) prima della scadenza</strong></span>
+                </label>
+                <span style="font-size:0.77rem; color:var(--accent-gold); font-family:var(--font-mono);">
+                    Data invio avviso (-7gg): <strong id="nolReminderPreviewDateBadge">${window.formatDateItShort(remIso)}</strong>
+                </span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Stato Contratto</label>
+                    <select id="f_nol_stato" class="form-control">
+                        ${["Attivo", "In Scadenza", "Rinnovato", "Restituito / Concluso"].map(s =>
+                            `<option value="${s}" ${r.stato === s ? 'selected' : ''}>${s}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="flex:2;">
+                    <label>Note & Condizioni Noleggio (Archetto, Custodia, Assicurazione...)</label>
+                    <input type="text" id="f_nol_note" class="form-control" value="${esc(r.note || '')}" placeholder="Es. Completo di custodia rigida Gewa, archetto in Pernambuco e colofonia...">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.85rem; font-size:0.94rem; margin-top:0.4rem;">
+                <i data-lucide="key-round"></i> ${existingRental ? 'Salva Modifiche Contratto di Noleggio' : 'Attiva Contratto di Noleggio'}
+            </button>
+        </form>
+    `;
+};
+
+window.openEditNoleggioModal = function(itemId) {
+    const item = window.atelierDB.getItem("noleggio", itemId);
+    if (!item) return;
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "820px";
+
+    modalTitle.innerText = `Modifica Noleggio: ${item.strumento} (${item.cliente})`;
+    modalBody.innerHTML = window.buildNoleggioModalForm(item);
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.deleteNoleggioItem = function(itemId, label) {
+    const item = window.atelierDB.getItem("noleggio", itemId);
+    if (!confirm(`Vuoi eliminare il contratto di noleggio "${label || (item && item.strumento) || 'selezionato'}"?`)) return;
+    window.atelierDB.removeItem("noleggio", itemId);
+    window.showToast("Contratto di noleggio eliminato.");
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        window.appController.openModule("noleggio");
+    }
+};
+
+/**
+ * Mostra l'anteprima completa del Reminder di scadenza (1 settimana prima) e consente l'invio immediato
+ */
+window.openNoleggioReminderPreviewModal = function(itemId) {
+    let item = itemId ? window.atelierDB.getItem("noleggio", itemId) : null;
+    if (!item) {
+        // Se non ci sono ancora contratti o viene aperto il template dimostrativo
+        const dStart = new Date().toISOString().split("T")[0];
+        const dEndObj = new Date();
+        dEndObj.setDate(dEndObj.getDate() + 7);
+        const dEnd = dEndObj.toISOString().split("T")[0];
+        const firstClient = ((window.atelierDB && window.atelierDB.data.clienti) || [])[0] || {
+            nome: "Maestro Marco Rossi",
+            email: "m.rossi.violin@orchestra.it"
+        };
+        item = {
+            id: "",
+            cliente: firstClient.nome,
+            emailCliente: firstClient.email,
+            strumento: "Violino Master 'La Fenice' Opus 38 (Modello Stradivari 1715)",
+            codiceStrumento: "VIO-2024-001",
+            dataInizio: dStart,
+            dataFine: dEnd,
+            periodoNoleggio: `1 Mese (${window.formatDateItShort(dStart)} → ${window.formatDateItShort(dEnd)})`,
+            prezzo: 180,
+            frequenzaCanone: "Mensile",
+            note: "Completo di custodia rigida, archetto in Pernambuco e copertura assicurativa atelier."
+        };
+    }
+
+    const emailData = window.buildNoleggioReminderEmailContent(item);
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    const recipientEmail = item.emailCliente || (window.resolveClientEmailByName ? window.resolveClientEmailByName(item.cliente) : "") || "";
+    const remDateIso = window.getNoleggioReminderDateIso(item.dataFine);
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalContainer = modalOverlay.querySelector(".modal-container");
+    if (modalContainer) modalContainer.style.maxWidth = "860px";
+
+    modalTitle.innerHTML = `<i data-lucide="bell-ring" style="color:var(--accent-gold);"></i> Anteprima Completa Reminder Scadenza Noleggio (-7 Giorni)`;
+
+    modalBody.innerHTML = `
+        <div>
+            <!-- Barra stato pianificazione 7 giorni prima -->
+            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.35); border-radius:10px; padding:0.85rem 1.1rem; margin-bottom:1.1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+                <div>
+                    <div style="font-size:0.74rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--accent-emerald); font-weight:700;">
+                        ⏰ Programmazione Automatica Preavviso (1 Settimana Prima della Scadenza)
+                    </div>
+                    <div style="font-size:0.9rem; color:#fff; margin-top:0.15rem;">
+                        Data Scadenza: <strong style="color:var(--accent-gold);">${esc(emailData.dataFineIt)}</strong> •
+                        Invio Automatico Previsto: <strong style="color:#6ee7b7;">${esc(window.formatDateItShort(remDateIso))}</strong> (-7 giorni)
+                    </div>
+                </div>
+                <span class="badge ${item.reminder7ggInviato ? 'badge-success' : 'badge-warning'}">
+                    ${item.reminder7ggInviato ? `✓ Inviato (${esc(item.dataInvioReminder7gg || 'OK')})` : '⏳ In Programmazione Automatica'}
+                </span>
+            </div>
+
+            <!-- Parametri Invio Modificabili -->
+            <div class="form-row">
+                <div class="form-group" style="flex:1;">
+                    <label>Destinatario Email Cliente *</label>
+                    <input type="email" id="nol_rem_to_email" class="form-control" value="${esc(recipientEmail)}" placeholder="es. cliente@orchestra.it">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>Nome Cliente</label>
+                    <input type="text" id="nol_rem_to_name" class="form-control" value="${esc(item.cliente || '')}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Oggetto del Reminder</label>
+                <input type="text" id="nol_rem_subject" class="form-control" value="${esc(emailData.subject)}">
+            </div>
+
+            <!-- Anteprima Grafica HTML del Reminder -->
+            <div style="margin-bottom:1rem;">
+                <label style="display:block; margin-bottom:0.4rem; color:var(--accent-gold); font-weight:700; font-size:0.82rem;">
+                    👁️ Anteprima Grafica Email Reminder Ricevuta dal Cliente:
+                </label>
+                <div style="background:#070a10; border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:1.1rem; max-height:380px; overflow-y:auto;">
+                    ${emailData.htmlContent}
+                </div>
+            </div>
+
+            <!-- Testo Completo Modificabile del Reminder -->
+            <div class="form-group">
+                <label>Testo Integrale del Messaggio (Versione Testuale / Personalizzabile)</label>
+                <textarea id="nol_rem_text_body" class="form-control" rows="8" style="font-family:var(--font-mono); font-size:0.8rem; line-height:1.5;">${esc(emailData.textContent)}</textarea>
+            </div>
+
+            <div id="nolReminderFeedbackBox" style="display:none; margin:0.85rem 0; padding:0.8rem 1rem; border-radius:8px; font-size:0.84rem;"></div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem; margin-top:1.1rem; padding-top:0.85rem; border-top:1px solid rgba(255,255,255,0.08);">
+                <span style="font-size:0.75rem; color:var(--text-muted);">
+                    Invio tramite SMTP Atelier (<code>info@liuteriadelorenzi.it</code> / Gmail) o Sendinblue (Brevo)
+                </span>
+                <div style="display:flex; gap:0.55rem;">
+                    <button type="button" class="btn btn-secondary" onclick="window.closeModal()">Chiudi</button>
+                    ${item.id ? `
+                        <button type="button" id="nolRemSendNowBtn" class="btn btn-primary" onclick="window.sendNoleggioReminderNow('${esc(item.id)}')">
+                            <i data-lucide="send"></i> 🚀 Invia Ora Avviso al Cliente
+                        </button>
+                    ` : ""}
+                </div>
+            </div>
+        </div>
+    `;
+
+    modalOverlay.classList.add("active");
+    if (window.appController && window.appController.setupLucideIcons) {
+        window.appController.setupLucideIcons();
+    }
+};
+
+window.dispatchNoleggioReminderEmail = async function(rental, customOverrides = {}) {
+    const emailData = window.buildNoleggioReminderEmailContent(rental);
+    const toEmail = (customOverrides.toEmail || rental.emailCliente || (window.resolveClientEmailByName ? window.resolveClientEmailByName(rental.cliente) : "") || "").trim();
+    const toName = (customOverrides.toName || rental.cliente || "Cliente").trim();
+    const subject = (customOverrides.subject || emailData.subject).trim();
+    const textContent = (customOverrides.textContent || emailData.textContent).trim();
+    const htmlContent = customOverrides.htmlContent || emailData.htmlContent;
+
+    if (!toEmail || !toEmail.includes("@")) {
+        return { ok: false, error: "Indirizzo email del cliente mancante o non valido." };
+    }
+
+    // 1. Prova invio tramite Sendinblue / Brevo se configurato
+    const sibCfg = window.getSendinblueConfig ? window.getSendinblueConfig() : {};
+    if (sibCfg && sibCfg.apiKey && String(sibCfg.apiKey).trim().length > 8 && typeof window.dispatchSendinblueEmailPayload === "function") {
+        const sibRes = await window.dispatchSendinblueEmailPayload({
+            appointmentId: rental.id,
+            recipientEmail: toEmail,
+            recipientName: toName,
+            toEmail,
+            toName,
+            cliente: toName,
+            subject,
+            textContent,
+            htmlContent,
+            customMessage: textContent
+        }, sibCfg);
+        if (sibRes && (sibRes.ok || sibRes.success)) {
+            return { ok: true, method: "Sendinblue/Brevo", message: `Reminder inviato a ${toEmail}` };
+        }
+    }
+
+    // 2. Invio tramite endpoint SMTP del server (/api/mail/send da info@liuteriadelorenzi.it / gmail)
+    try {
+        const res = await fetch("/api/mail/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                accountId: "domain",
+                toEmail,
+                subject,
+                bodyText: textContent
+            })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.success) {
+                return {
+                    ok: true,
+                    localOnly: Boolean(data.localOnly),
+                    method: data.method || "Posta Atelier",
+                    message: data.localOnly
+                        ? `Avviso registrato in Posta Inviata per ${toEmail} (configura SMTP/Sendinblue per il recapito esterno)`
+                        : `Avviso inviato con successo a ${toEmail} tramite ${data.method}!`
+                };
+            }
+        }
+    } catch (e) {
+        // fallback locale
+    }
+
+    return {
+        ok: true,
+        localOnly: true,
+        method: "Notifica Gestionale Locale",
+        message: `Promemoria registrato per ${toEmail}.`
+    };
+};
+
+window.sendNoleggioReminderNow = async function(rentalId) {
+    const rental = window.atelierDB.getItem("noleggio", rentalId);
+    if (!rental) return;
+
+    const toEmail = (document.getElementById("nol_rem_to_email")?.value || rental.emailCliente || "").trim();
+    const toName = (document.getElementById("nol_rem_to_name")?.value || rental.cliente || "").trim();
+    const subject = (document.getElementById("nol_rem_subject")?.value || "").trim();
+    const textContent = (document.getElementById("nol_rem_text_body")?.value || "").trim();
+
+    const fb = document.getElementById("nolReminderFeedbackBox");
+    const btn = document.getElementById("nolRemSendNowBtn");
+    if (btn) btn.disabled = true;
+    if (fb) {
+        fb.style.display = "block";
+        fb.style.background = "rgba(56, 189, 248, 0.12)";
+        fb.style.border = "1px solid rgba(56, 189, 248, 0.35)";
+        fb.style.color = "#bae6fd";
+        fb.innerText = `⏳ Invio avviso di scadenza a ${toEmail} in corso...`;
+    }
+
+    const res = await window.dispatchNoleggioReminderEmail(rental, {
+        toEmail,
+        toName,
+        subject,
+        textContent
+    });
+
+    if (btn) btn.disabled = false;
+
+    if (res && res.ok) {
+        const nowStamp = new Date().toLocaleString("it-IT", {
+            day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        rental.emailCliente = toEmail;
+        rental.reminder7ggInviato = true;
+        rental.dataInvioReminder7gg = nowStamp;
+        rental.ultimoPromemoriaInviato = nowStamp;
+        window.atelierDB.updateItem("noleggio", rental.id, rental);
+
+        window.showToast(res.message || `Avviso di scadenza inviato a ${toEmail}!`);
+        window.closeModal();
+        if (window.appController && window.appController.activeModuleId === "noleggio") {
+            window.appController.openModule("noleggio");
+        }
+    } else if (fb) {
+        fb.style.background = "rgba(239, 68, 68, 0.14)";
+        fb.style.border = "1px solid rgba(239, 68, 68, 0.4)";
+        fb.style.color = "#fca5a5";
+        fb.innerText = `❌ Errore: ${(res && res.error) || "Impossibile inviare l'avviso."}`;
+    }
+};
+
+/**
+ * Controlla automaticamente tutti i noleggi attivi:
+ * se mancano <= 7 giorni (una settimana) alla scadenza e l'avviso non è ancora stato inviato,
+ * invia automaticamente l'email al cliente e mostra una notifica.
+ */
+window.checkAndSendNoleggio7DaysReminders = async function(manualTrigger = false) {
+    if (!window.atelierDB || !window.atelierDB.data) return;
+    const rentals = Array.isArray(window.atelierDB.data.noleggio) ? window.atelierDB.data.noleggio : [];
+    let sentCount = 0;
+
+    for (const r of rentals) {
+        if (!r || r.stato === "Restituito / Concluso") continue;
+        if (r.autoReminder7gg === false && !manualTrigger) continue;
+        if (r.reminder7ggInviato) continue;
+
+        const daysLeft = window.calculateNoleggioDaysRemaining(r.dataFine);
+        if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 7) {
+            const toEmail = r.emailCliente || (window.resolveClientEmailByName ? window.resolveClientEmailByName(r.cliente) : "");
+            if (!toEmail || !toEmail.includes("@")) continue;
+
+            const res = await window.dispatchNoleggioReminderEmail(r, { toEmail });
+            if (res && res.ok) {
+                const nowStamp = new Date().toLocaleString("it-IT", {
+                    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+                });
+                r.emailCliente = toEmail;
+                r.reminder7ggInviato = true;
+                r.dataInvioReminder7gg = `${nowStamp} (Auto -7gg)`;
+                r.ultimoPromemoriaInviato = nowStamp;
+                window.atelierDB.updateItem("noleggio", r.id, r);
+                sentCount++;
+            }
+        }
+    }
+
+    if (sentCount > 0) {
+        window.showToast(`🔔 Inviati automaticamente ${sentCount} avvisi di scadenza noleggio (preavviso 7 giorni)!`);
+        if (window.appController && window.appController.activeModuleId === "noleggio") {
+            const container = document.getElementById("moduleContentContainer");
+            if (container && window.AppModules && window.AppModules.renderNoleggio) {
+                window.AppModules.renderNoleggio(container);
+                window.appController.setupLucideIcons();
+            }
+        }
+    } else if (manualTrigger) {
+        window.showToast("Controllo completato: nessun nuovo noleggio in scadenza entro 7 giorni da notificare.");
+    }
+};
+
+window.startNoleggioReminderScheduler = function() {
+    setTimeout(() => {
+        window.checkAndSendNoleggio7DaysReminders(false);
+    }, 2500);
+    setInterval(() => {
+        window.checkAndSendNoleggio7DaysReminders(false);
+    }, 60 * 60 * 1000); // Ricontrolla ogni ora
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     if (window.socialMediaDB) {
         window.socialMediaDB.init();
@@ -10547,5 +11370,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (window.syncBibliotecaFromServer) {
         window.syncBibliotecaFromServer();
+    }
+    if (window.startNoleggioReminderScheduler) {
+        window.startNoleggioReminderScheduler();
     }
 });

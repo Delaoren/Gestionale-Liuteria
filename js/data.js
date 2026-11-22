@@ -905,7 +905,9 @@ const defaultData = {
             ]
         },
         // 15. Mail (liuteriadelorenzi@gmail.com & info@liuteriadelorenzi.it)
-        mail: []
+        mail: [],
+        // 16. Noleggio Strumenti
+        noleggio: []
     };
 
 class DataStore {
@@ -942,6 +944,9 @@ class DataStore {
                 }
                 if (!Array.isArray(parsed.costiLaboratorio)) {
                     parsed.costiLaboratorio = [];
+                }
+                if (!Array.isArray(parsed.noleggio)) {
+                    parsed.noleggio = [];
                 }
                 if (!parsed.liuteriaMaking || !parsed.liuteriaMaking.measurements) {
                     parsed.liuteriaMaking = JSON.parse(JSON.stringify(defaultData.liuteriaMaking));
