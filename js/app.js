@@ -10634,6 +10634,93 @@ window.getNoleggioReminderDateIso = function(dataFineIso) {
     return `${y}-${m}-${d}`;
 };
 
+window.DEFAULT_NOLEGGIO_REMINDER_SUBJECT_TEMPLATE =
+    "Avviso Scadenza Noleggio tra 7 giorni: {{strumento}} (Scadenza {{dataFine}}) — Liuteria De Lorenzi";
+
+window.DEFAULT_NOLEGGIO_REMINDER_BODY_TEMPLATE = [
+    "Gentile {{cliente}},",
+    "",
+    "Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana ({{giorniRimanenti}}), in data {{dataFine}}, giungerà a scadenza il contratto di noleggio relativo allo strumento a Lei affidato.",
+    "",
+    "RIEPILOGO DEL NOLEGGIO:",
+    "• Strumento Noleggiato: {{strumento}}{{codiceStrumento}}",
+    "• Intestatario: {{cliente}}",
+    "• Periodo di Noleggio: {{periodo}}",
+    "• Data di Scadenza: {{dataFine}}",
+    "• Canone / Prezzo Noleggio: € {{prezzo}} ({{frequenza}})",
+    "{{rigaNote}}",
+    "",
+    "MODALITÀ DI RINNOVO O RICONSEGNA:",
+    "1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il {{dataFine}} indicando la nuova durata desiderata.",
+    "2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier per la verifica acustica e conservativa finale.",
+    "",
+    "Restiamo a Sua completa disposizione per qualsiasi necessità.",
+    "",
+    "Un cordiale saluto,",
+    "Maestro Fabio De Lorenzi",
+    "{{atelierName}}",
+    "Email: {{replyEmail}} | Tel: {{atelierPhone}}"
+].join("\n");
+
+window.getNoleggioReminderTemplateConfig = function() {
+    if (!window.atelierDB || !window.atelierDB.data) return { customSubject: "", customBodyText: "" };
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    if (!window.atelierDB.data.settings.noleggioReminderTemplate) {
+        window.atelierDB.data.settings.noleggioReminderTemplate = {
+            customSubject: "",
+            customBodyText: ""
+        };
+    }
+    return window.atelierDB.data.settings.noleggioReminderTemplate;
+};
+
+window.interpolateNoleggioTemplate = function(templateStr, vars) {
+    if (!templateStr) return "";
+    let out = String(templateStr);
+    Object.keys(vars).forEach(k => {
+        const val = vars[k] !== undefined && vars[k] !== null ? String(vars[k]) : "";
+        out = out.split(`{{${k}}}`).join(val);
+    });
+    // Rimuove eventuali righe vuote lasciate da {{rigaNote}} se assente
+    out = out.replace(/\n{3,}/g, "\n\n");
+    return out.trim();
+};
+
+window.renderNoleggioHtmlFromPlainText = function(plainText, meta = {}) {
+    const esc = window.escapeHtml || (s => String(s ?? ""));
+    const replyEmail = meta.replyEmail || "info@liuteriadelorenzi.it";
+    const atelierPhone = meta.atelierPhone || "+39 0372 000000";
+    const lines = String(plainText || "").split(/\r?\n/);
+
+    const formattedHtmlLines = lines.map(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return `<div style="height:0.65rem;"></div>`;
+        if (trimmed.startsWith("• ") || trimmed.startsWith("- ")) {
+            return `<div style="padding:3px 0 3px 10px; border-left:3px solid #f59e0b; background:rgba(30,41,59,0.55); margin:2px 0; color:#f1f5f9;">${esc(trimmed)}</div>`;
+        }
+        if (/^[A-ZÀÈÉÌÒÙ\s'()/-]{5,}:$/.test(trimmed)) {
+            return `<div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#fbbf24; font-weight:700; margin-top:12px; margin-bottom:4px;">${esc(trimmed)}</div>`;
+        }
+        return `<div style="color:#e2e8f0;">${esc(line)}</div>`;
+    }).join("");
+
+    return `
+        <div style="font-family:Georgia, 'Times New Roman', serif; max-width:640px; margin:0 auto; background:#0f172a; color:#f8fafc; border:1px solid #d4af37; border-radius:14px; overflow:hidden;">
+            <div style="background:linear-gradient(135deg, #1e293b, #090d16); padding:24px 28px; border-bottom:2px solid #d4af37; text-align:center;">
+                <div style="font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#fbbf24; font-weight:700;">Bottega d'Arte Liutaria • Cremona</div>
+                <h2 style="margin:6px 0 4px 0; color:#ffffff; font-size:22px;">Liuteria De Lorenzi</h2>
+                <div style="font-size:13px; color:#cbd5e1;">Avviso di Prossima Scadenza Noleggio Strumento (Preavviso 7 Giorni)</div>
+            </div>
+            <div style="padding:26px 28px; line-height:1.65; font-size:15px; color:#e2e8f0;">
+                ${formattedHtmlLines}
+            </div>
+            <div style="background:#090d16; padding:14px 24px; text-align:center; font-size:12px; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.08);">
+                Email: <a href="mailto:${esc(replyEmail)}" style="color:#38bdf8;">${esc(replyEmail)}</a> • Tel: ${esc(atelierPhone)}
+            </div>
+        </div>
+    `;
+};
+
 window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) {
     const cfg = Object.assign({}, (window.getSendinblueConfig ? window.getSendinblueConfig() : {}), cfgOverride || {});
     const atelierName = cfg.senderName || "Liuteria De Lorenzi — Cremona";
@@ -10650,99 +10737,45 @@ window.buildNoleggioReminderEmailContent = function(rental, cfgOverride = null) 
     const freqLabel = (rental && rental.frequenzaCanone) || "Canone Noleggio";
     const daysLeft = window.calculateNoleggioDaysRemaining(rental && rental.dataFine);
     const daysLeftText = daysLeft === null ? "7 giorni" : (daysLeft === 1 ? "1 giorno" : `${Math.max(0, daysLeft)} giorni`);
+    const rigaNote = (rental && rental.note) ? `• Note Contratto: ${rental.note}` : "";
 
-    const subject = `Avviso Scadenza Noleggio tra 7 giorni: ${strumento} (Scadenza ${dataFineIt}) — Liuteria De Lorenzi`;
+    const vars = {
+        cliente: clienteNome,
+        strumento: strumento,
+        codiceStrumento: codiceStr,
+        dataInizio: dataInizioIt,
+        dataFine: dataFineIt,
+        periodo: periodoLabel,
+        prezzo: prezzoFmt,
+        frequenza: freqLabel,
+        giorniRimanenti: daysLeftText,
+        note: (rental && rental.note) || "",
+        rigaNote: rigaNote,
+        atelierName: atelierName,
+        replyEmail: replyEmail,
+        atelierPhone: atelierPhone
+    };
 
-    const textContent = [
-        `Gentile ${clienteNome},`,
-        ``,
-        `Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana (${daysLeftText}), in data ${dataFineIt}, giungerà a scadenza il contratto di noleggio relativo allo strumento a Lei affidato.`,
-        ``,
-        `RIEPILOGO DEL NOLEGGIO:`,
-        `• Strumento Noleggiato: ${strumento}${codiceStr}`,
-        `• Intestatario: ${clienteNome}`,
-        `• Periodo di Noleggio: ${periodoLabel}`,
-        `• Data di Scadenza: ${dataFineIt}`,
-        `• Canone / Prezzo Noleggio: € ${prezzoFmt} (${freqLabel})`,
-        rental && rental.note ? `• Note Contratto: ${rental.note}` : null,
-        ``,
-        `MODALITÀ DI RINNOVO O RICONSEGNA:`,
-        `1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il ${dataFineIt} indicando la nuova durata desiderata.`,
-        `2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier per la verifica acustica e conservativa finale.`,
-        ``,
-        `Restiamo a Sua completa disposizione per qualsiasi necessità.`,
-        ``,
-        `Un cordiale saluto,`,
-        `Maestro Fabio De Lorenzi`,
-        `${atelierName}`,
-        `Email: ${replyEmail} | Tel: ${atelierPhone}`
-    ].filter(line => line !== null).join("\n");
+    const tplCfg = window.getNoleggioReminderTemplateConfig();
+    const subjectTpl = (rental && rental.customReminderSubject) || (tplCfg && tplCfg.customSubject) || window.DEFAULT_NOLEGGIO_REMINDER_SUBJECT_TEMPLATE;
+    const bodyTpl = (rental && rental.customReminderText) || (tplCfg && tplCfg.customBodyText) || window.DEFAULT_NOLEGGIO_REMINDER_BODY_TEMPLATE;
 
-    const esc = window.escapeHtml || (s => String(s ?? ""));
-    const htmlContent = `
-        <div style="font-family:Georgia, 'Times New Roman', serif; max-width:640px; margin:0 auto; background:#0f172a; color:#f8fafc; border:1px solid #d4af37; border-radius:14px; overflow:hidden;">
-            <div style="background:linear-gradient(135deg, #1e293b, #090d16); padding:24px 28px; border-bottom:2px solid #d4af37; text-align:center;">
-                <div style="font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#fbbf24; font-weight:700;">Bottega d'Arte Liutaria • Cremona</div>
-                <h2 style="margin:6px 0 4px 0; color:#ffffff; font-size:22px;">Liuteria De Lorenzi</h2>
-                <div style="font-size:13px; color:#cbd5e1;">Avviso di Prossima Scadenza Noleggio Strumento (Preavviso 7 Giorni)</div>
-            </div>
-            <div style="padding:26px 28px; line-height:1.65; font-size:15px; color:#e2e8f0;">
-                <p style="margin-top:0;">Gentile <strong style="color:#ffffff;">${esc(clienteNome)}</strong>,</p>
-                <p>Le scriviamo dalla <strong>Liuteria De Lorenzi</strong> per informarLa che tra <strong>una settimana</strong> (in data <strong style="color:#fbbf24;">${esc(dataFineIt)}</strong>) giungerà a scadenza il periodo di noleggio dello strumento a Lei affidato.</p>
-
-                <div style="background:#1e293b; border-left:4px solid #f59e0b; border-radius:8px; padding:16px 18px; margin:20px 0;">
-                    <div style="font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#fbbf24; font-weight:700; margin-bottom:10px;">🎻 Riepilogo Contratto di Noleggio</div>
-                    <table style="width:100%; border-collapse:collapse; font-size:14px; color:#f1f5f9;">
-                        <tr>
-                            <td style="padding:5px 0; color:#94a3b8; width:42%;">Strumento Noleggiato:</td>
-                            <td style="padding:5px 0; font-weight:700; color:#ffffff;">${esc(strumento)}${esc(codiceStr)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 0; color:#94a3b8;">Periodo di Noleggio:</td>
-                            <td style="padding:5px 0;">${esc(periodoLabel)}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 0; color:#94a3b8;">Data di Scadenza:</td>
-                            <td style="padding:5px 0; font-weight:700; color:#fbbf24;">${esc(dataFineIt)} (${esc(daysLeftText)} rimanenti)</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:5px 0; color:#94a3b8;">Prezzo / Canone:</td>
-                            <td style="padding:5px 0; font-weight:700; color:#34d399;">€ ${esc(prezzoFmt)} <span style="font-weight:400; color:#cbd5e1;">(${esc(freqLabel)})</span></td>
-                        </tr>
-                        ${rental && rental.note ? `
-                        <tr>
-                            <td style="padding:5px 0; color:#94a3b8;">Note:</td>
-                            <td style="padding:5px 0; color:#cbd5e1;">${esc(rental.note)}</td>
-                        </tr>` : ""}
-                    </table>
-                </div>
-
-                <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.35); border-radius:8px; padding:14px 18px; margin:18px 0; font-size:14px;">
-                    <strong style="color:#6ee7b7; display:block; margin-bottom:6px;">📌 Rinnovo o Riconsegna dello Strumento:</strong>
-                    <ul style="margin:0; padding-left:18px; color:#e2e8f0;">
-                        <li style="margin-bottom:6px;"><strong>Rinnovo del noleggio:</strong> qualora desiderasse prolungare il noleggio, La invitiamo a rispondere a questa email entro il <strong>${esc(dataFineIt)}</strong>.</li>
-                        <li><strong>Riconsegna in Atelier:</strong> in caso di restituzione, La preghiamo di contattarci per fissare l'appuntamento di riconsegna e controllo in bottega.</li>
-                    </ul>
-                </div>
-
-                <p>Restiamo a Sua completa disposizione per qualsiasi chiarimento.</p>
-                <p style="margin-bottom:0;">Un cordiale saluto,<br><strong style="color:#fbbf24;">Maestro Fabio De Lorenzi</strong><br><span style="font-size:13px; color:#94a3b8;">${esc(atelierName)}</span></p>
-            </div>
-            <div style="background:#090d16; padding:14px 24px; text-align:center; font-size:12px; color:#94a3b8; border-top:1px solid rgba(255,255,255,0.08);">
-                Email: <a href="mailto:${esc(replyEmail)}" style="color:#38bdf8;">${esc(replyEmail)}</a> • Tel: ${esc(atelierPhone)}
-            </div>
-        </div>
-    `;
+    const subject = window.interpolateNoleggioTemplate(subjectTpl, vars);
+    const textContent = window.interpolateNoleggioTemplate(bodyTpl, vars);
+    const htmlContent = window.renderNoleggioHtmlFromPlainText(textContent, { replyEmail, atelierPhone });
 
     return {
         subject,
         textContent,
         htmlContent,
+        subjectTemplate: subjectTpl,
+        bodyTemplate: bodyTpl,
         dataInizioIt,
         dataFineIt,
         daysLeft,
         daysLeftText,
-        prezzoFmt
+        prezzoFmt,
+        vars
     };
 };
 
@@ -11052,12 +11085,133 @@ window.deleteNoleggioItem = function(itemId, label) {
 };
 
 /**
- * Mostra l'anteprima completa del Reminder di scadenza (1 settimana prima) e consente l'invio immediato
+ * Mostra l'anteprima completa del Reminder di scadenza (1 settimana prima),
+ * permette di modificare e salvare il testo (sia per il singolo noleggio che come modello predefinito)
+ * e consente l'invio immediato.
  */
+window._activeNoleggioPreviewVars = null;
+
+window.updateNoleggioModalLiveHtmlPreview = function() {
+    const subjEl = document.getElementById("nol_rem_subject");
+    const bodyEl = document.getElementById("nol_rem_text_body");
+    const htmlBox = document.getElementById("nol_rem_live_html_preview");
+    if (!bodyEl || !htmlBox) return;
+
+    const vars = window._activeNoleggioPreviewVars || {};
+    const interpolatedBody = window.interpolateNoleggioTemplate(bodyEl.value, vars);
+    htmlBox.innerHTML = window.renderNoleggioHtmlFromPlainText(interpolatedBody, {
+        replyEmail: vars.replyEmail,
+        atelierPhone: vars.atelierPhone
+    });
+    const subjPreviewEl = document.getElementById("nol_rem_live_subject_preview");
+    if (subjPreviewEl && subjEl) {
+        subjPreviewEl.innerText = window.interpolateNoleggioTemplate(subjEl.value, vars);
+    }
+};
+
+window.saveNoleggioReminderTextChanges = function(rentalId = "", saveAsGlobalDefault = true) {
+    const subjVal = (document.getElementById("nol_rem_subject")?.value || "").trim();
+    const bodyVal = (document.getElementById("nol_rem_text_body")?.value || "").trim();
+    if (!bodyVal) {
+        window.showToast("Il testo del reminder non può essere vuoto.");
+        return;
+    }
+
+    if (saveAsGlobalDefault) {
+        const tplCfg = window.getNoleggioReminderTemplateConfig();
+        tplCfg.customSubject = subjVal;
+        tplCfg.customBodyText = bodyVal;
+        if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+        window.atelierDB.data.settings.updatedAt = new Date().toISOString();
+    }
+
+    if (rentalId) {
+        const rental = window.atelierDB.getItem("noleggio", rentalId);
+        if (rental) {
+            rental.customReminderSubject = subjVal;
+            rental.customReminderText = bodyVal;
+            window.atelierDB.updateItem("noleggio", rentalId, rental);
+        }
+    }
+
+    window.atelierDB.saveData();
+    window.updateNoleggioModalLiveHtmlPreview();
+
+    const fb = document.getElementById("nolReminderFeedbackBox");
+    if (fb) {
+        fb.style.display = "block";
+        fb.style.background = "rgba(16, 185, 129, 0.14)";
+        fb.style.border = "1px solid rgba(16, 185, 129, 0.45)";
+        fb.style.color = "#6ee7b7";
+        fb.innerHTML = `✅ <strong>Testo del reminder salvato con successo!</strong> Verrà utilizzato per gli avvisi di scadenza (-7 giorni).`;
+    }
+
+    window.showToast("Testo del reminder aggiornato e salvato!");
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderNoleggio) {
+            window.AppModules.renderNoleggio(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.resetNoleggioReminderToDefault = function(rentalId = "") {
+    if (!confirm("Vuoi ripristinare il testo predefinito originale del reminder di scadenza?")) return;
+    const tplCfg = window.getNoleggioReminderTemplateConfig();
+    tplCfg.customSubject = "";
+    tplCfg.customBodyText = "";
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    window.atelierDB.data.settings.updatedAt = new Date().toISOString();
+
+    if (rentalId) {
+        const rental = window.atelierDB.getItem("noleggio", rentalId);
+        if (rental) {
+            delete rental.customReminderSubject;
+            delete rental.customReminderText;
+            window.atelierDB.updateItem("noleggio", rentalId, rental);
+        }
+    }
+    window.atelierDB.saveData();
+    window.showToast("Ripristinato testo predefinito del reminder.");
+    window.openNoleggioReminderPreviewModal(rentalId);
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderNoleggio) {
+            window.AppModules.renderNoleggio(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
+window.saveInlineNoleggioReminderTemplate = function() {
+    const subjVal = (document.getElementById("nol_inline_tpl_subject")?.value || "").trim();
+    const bodyVal = (document.getElementById("nol_inline_tpl_body")?.value || "").trim();
+    if (!bodyVal) {
+        window.showToast("Il testo del reminder non può essere vuoto.");
+        return;
+    }
+    const tplCfg = window.getNoleggioReminderTemplateConfig();
+    tplCfg.customSubject = subjVal;
+    tplCfg.customBodyText = bodyVal;
+    if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+    window.atelierDB.data.settings.updatedAt = new Date().toISOString();
+    window.atelierDB.saveData();
+
+    window.showToast("Modello testo reminder salvato con successo!");
+    if (window.appController && window.appController.activeModuleId === "noleggio") {
+        const container = document.getElementById("moduleContentContainer");
+        if (container && window.AppModules && window.AppModules.renderNoleggio) {
+            window.AppModules.renderNoleggio(container);
+            window.appController.setupLucideIcons();
+        }
+    }
+};
+
 window.openNoleggioReminderPreviewModal = function(itemId) {
     let item = itemId ? window.atelierDB.getItem("noleggio", itemId) : null;
     if (!item) {
-        // Se non ci sono ancora contratti o viene aperto il template dimostrativo
+        // Se non ci sono ancora contratti o viene aperto il template generale dal pulsante "Mostra Testo Completo del Reminder"
         const dStart = new Date().toISOString().split("T")[0];
         const dEndObj = new Date();
         dEndObj.setDate(dEndObj.getDate() + 7);
@@ -11082,17 +11236,21 @@ window.openNoleggioReminderPreviewModal = function(itemId) {
     }
 
     const emailData = window.buildNoleggioReminderEmailContent(item);
+    window._activeNoleggioPreviewVars = emailData.vars;
     const esc = window.escapeHtml || (s => String(s ?? ""));
     const recipientEmail = item.emailCliente || (window.resolveClientEmailByName ? window.resolveClientEmailByName(item.cliente) : "") || "";
     const remDateIso = window.getNoleggioReminderDateIso(item.dataFine);
+
+    const editableSubject = item.id ? emailData.subject : emailData.subjectTemplate;
+    const editableBody = item.id ? emailData.textContent : emailData.bodyTemplate;
 
     const modalOverlay = document.getElementById("modalOverlay");
     const modalTitle = document.getElementById("modalTitle");
     const modalBody = document.getElementById("modalBody");
     const modalContainer = modalOverlay.querySelector(".modal-container");
-    if (modalContainer) modalContainer.style.maxWidth = "860px";
+    if (modalContainer) modalContainer.style.maxWidth = "920px";
 
-    modalTitle.innerHTML = `<i data-lucide="bell-ring" style="color:var(--accent-gold);"></i> Anteprima Completa Reminder Scadenza Noleggio (-7 Giorni)`;
+    modalTitle.innerHTML = `<i data-lucide="edit-3" style="color:var(--accent-gold);"></i> Mostra & Modifica Testo Completo del Reminder (-7 Giorni)`;
 
     modalBody.innerHTML = `
         <div>
@@ -11107,55 +11265,80 @@ window.openNoleggioReminderPreviewModal = function(itemId) {
                         Invio Automatico Previsto: <strong style="color:#6ee7b7;">${esc(window.formatDateItShort(remDateIso))}</strong> (-7 giorni)
                     </div>
                 </div>
-                <span class="badge ${item.reminder7ggInviato ? 'badge-success' : 'badge-warning'}">
-                    ${item.reminder7ggInviato ? `✓ Inviato (${esc(item.dataInvioReminder7gg || 'OK')})` : '⏳ In Programmazione Automatica'}
-                </span>
-            </div>
-
-            <!-- Parametri Invio Modificabili -->
-            <div class="form-row">
-                <div class="form-group" style="flex:1;">
-                    <label>Destinatario Email Cliente *</label>
-                    <input type="email" id="nol_rem_to_email" class="form-control" value="${esc(recipientEmail)}" placeholder="es. cliente@orchestra.it">
-                </div>
-                <div class="form-group" style="flex:1;">
-                    <label>Nome Cliente</label>
-                    <input type="text" id="nol_rem_to_name" class="form-control" value="${esc(item.cliente || '')}">
+                <div style="display:flex; gap:0.45rem; align-items:center;">
+                    <button type="button" class="btn btn-secondary" style="padding:0.28rem 0.65rem; font-size:0.73rem;" onclick="window.resetNoleggioReminderToDefault('${esc(item.id || '')}')" title="Ripristina il testo predefinito originale">
+                        <i data-lucide="rotate-ccw"></i> Ripristina Default
+                    </button>
+                    <span class="badge ${item.reminder7ggInviato ? 'badge-success' : 'badge-warning'}">
+                        ${item.reminder7ggInviato ? `✓ Inviato (${esc(item.dataInvioReminder7gg || 'OK')})` : '⏳ In Programmazione'}
+                    </span>
                 </div>
             </div>
 
+            ${item.id ? `
+                <!-- Parametri Destinatario (quando aperto su un contratto specifico) -->
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Destinatario Email Cliente *</label>
+                        <input type="email" id="nol_rem_to_email" class="form-control" value="${esc(recipientEmail)}" placeholder="es. cliente@orchestra.it">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Nome Cliente</label>
+                        <input type="text" id="nol_rem_to_name" class="form-control" value="${esc(item.cliente || '')}">
+                    </div>
+                </div>
+            ` : `
+                <div style="background:rgba(245, 158, 11, 0.09); border:1px solid rgba(245, 158, 11, 0.35); border-radius:8px; padding:0.7rem 0.95rem; margin-bottom:0.9rem; font-size:0.79rem; color:#fde68a;">
+                    💡 <strong>Modifica Modello Reminder:</strong> Puoi modificare liberamente oggetto e testo qui sotto. Puoi usare i segnaposto automatici <code>{{cliente}}</code>, <code>{{strumento}}</code>, <code>{{dataFine}}</code>, <code>{{periodo}}</code>, <code>{{prezzo}}</code>, <code>{{frequenza}}</code>, <code>{{giorniRimanenti}}</code> oppure scrivere un testo fisso personalizzato.
+                </div>
+            `}
+
+            <!-- Editor Oggetto & Testo Integrale con Anteprima Live Affiancata -->
             <div class="form-group">
-                <label>Oggetto del Reminder</label>
-                <input type="text" id="nol_rem_subject" class="form-control" value="${esc(emailData.subject)}">
+                <label style="color:var(--accent-gold); font-weight:700;">✏️ Modifica Oggetto del Reminder</label>
+                <input type="text" id="nol_rem_subject" class="form-control" value="${esc(editableSubject)}" oninput="window.updateNoleggioModalLiveHtmlPreview()">
             </div>
 
-            <!-- Anteprima Grafica HTML del Reminder -->
-            <div style="margin-bottom:1rem;">
-                <label style="display:block; margin-bottom:0.4rem; color:var(--accent-gold); font-weight:700; font-size:0.82rem;">
-                    👁️ Anteprima Grafica Email Reminder Ricevuta dal Cliente:
-                </label>
-                <div style="background:#070a10; border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:1.1rem; max-height:380px; overflow-y:auto;">
-                    ${emailData.htmlContent}
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:1.1rem; align-items:start; margin-bottom:0.9rem;">
+                <!-- Colonna Sinistra: Casella di Modifica Testo -->
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; color:var(--accent-cyan); font-weight:700; margin-bottom:0.4rem;">
+                        <span>✏️ Modifica Testo Completo del Messaggio:</span>
+                        <span style="font-size:0.71rem; color:var(--text-muted); font-weight:400;">Aggiorna l'anteprima in tempo reale</span>
+                    </label>
+                    <textarea id="nol_rem_text_body" class="form-control" rows="15" oninput="window.updateNoleggioModalLiveHtmlPreview()" style="font-family:var(--font-mono); font-size:0.81rem; line-height:1.55; min-height:360px;">${esc(editableBody)}</textarea>
                 </div>
-            </div>
 
-            <!-- Testo Completo Modificabile del Reminder -->
-            <div class="form-group">
-                <label>Testo Integrale del Messaggio (Versione Testuale / Personalizzabile)</label>
-                <textarea id="nol_rem_text_body" class="form-control" rows="8" style="font-family:var(--font-mono); font-size:0.8rem; line-height:1.5;">${esc(emailData.textContent)}</textarea>
+                <!-- Colonna Destra: Anteprima Grafica HTML in Tempo Reale -->
+                <div>
+                    <label style="display:block; margin-bottom:0.4rem; color:var(--accent-gold); font-weight:700; font-size:0.82rem;">
+                        👁️ Anteprima Live Email Ricevuta dal Cliente:
+                    </label>
+                    <div style="background:#070a10; border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:0.9rem; max-height:385px; overflow-y:auto;">
+                        <div style="font-size:0.76rem; color:#cbd5e1; padding-bottom:0.5rem; margin-bottom:0.65rem; border-bottom:1px solid rgba(255,255,255,0.08);">
+                            <strong>Oggetto:</strong> <span id="nol_rem_live_subject_preview" style="color:#fff;">${esc(emailData.subject)}</span>
+                        </div>
+                        <div id="nol_rem_live_html_preview">
+                            ${emailData.htmlContent}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="nolReminderFeedbackBox" style="display:none; margin:0.85rem 0; padding:0.8rem 1rem; border-radius:8px; font-size:0.84rem;"></div>
 
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem; margin-top:1.1rem; padding-top:0.85rem; border-top:1px solid rgba(255,255,255,0.08);">
                 <span style="font-size:0.75rem; color:var(--text-muted);">
-                    Invio tramite SMTP Atelier (<code>info@liuteriadelorenzi.it</code> / Gmail) o Sendinblue (Brevo)
+                    Le modifiche salvate vengono memorizzate sia nel browser che sul server (MongoDB)
                 </span>
-                <div style="display:flex; gap:0.55rem;">
+                <div style="display:flex; gap:0.55rem; flex-wrap:wrap;">
                     <button type="button" class="btn btn-secondary" onclick="window.closeModal()">Chiudi</button>
+                    <button type="button" class="btn btn-primary" style="background:linear-gradient(135deg, #059669, #047857); border-color:#34d399; color:#fff;" onclick="window.saveNoleggioReminderTextChanges('${esc(item.id || '')}', true)">
+                        <i data-lucide="save"></i> 💾 Salva Modifiche al Testo
+                    </button>
                     ${item.id ? `
                         <button type="button" id="nolRemSendNowBtn" class="btn btn-primary" onclick="window.sendNoleggioReminderNow('${esc(item.id)}')">
-                            <i data-lucide="send"></i> 🚀 Invia Ora Avviso al Cliente
+                            <i data-lucide="send"></i> 🚀 Salva & Invia Ora al Cliente
                         </button>
                     ` : ""}
                 </div>
@@ -11244,8 +11427,26 @@ window.sendNoleggioReminderNow = async function(rentalId) {
 
     const toEmail = (document.getElementById("nol_rem_to_email")?.value || rental.emailCliente || "").trim();
     const toName = (document.getElementById("nol_rem_to_name")?.value || rental.cliente || "").trim();
-    const subject = (document.getElementById("nol_rem_subject")?.value || "").trim();
-    const textContent = (document.getElementById("nol_rem_text_body")?.value || "").trim();
+    const subjectRaw = (document.getElementById("nol_rem_subject")?.value || "").trim();
+    const textContentRaw = (document.getElementById("nol_rem_text_body")?.value || "").trim();
+
+    if (textContentRaw) {
+        rental.customReminderSubject = subjectRaw;
+        rental.customReminderText = textContentRaw;
+        const tplCfg = window.getNoleggioReminderTemplateConfig();
+        tplCfg.customSubject = subjectRaw;
+        tplCfg.customBodyText = textContentRaw;
+        if (!window.atelierDB.data.settings) window.atelierDB.data.settings = {};
+        window.atelierDB.data.settings.updatedAt = new Date().toISOString();
+    }
+
+    const emailData = window.buildNoleggioReminderEmailContent(rental);
+    const subject = window.interpolateNoleggioTemplate(subjectRaw || emailData.subject, emailData.vars);
+    const textContent = window.interpolateNoleggioTemplate(textContentRaw || emailData.textContent, emailData.vars);
+    const htmlContent = window.renderNoleggioHtmlFromPlainText(textContent, {
+        replyEmail: emailData.vars.replyEmail,
+        atelierPhone: emailData.vars.atelierPhone
+    });
 
     const fb = document.getElementById("nolReminderFeedbackBox");
     const btn = document.getElementById("nolRemSendNowBtn");
@@ -11262,7 +11463,8 @@ window.sendNoleggioReminderNow = async function(rentalId) {
         toEmail,
         toName,
         subject,
-        textContent
+        textContent,
+        htmlContent
     });
 
     if (btn) btn.disabled = false;

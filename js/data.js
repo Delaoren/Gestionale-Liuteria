@@ -118,6 +118,10 @@ const defaultData = {
                 lastSync: "",
                 lastError: ""
             }
+        },
+        noleggioReminderTemplate: {
+            customSubject: "",
+            customBodyText: ""
         }
     },
     // 1. Biblioteca (Library)
@@ -932,6 +936,9 @@ class DataStore {
                     }
                     if (!parsed.settings.mailAccounts) {
                         parsed.settings.mailAccounts = JSON.parse(JSON.stringify(defaultData.settings.mailAccounts));
+                    }
+                    if (!parsed.settings.noleggioReminderTemplate) {
+                        parsed.settings.noleggioReminderTemplate = { customSubject: "", customBodyText: "" };
                     }
                     if (parsed.settings.atelierName === "Atelier Liuteria Master" || !parsed.settings.atelierName) {
                         parsed.settings.atelierName = "Liuteria De Lorenzi";

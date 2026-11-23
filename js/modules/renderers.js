@@ -2389,24 +2389,32 @@ window.AppModules = {
                 `}
             </div>
 
-            <!-- Riquadro Permanente: Anteprima Integrale del Reminder Scadenza (1 Settimana Prima) -->
+            <!-- Riquadro Permanente: Anteprima Integrale & Modifica del Reminder Scadenza (1 Settimana Prima) -->
             <div class="glass-panel" style="border:1px solid rgba(212, 175, 55, 0.35);">
                 <div class="panel-header" style="flex-wrap:wrap; gap:0.8rem;">
                     <div>
                         <div class="panel-title" style="color:var(--accent-gold);">
-                            <i data-lucide="mail" style="color:var(--accent-gold);"></i>
-                            Modello & Contenuto Completo del Reminder (Inviato 7 Giorni Prima della Scadenza)
+                            <i data-lucide="edit-3" style="color:var(--accent-gold);"></i>
+                            Modello & Contenuto Completo del Reminder (Modificabile • Inviato 7 Giorni Prima della Scadenza)
                         </div>
                         <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
-                            Ecco il testo integrale e l'impaginazione dell'avviso automatico che il cliente riceve una settimana prima della scadenza del noleggio.
+                            Puoi modificare direttamente qui sotto l'oggetto e il testo del reminder oppure aprirlo nel pop-up tramite il pulsante <strong>Mostra Testo Completo del Reminder</strong>.
                         </p>
                     </div>
-                    <button type="button" class="btn btn-secondary" onclick="window.openNoleggioReminderPreviewModal('${sampleRental ? esc(sampleRental.id) : ''}')">
-                        <i data-lucide="maximize-2"></i> Personalizza / Invia in Pop-up
-                    </button>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary" onclick="window.resetNoleggioReminderToDefault('${sampleRental ? esc(sampleRental.id) : ''}')">
+                            <i data-lucide="rotate-ccw"></i> Ripristina Testo Default
+                        </button>
+                        <button type="button" class="btn btn-primary" style="background:linear-gradient(135deg, #059669, #047857); border-color:#34d399; color:#fff;" onclick="window.saveInlineNoleggioReminderTemplate()">
+                            <i data-lucide="save"></i> 💾 Salva Modifiche al Testo
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="window.openNoleggioReminderPreviewModal('${sampleRental ? esc(sampleRental.id) : ''}')">
+                            <i data-lucide="maximize-2"></i> Apri Editor in Pop-up
+                        </button>
+                    </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1.2rem; align-items:start;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap:1.2rem; align-items:start;">
                     <!-- Colonna 1: Versione Grafica HTML -->
                     <div>
                         <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-gold); margin-bottom:0.5rem;">
@@ -2420,12 +2428,24 @@ window.AppModules = {
                         </div>
                     </div>
 
-                    <!-- Colonna 2: Testo Integrale Plain-Text -->
+                    <!-- Colonna 2: Editor Testo Integrale Modificabile -->
                     <div>
                         <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-cyan); margin-bottom:0.5rem;">
-                            📝 Testo Integrale del Reminder (Plain-Text)
+                            ✏️ Modifica Oggetto & Testo Integrale del Reminder
                         </div>
-                        <pre style="background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:1.15rem; color:#e2e8f0; font-family:var(--font-mono); font-size:0.79rem; line-height:1.6; white-space:pre-wrap; margin:0;">${esc(previewReminder.textContent)}</pre>
+                        <div class="form-group" style="margin-bottom:0.75rem;">
+                            <label style="font-size:0.76rem; color:var(--text-secondary);">Oggetto Email Reminder:</label>
+                            <input type="text" id="nol_inline_tpl_subject" class="form-control" value="${esc(previewReminder.subjectTemplate || previewReminder.subject)}" style="font-size:0.83rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0.75rem;">
+                            <label style="font-size:0.76rem; color:var(--text-secondary);">Testo Completo del Messaggio (supporta segnaposto come <code>{{cliente}}</code>, <code>{{strumento}}</code>, <code>{{dataFine}}</code>, <code>{{prezzo}}</code>):</label>
+                            <textarea id="nol_inline_tpl_body" class="form-control" rows="16" style="font-family:var(--font-mono); font-size:0.8rem; line-height:1.58;">${esc(previewReminder.bodyTemplate || previewReminder.textContent)}</textarea>
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+                            <button type="button" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="window.saveInlineNoleggioReminderTemplate()">
+                                <i data-lucide="save"></i> 💾 Salva Testo Personalizzato del Reminder
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

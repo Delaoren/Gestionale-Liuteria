@@ -3489,15 +3489,29 @@ class LutherieHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
 
+def _interpolate_noleggio_tpl(tpl_str, vars_dict):
+    out = str(tpl_str or "")
+    for k, v in vars_dict.items():
+        out = out.replace("{{" + k + "}}", str(v if v is not None else ""))
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
 def check_and_send_noleggio_reminders_server():
     """
     Controlla in MongoDB la collezione 'noleggio': se mancano <= 7 giorni (una settimana)
-    alla data di fine noleggio e reminder7ggInviato è False, invia l'avviso al cliente.
+    alla data di fine noleggio e reminder7ggInviato è False, invia l'avviso al cliente
+    usando eventuale testo personalizzato salvato dall'utente.
     """
     if mongo_db is None:
         return
     try:
         today = datetime.now().date()
+        settings_doc = mongo_db["settings"].find_one({"_singleton_id": "settings"}) or {}
+        tpl_cfg = settings_doc.get("noleggioReminderTemplate") if isinstance(settings_doc.get("noleggioReminderTemplate"), dict) else {}
+        global_custom_subj = str(tpl_cfg.get("customSubject") or "").strip()
+        global_custom_body = str(tpl_cfg.get("customBodyText") or "").strip()
+
         docs = list(mongo_db["noleggio"].find({}))
         for r in docs:
             if not isinstance(r, dict):
@@ -3522,29 +3536,61 @@ def check_and_send_noleggio_reminders_server():
                 strumento = str(r.get("strumento") or "Strumento ad Arco").strip()
                 codice = f" (Cod. {r.get('codiceStrumento')})" if r.get("codiceStrumento") else ""
                 data_fine_it = end_date.strftime("%d/%m/%Y")
-                periodo = str(r.get("periodoNoleggio") or data_fine_it)
+                data_inizio_str = str(r.get("dataInizio") or "").split("T")[0].strip()
+                try:
+                    data_inizio_it = datetime.strptime(data_inizio_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+                except Exception:
+                    data_inizio_it = data_inizio_str or "-"
+                periodo = str(r.get("periodoNoleggio") or f"dal {data_inizio_it} al {data_fine_it}")
                 prezzo = r.get("prezzo") or 0
                 freq = str(r.get("frequenzaCanone") or "Canone")
+                days_text = "1 giorno" if days_left == 1 else f"{days_left} giorni"
+                note_val = str(r.get("note") or "").strip()
+                riga_note = f"• Note Contratto: {note_val}" if note_val else ""
 
-                subject = f"Avviso Scadenza Noleggio tra 7 giorni: {strumento} (Scadenza {data_fine_it}) — Liuteria De Lorenzi"
-                body_text = (
+                vars_dict = {
+                    "cliente": cliente_nome,
+                    "strumento": strumento,
+                    "codiceStrumento": codice,
+                    "dataInizio": data_inizio_it,
+                    "dataFine": data_fine_it,
+                    "periodo": periodo,
+                    "prezzo": prezzo,
+                    "frequenza": freq,
+                    "giorniRimanenti": days_text,
+                    "note": note_val,
+                    "rigaNote": riga_note,
+                    "atelierName": "Liuteria De Lorenzi — Cremona",
+                    "replyEmail": "info@liuteriadelorenzi.it",
+                    "atelierPhone": "+39 0372 000000"
+                }
+
+                default_subj = f"Avviso Scadenza Noleggio tra 7 giorni: {strumento} (Scadenza {data_fine_it}) — Liuteria De Lorenzi"
+                default_body = (
                     f"Gentile {cliente_nome},\n\n"
-                    f"Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana ({days_left} giorni), "
+                    f"Le scriviamo dalla Bottega Liuteria De Lorenzi per ricordarLe che tra una settimana ({days_text}), "
                     f"in data {data_fine_it}, giungerà a scadenza il contratto di noleggio relativo allo strumento a Lei affidato.\n\n"
                     f"RIEPILOGO DEL NOLEGGIO:\n"
-                    f"- Strumento Noleggiato: {strumento}{codice}\n"
-                    f"- Intestatario: {cliente_nome}\n"
-                    f"- Periodo di Noleggio: {periodo}\n"
-                    f"- Data di Scadenza: {data_fine_it}\n"
-                    f"- Canone / Prezzo Noleggio: EUR {prezzo} ({freq})\n\n"
-                    f"MODALITA' DI RINNOVO O RICONSEGNA:\n"
-                    f"1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il {data_fine_it}.\n"
-                    f"2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier.\n\n"
+                    f"• Strumento Noleggiato: {strumento}{codice}\n"
+                    f"• Intestatario: {cliente_nome}\n"
+                    f"• Periodo di Noleggio: {periodo}\n"
+                    f"• Data di Scadenza: {data_fine_it}\n"
+                    f"• Canone / Prezzo Noleggio: € {prezzo} ({freq})\n\n"
+                    f"MODALITÀ DI RINNOVO O RICONSEGNA:\n"
+                    f"1) RINNOVO DEL NOLEGGIO: Se desidera prolungare il periodo di noleggio, La invitiamo a rispondere a questa email entro il {data_fine_it} indicando la nuova durata desiderata.\n"
+                    f"2) RICONSEGNA IN BOTTEGA: Se intende restituire lo strumento, La preghiamo di concordare giorno e orario di riconsegna presso il nostro Atelier per la verifica acustica e conservativa finale.\n\n"
+                    f"Restiamo a Sua completa disposizione per qualsiasi necessità.\n\n"
                     f"Un cordiale saluto,\n"
                     f"Maestro Fabio De Lorenzi\n"
                     f"Liuteria De Lorenzi — Cremona\n"
-                    f"info@liuteriadelorenzi.it"
+                    f"Email: info@liuteriadelorenzi.it | Tel: +39 0372 000000"
                 )
+
+                subj_tpl = str(r.get("customReminderSubject") or "").strip() or global_custom_subj or default_subj
+                body_tpl = str(r.get("customReminderText") or "").strip() or global_custom_body or default_body
+
+                subject = _interpolate_noleggio_tpl(subj_tpl, vars_dict)
+                body_text = _interpolate_noleggio_tpl(body_tpl, vars_dict)
                 send_res = send_mail_from_account({
                     "accountId": "domain",
                     "toEmail": to_email,
